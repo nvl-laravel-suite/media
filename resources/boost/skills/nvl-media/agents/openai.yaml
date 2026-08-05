@@ -1,0 +1,4 @@
+interface:
+  display_name: "NVL Media"
+  short_description: "Build secure reusable media systems"
+  default_prompt: "Use $nvl-media to implement or review private files, reusable public assets, uploads, scanning, delivery, variations, and reconciliation."
