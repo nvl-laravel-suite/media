@@ -16,6 +16,7 @@ use Nvl\Media\Actions\RenameMediaAction;
 use Nvl\Media\Actions\UpdateMediaMetadataAction;
 use Nvl\Media\Contracts\DeleteMediaContract;
 use Nvl\Media\Data\Mutations\BulkMediaPayload;
+use Nvl\Media\Data\Mutations\RenameMediaData;
 use Nvl\Media\Data\Mutations\ReorderMediaPayload;
 use Nvl\Media\Data\Mutations\UpdateMediaPayload;
 use Nvl\Media\Exceptions\MediaUploadException;
@@ -68,17 +69,13 @@ final class MediaMutationController extends Controller
         ]);
     }
 
-    public function rename(Request $request, Media $media): JsonResponse
+    public function rename(Request $request, RenameMediaData $data, Media $media): JsonResponse
     {
         $this->authorize('update', $media);
 
-        $request->validate([
-            'filename' => ['required', 'string', 'max:255', 'regex:/^[^\/\\\\]+$/'],
-        ]);
-
         $renamed = $this->renameMedia->execute(
             $media,
-            $request->string('filename')->toString(),
+            $data->filename,
         );
 
         return response()->json([

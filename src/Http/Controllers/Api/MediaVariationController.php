@@ -6,10 +6,10 @@ namespace Nvl\Media\Http\Controllers\Api;
 
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Nvl\Media\Actions\GenerateImageVariationAction;
 use Nvl\Media\Data\Display\MediaImageVariationPayload;
+use Nvl\Media\Data\Mutations\RequestMediaVariationsData;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Services\MediaConfiguredVariationService;
@@ -42,7 +42,7 @@ final class MediaVariationController extends Controller
         ]);
     }
 
-    public function regenerate(Request $request, Media $media): JsonResponse
+    public function regenerate(RequestMediaVariationsData $data, Media $media): JsonResponse
     {
         $this->authorize('regenerate', $media);
         $media->loadMissing('imageVariations');
@@ -54,12 +54,7 @@ final class MediaVariationController extends Controller
             ], HttpResponse::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        $request->validate([
-            'variations' => ['nullable', 'array'],
-            'variations.*' => ['string', 'max:50'],
-        ]);
-
-        $requested = $request->input('variations');
+        $requested = $data->variations;
         $labels = is_array($requested)
             ? array_values(array_filter($requested, 'is_string'))
             : [];

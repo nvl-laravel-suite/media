@@ -13,14 +13,12 @@ use Illuminate\Routing\Controller;
 use Illuminate\Validation\ValidationException;
 use Nvl\Media\Actions\ReplaceMediaFileAction;
 use Nvl\Media\Contracts\UploadMediaContract;
+use Nvl\Media\Data\Mutations\ReplaceMediaData;
 use Nvl\Media\Data\Mutations\StoreMediaPayload;
-use Nvl\Media\Http\Rules\AllowedMimeTypes;
-use Nvl\Media\Http\Rules\MaxFileSize;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaDiskGuard;
 use Nvl\Media\Services\MediaResourceDataFactory;
 use Nvl\Media\Slots\MediaSlot;
-use Nvl\Media\Support\MediaConfiguration;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 /**
@@ -40,16 +38,6 @@ final class MediaUploadController extends Controller
     public function store(Request $request, StoreMediaPayload $data): JsonResponse
     {
         $this->authorize('create', Media::class);
-
-        $request->validate([
-            'files' => [
-                'required',
-                'array',
-                'min:1',
-                'max:'.MediaConfiguration::integer('media.max_files_per_upload', 10, 1),
-            ],
-            'files.*' => ['required', 'file', new MaxFileSize, new AllowedMimeTypes],
-        ]);
 
         $slot = new MediaSlot($data->collection ?? 'default');
         $slot->useDisk($this->diskGuard->resolveAllowed(
@@ -89,15 +77,11 @@ final class MediaUploadController extends Controller
         ], HttpResponse::HTTP_CREATED);
     }
 
-    public function replace(Request $request, Media $media): JsonResponse
+    public function replace(Request $request, ReplaceMediaData $data, Media $media): JsonResponse
     {
         $this->authorize('update', $media);
 
-        $request->validate([
-            'file' => ['required', 'file', new MaxFileSize, new AllowedMimeTypes],
-        ]);
-
-        $replacement = $request->file('file');
+        $replacement = $data->file;
 
         if (! $replacement instanceof UploadedFile) {
             throw ValidationException::withMessages([
