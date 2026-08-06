@@ -147,7 +147,11 @@ describe('HTTP delivery semantics', function () {
             ->assertHeader('Content-Range', 'bytes 2-5/10')
             ->assertHeader('Content-Length', '4');
 
-        expect($response->streamedContent())->toBe('2345');
+        ob_start();
+        $response->baseResponse->sendContent();
+        $content = ob_get_clean();
+
+        expect($content)->toBe('2345');
     });
 
     it('supports range delivery through remote-style disks', function () {

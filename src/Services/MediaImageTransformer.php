@@ -120,10 +120,12 @@ class MediaImageTransformer
             return;
         }
 
-        $orientation = Orientation::tryFrom($definition->rotationDegrees);
+        foreach (Orientation::cases() as $orientation) {
+            if ($orientation->degrees() === $definition->rotationDegrees) {
+                $image->orientation($orientation);
 
-        if ($orientation !== null) {
-            $image->orientation($orientation);
+                return;
+            }
         }
     }
 
