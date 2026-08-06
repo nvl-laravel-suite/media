@@ -408,7 +408,7 @@ it('restores the source and removes a newly created destination when a later obj
         'hash' => 'rollback-new-destination.jpg',
     ]);
     $variation = $media->imageVariations()->create([
-        'label' => 'missing-new-destination-variation',
+        'label' => 'missing-destination-variation',
         'width' => 150,
         'height' => 150,
         'size' => 100,
