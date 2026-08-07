@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once dirname(__DIR__).'/Fixtures/GenerateImageVariationFilesystemFake.php';
+
 use Illuminate\Foundation\Auth\User;
 use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Actions\GenerateImageVariationAction;
@@ -12,6 +14,7 @@ use Nvl\Media\Exceptions\ConversionFailedException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Services\MediaImageTransformer;
+use Nvl\Media\Tests\Fixtures\GenerateImageVariationFilesystemFake;
 
 function createVariationUser(array $overrides = []): User
 {
@@ -54,6 +57,10 @@ describe('GenerateImageVariationAction', function () {
             'filesystems.default' => 'public',
             'media.conversions_folder' => 'conversions',
         ]);
+    });
+
+    afterEach(function () {
+        GenerateImageVariationFilesystemFake::reset();
     });
 
     it('returns null for non-image media types', function () {
@@ -268,6 +275,7 @@ describe('GenerateImageVariationAction', function () {
         $mock_processor->shouldReceive('process')
             ->once()
             ->andReturnUsing(function ($source, $output) {
+                expect(pathinfo($output, PATHINFO_EXTENSION))->toBe('webp');
                 file_put_contents($output, 'webp content');
 
                 return ['width' => 320, 'height' => 320, 'size' => 12];
@@ -286,6 +294,25 @@ describe('GenerateImageVariationAction', function () {
 
         Storage::disk('public')->assertExists($result->getPath());
     });
+
+    it('restores media availability when a temporary output cannot be created', function (string $failure) {
+        $media = createVariationMedia(['disk' => 'public', 'folder' => 'uploads', 'hash' => 'temp-failure.jpg']);
+        Storage::disk('public')->put($media->buildPath(), 'original');
+
+        GenerateImageVariationFilesystemFake::${$failure} = true;
+
+        $imageTransformer = Mockery::mock(MediaImageTransformer::class);
+        $imageTransformer->shouldNotReceive('process');
+        app()->instance(MediaImageTransformer::class, $imageTransformer);
+
+        $definition = (new ConversionDefinition('thumb'))
+            ->width(150)->height(150);
+
+        expect(fn () => app(GenerateImageVariationAction::class)->execute($media, $definition))
+            ->toThrow(ConversionFailedException::class)
+            ->and($media->fresh()->status)->toBe(MediaLifecycleStatus::Available)
+            ->and($media->fresh()->failure_code)->toBe('variation_failed');
+    })->with(['failTempnam', 'failRename']);
 
     it('materializes a temporary local source file for remote-style disks', function () {
         Storage::fake('s3');

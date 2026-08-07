@@ -70,6 +70,7 @@ final class GenerateImageVariationAction
                 }
 
                 $definition->validate();
+                $resultExtension = $definition->getResultExtension($currentMedia->extension);
                 DB::transaction(function () use ($currentMedia): void {
                     $currentMedia->forceFill([
                         'status' => MediaLifecycleStatus::ProcessingVariations,
@@ -78,19 +79,29 @@ final class GenerateImageVariationAction
                     ])->save();
                 });
 
-                $temporaryOutput = tempnam(sys_get_temp_dir(), 'media_var_');
-
-                if ($temporaryOutput === false) {
-                    throw new ConversionFailedException(
-                        "Failed to create temporary file for variation [{$definition->name}].",
-                    );
-                }
-
-                $this->temporaryFiles->track($temporaryOutput);
+                $temporaryOutput = null;
                 $newVariationPath = null;
 
                 try {
-                    $resultExtension = $definition->getResultExtension($currentMedia->extension);
+                    $temporaryOutputBase = tempnam(sys_get_temp_dir(), 'media_var_');
+
+                    if ($temporaryOutputBase === false) {
+                        throw new ConversionFailedException(
+                            "Failed to create temporary file for variation [{$definition->name}].",
+                        );
+                    }
+
+                    $temporaryOutput = $temporaryOutputBase.'.'.$resultExtension;
+
+                    if (! rename($temporaryOutputBase, $temporaryOutput)) {
+                        @unlink($temporaryOutputBase);
+
+                        throw new ConversionFailedException(
+                            "Failed to prepare temporary output for variation [{$definition->name}].",
+                        );
+                    }
+
+                    $this->temporaryFiles->track($temporaryOutput);
                     $quality = $definition->targetQuality ?? 80;
                     $existing = MediaImageVariation::query()
                         ->where('media_id', $currentMedia->id)
@@ -253,7 +264,9 @@ final class GenerateImageVariationAction
 
                     throw $failure;
                 } finally {
-                    $this->temporaryFiles->release($temporaryOutput);
+                    if (is_string($temporaryOutput)) {
+                        $this->temporaryFiles->release($temporaryOutput);
+                    }
                 }
             },
         );

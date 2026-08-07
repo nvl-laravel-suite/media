@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -1018,13 +1019,30 @@ describe('slot size limit', function () {
 
         $media_ids = [];
         $sizes = [100, 200, 300];
+        Carbon::setTestNow('2026-08-07 12:00:00');
 
-        for ($i = 0; $i < 3; $i++) {
-            $file = UploadedFile::fake()->image("file{$i}.jpg", $sizes[$i], $sizes[$i]);
-            $media = $model->addMedia($file)
-                ->withoutVariations()
-                ->slot('gallery');
-            $media_ids[] = $media->id;
+        try {
+            for ($i = 0; $i < 2; $i++) {
+                $file = UploadedFile::fake()->image("file{$i}.jpg", $sizes[$i], $sizes[$i]);
+                $media = $model->addMedia($file)
+                    ->withoutVariations()
+                    ->slot('gallery');
+                $media_ids[] = $media->id;
+            }
+
+            MediaAssociation::query()
+                ->where('media_id', $media_ids[0])
+                ->update(['order' => 1]);
+            MediaAssociation::query()
+                ->where('media_id', $media_ids[1])
+                ->update(['order' => 0]);
+
+            $latest = $model->addMedia(
+                UploadedFile::fake()->image('file2.jpg', $sizes[2], $sizes[2]),
+            )->withoutVariations()->slot('gallery');
+            $media_ids[] = $latest->id;
+        } finally {
+            Carbon::setTestNow();
         }
 
         // First file should have been removed

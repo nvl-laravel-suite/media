@@ -444,7 +444,7 @@ class MediaAdder
         if ($excess_count > 0) {
             $to_remove = $existing
                 ->reject(static fn (Media $media): bool => $media->is($uploadedMedia))
-                ->sortBy(fn (Media $media): DateTimeInterface|string|null => $this->slotOrderingTimestamp($media))
+                ->sortBy(fn (Media $media): string => $this->slotOrderingKey($media))
                 ->take($excess_count);
 
             foreach ($to_remove as $media) {
@@ -459,19 +459,27 @@ class MediaAdder
         }
     }
 
-    private function slotOrderingTimestamp(Media $media): DateTimeInterface|string|null
+    /**
+     * Order uploads deterministically when database timestamp precision ties.
+     *
+     * Media uses UUIDv7 identifiers, so its key preserves insertion order when
+     * multiple associations share the same persisted creation timestamp.
+     */
+    private function slotOrderingKey(Media $media): string
     {
         $pivot = $media->getRelationValue('pivot');
+        $createdAt = null;
 
         if ($pivot instanceof Pivot) {
             $createdAt = $pivot->getAttribute('created_at');
-
-            if ($createdAt instanceof DateTimeInterface || is_string($createdAt)) {
-                return $createdAt;
-            }
         }
 
-        return $media->created_at;
+        $createdAt ??= $media->created_at;
+        $timestamp = $createdAt instanceof DateTimeInterface
+            ? $createdAt->format('Y-m-d H:i:s.uP')
+            : (is_string($createdAt) ? $createdAt : '');
+
+        return $timestamp."\0".$media->id;
     }
 
     private function collectionName(string $slotName): string
