@@ -1,6 +1,6 @@
 # NVL Media
 
-A standalone Laravel media system for secure uploads, private one-to-one files, reusable public assets, polymorphic ownership, image variations, localized metadata, centralized delivery, and safe lifecycle operations.
+The suite's Laravel media module for secure uploads, private one-to-one files, reusable public assets, polymorphic ownership, image variations, localized metadata, centralized delivery, and safe lifecycle operations.
 
 ## Purpose and boundaries
 
@@ -28,7 +28,7 @@ Media owns the complete lifecycle of binary assets: ingestion, validation, conte
 - `league/flysystem-aws-s3-v3` is included for S3-compatible disks
 
 ```bash
-composer require nvl/media:^1.0
+composer require nvl/laravel-suite:^1.0
 php artisan migrate
 php artisan vendor:publish --tag=media-config
 php artisan vendor:publish --tag=media-migrations
