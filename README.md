@@ -2,6 +2,16 @@
 
 [← NVL Laravel Suite](../../../README.md)
 
+## Quick reference
+
+| Item | Value |
+|---|---|
+| Installed through | `composer require nvl/laravel-suite:^1.0` |
+| Module identifier | `nvl/media` |
+| PHP namespace | `Nvl\Media` |
+| Service provider | `Nvl\Media\Providers\MediaServiceProvider` |
+| Configuration | `config/media.php` |
+
 The suite's Laravel media module for secure uploads, private one-to-one files, reusable public assets, polymorphic ownership, image variations, localized metadata, centralized delivery, and safe lifecycle operations.
 
 ## Purpose and boundaries
