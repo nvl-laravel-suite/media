@@ -1,4 +1,6 @@
-# NVL Media
+# NVL Media — API and usage
+
+[← NVL Laravel Suite](../../../README.md)
 
 The suite's Laravel media module for secure uploads, private one-to-one files, reusable public assets, polymorphic ownership, image variations, localized metadata, centralized delivery, and safe lifecycle operations.
 
