@@ -7,6 +7,7 @@ namespace Nvl\Media\Services;
 use Illuminate\Http\UploadedFile;
 use Nvl\Media\Actions\FinalizeMediaScanAction;
 use Nvl\Media\Actions\GenerateImageVariationAction;
+use Nvl\Media\Actions\RelocateMediaAction;
 use Nvl\Media\Actions\RenameMediaAction;
 use Nvl\Media\Actions\ReplaceMediaFileAction;
 use Nvl\Media\Actions\UpdateMediaMetadataAction;
@@ -14,6 +15,7 @@ use Nvl\Media\Contracts\DeleteMediaContract;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Data\MediaScanResultData;
 use Nvl\Media\Data\Mutations\UpdateMediaPayload;
+use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 
@@ -26,6 +28,7 @@ final readonly class MediaMutationService
         private DeleteMediaContract $deleteMedia,
         private ReplaceMediaFileAction $replaceMedia,
         private RenameMediaAction $renameMedia,
+        private RelocateMediaAction $relocateMedia,
         private UpdateMediaMetadataAction $updateMedia,
         private GenerateImageVariationAction $generateVariation,
         private FinalizeMediaScanAction $finalizeScan,
@@ -44,6 +47,18 @@ final readonly class MediaMutationService
     public function rename(Media|string $media, string $filename): Media
     {
         return $this->renameMedia->execute($media, $filename);
+    }
+
+    /**
+     * Relocate one media record and its variations to another disk.
+     */
+    public function relocate(
+        Media|string $media,
+        string $disk,
+        MediaVisibility $visibility,
+        ?int $expectedRevision = null,
+    ): Media {
+        return $this->relocateMedia->execute($media, $disk, $visibility, $expectedRevision);
     }
 
     public function update(Media|string $media, UpdateMediaPayload $data): Media

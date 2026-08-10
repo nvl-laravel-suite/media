@@ -6,11 +6,13 @@ Version 1.0 uses UUID media records, string-compatible morph identifiers, explic
 
 1. Set `media.migrations.enabled=false` for an existing schema.
 2. Run `php artisan nvl:media:doctor --strict --format=json`.
-3. Add and backfill uploader type, lifecycle, checksum, association indexes, and translation rows in an application-owned bridge.
+3. Stage the legacy Spatie-style table under a non-canonical name, run `php artisan nvl:media:adopt-spatie --source=... --format=json`, resolve every mapping/path error, then repeat with `--apply`. Pass `--translations` and `--variations` for staged companion tables.
 4. Register owners with `HasMedia` and `InteractsWithMedia`.
 5. Bind `MediaAuthorization`, a production `MediaContentScanner`, and a `MultipartUploadGateway` when needed.
 6. Enable asset delivery independently of management APIs.
 7. Run read-only `php artisan nvl:media:reconcile --production` before and after cutover.
+
+If existing `folder` values are already complete disk-relative paths, set `MEDIA_ROOT_FOLDER=` during in-place adoption. Leaving the default `media` prefix would point every imported row at a different object. Keep the empty root only for a dedicated disk, or move objects through `nvl:media:migrate-disk` into the prefixed layout. `nvl:media:doctor` samples persisted rows and flags this mismatch.
 
 ### Image and queue configuration
 

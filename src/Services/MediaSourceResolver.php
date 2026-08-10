@@ -137,6 +137,46 @@ final class MediaSourceResolver
     }
 
     /**
+     * Materialize generated binary content as a MIME-detected bounded upload.
+     *
+     * @throws MediaUploadException
+     * @throws FileUnacceptableForCollection
+     */
+    public function fromBinary(string $contents, string $filename, string ...$allowedMimeTypes): UploadedFile
+    {
+        if (strlen($contents) > $this->maxSourceBytes()) {
+            throw new MediaUploadException('Generated binary media exceeds the maximum allowed size.');
+        }
+
+        $resolvedFilename = basename(trim($filename));
+
+        if ($resolvedFilename === '' || $resolvedFilename === '.' || $resolvedFilename === '..') {
+            throw new MediaUploadException('Generated binary media requires a valid filename.');
+        }
+
+        $temporaryPath = $this->createTempFile();
+
+        try {
+            $this->writeAll($temporaryPath, $contents);
+            $mimeType = $this->detectMime($temporaryPath);
+            $this->validateMimeType($mimeType, array_values($allowedMimeTypes));
+
+            return new UploadedFile($temporaryPath, $resolvedFilename, $mimeType, null, true);
+        } catch (FileUnacceptableForCollection|MediaUploadException $exception) {
+            $this->temporaryFiles->release($temporaryPath);
+
+            throw $exception;
+        } catch (Throwable $exception) {
+            $this->temporaryFiles->release($temporaryPath);
+
+            throw new MediaUploadException(
+                "Failed to materialize generated binary media: {$exception->getMessage()}",
+                previous: $exception,
+            );
+        }
+    }
+
+    /**
      * Stream a storage object into a bounded temporary upload.
      *
      * @throws MediaUploadException

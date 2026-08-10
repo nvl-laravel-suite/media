@@ -65,7 +65,8 @@ Set this to `false` only for controlled adoption of an existing schema. Publishe
 | --- | --- | --- |
 | `media.disk` | `MEDIA_FILESYSTEM_DISK`, then `FILESYSTEM_DISK`, then `local` | Default media disk |
 | `media.s3.use_acl_visibility` | `false` | Apply per-object ACL visibility on intentionally ACL-enabled S3 buckets |
-| `media.root_folder` | `media` | Mandatory storage prefix and reconciliation boundary |
+| `media.root_folder` | `media` | Storage prefix and reconciliation boundary; may be empty only for a dedicated adoption disk whose persisted folders are already complete |
+| `media.adoption.path_sample_size` | `25` | Maximum persisted rows Doctor samples against physical storage |
 | `media.default_path` | `misc` | Fallback folder template |
 | `media.conversions_folder` | `conversions` | Variation subdirectory |
 | `media.allowed_disks` | `['local', 'public']` | Security allowlist for HTTP and direct uploads |
@@ -80,7 +81,7 @@ MEDIA_ROOT_FOLDER=media
 
 Production S3-compatible disks should use `throw=true` and private objects at rest. Public media is delivered publicly by package policy; it does not require a `public-read` object ACL.
 
-Every resolved path is restricted beneath `media.root_folder`. Never set it to an empty string, `/`, a bucket root intended for unrelated objects, or an untrusted value.
+Every resolved path is restricted beneath `media.root_folder`. The normal production value is a non-empty prefix on a shared disk. During controlled in-place adoption, an empty root is required when each persisted `folder` already contains the complete disk-relative path; use it only on a dedicated disk, and never use `/` or an untrusted value. Doctor compares representative persisted paths using `media.adoption.path_sample_size` so prefix drift fails before cutover.
 
 See [S3 and object storage](s3.md).
 

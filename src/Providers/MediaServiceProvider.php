@@ -14,6 +14,7 @@ use Nvl\Media\Actions\DeleteMediaAction;
 use Nvl\Media\Actions\DetachMediaAction;
 use Nvl\Media\Actions\ReusePublicMediaAction;
 use Nvl\Media\Actions\UploadMediaAction;
+use Nvl\Media\Console\Commands\AdoptSpatieMediaCommand;
 use Nvl\Media\Console\Commands\MediaDoctorCommand;
 use Nvl\Media\Console\Commands\MigrateDiskCommand;
 use Nvl\Media\Console\Commands\PruneExpiredMultipartUploadsCommand;
@@ -117,6 +118,7 @@ final class MediaServiceProvider extends ServiceProvider
 
         if ($this->app->runningInConsole()) {
             $this->commands([
+                AdoptSpatieMediaCommand::class,
                 MigrateDiskCommand::class,
                 MediaDoctorCommand::class,
                 PruneExpiredMultipartUploadsCommand::class,

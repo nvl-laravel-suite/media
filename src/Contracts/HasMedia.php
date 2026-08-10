@@ -38,6 +38,15 @@ interface HasMedia
 
     public function addMediaFromString(string $text): MediaAdder;
 
+    /**
+     * Create an upload builder from generated binary content.
+     */
+    public function addMediaFromBinary(
+        string $contents,
+        string $filename,
+        string ...$allowedMimeTypes,
+    ): MediaAdder;
+
     public function addMediaFromDisk(string $key, ?string $disk = null): MediaAdder;
 
     /**

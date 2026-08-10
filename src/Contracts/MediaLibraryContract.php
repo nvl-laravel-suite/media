@@ -21,6 +21,7 @@ use Nvl\Media\Data\Multipart\SignedMultipartPartData;
 use Nvl\Media\Data\Multipart\SignMultipartPartData;
 use Nvl\Media\Data\Mutations\UpdateMediaPayload;
 use Nvl\Media\Enums\MediaAbility;
+use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\MediaAdder;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
@@ -59,6 +60,16 @@ interface MediaLibraryContract
 
     public function fromString(Model&HasMedia $owner, string $contents): MediaAdder;
 
+    /**
+     * Create an upload builder from generated binary content.
+     */
+    public function fromBinary(
+        Model&HasMedia $owner,
+        string $contents,
+        string $filename,
+        string ...$allowedMimeTypes,
+    ): MediaAdder;
+
     public function fromDisk(
         Model&HasMedia $owner,
         string $key,
@@ -76,6 +87,11 @@ interface MediaLibraryContract
     ): LengthAwarePaginator;
 
     public function findOrFail(string $id, bool $includeVariations = true): Media;
+
+    /**
+     * Resolve a URL only for an existing row and canonical backing object.
+     */
+    public function urlIfExists(?Media $media, string $variation = ''): ?string;
 
     /**
      * @return Collection<int, MediaUsage>
@@ -119,6 +135,16 @@ interface MediaLibraryContract
     public function replace(Media|string $media, UploadedFile $file): Media;
 
     public function rename(Media|string $media, string $filename): Media;
+
+    /**
+     * Relocate one media record and its variations to another disk.
+     */
+    public function relocate(
+        Media|string $media,
+        string $disk,
+        MediaVisibility $visibility,
+        ?int $expectedRevision = null,
+    ): Media;
 
     public function updateMetadata(Media|string $media, UpdateMediaPayload $data): Media;
 

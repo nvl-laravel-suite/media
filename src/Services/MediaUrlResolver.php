@@ -35,6 +35,18 @@ final class MediaUrlResolver
     }
 
     /**
+     * Resolve a URL only when the media and its canonical binary exist.
+     */
+    public function forExistingMedia(?Media $media, string $variation = ''): ?string
+    {
+        if (! $media instanceof Media || ! $this->existence->exists($media->disk, $media->buildPath())) {
+            return null;
+        }
+
+        return $this->forMedia($media, $variation);
+    }
+
+    /**
      * Get URL for a variation model, falling back to parent media if file is missing.
      */
     public function forVariation(MediaImageVariation $variation): string

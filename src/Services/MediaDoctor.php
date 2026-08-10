@@ -16,6 +16,7 @@ use Nvl\Media\Data\MediaDoctorCheckData;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\ImageFormat;
 use Nvl\Media\Enums\MediaImageDriver;
+use Nvl\Media\Models\Media;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaImageConfiguration;
 use Nvl\Media\Support\MediaQueueConfiguration;
@@ -28,6 +29,7 @@ final readonly class MediaDoctor
 {
     public function __construct(
         private Container $container,
+        private MediaFileExistence $existence,
     ) {}
 
     /**
@@ -39,6 +41,7 @@ final readonly class MediaDoctor
             ...$this->schemaChecks(),
             $this->migrationOwnershipCheck(),
             ...$this->diskChecks($production),
+            $this->representativeStoragePathCheck($production),
             ...$this->integrityChecks($production),
             ...$this->imageChecks(),
             ...$this->queueChecks($production),
@@ -319,6 +322,75 @@ final readonly class MediaDoctor
         }
 
         return $checks;
+    }
+
+    /**
+     * Verify representative persisted media paths against the configured root folder.
+     */
+    private function representativeStoragePathCheck(bool $production): MediaDoctorCheckData
+    {
+        if (! Schema::hasTable(MediaTables::MEDIA)) {
+            return new MediaDoctorCheckData(
+                'storage.persisted_paths',
+                $production ? 'error' : 'warning',
+                true,
+                'Persisted media paths are unavailable until the media table exists.',
+            );
+        }
+
+        $limit = MediaConfiguration::integer('media.adoption.path_sample_size', 25, 1);
+
+        try {
+            $samples = Media::withTrashed()
+                ->orderBy('id')
+                ->limit($limit)
+                ->get(['id', 'disk', 'folder', 'hash']);
+        } catch (Throwable $exception) {
+            return new MediaDoctorCheckData(
+                'storage.persisted_paths',
+                $production ? 'error' : 'warning',
+                false,
+                'Persisted media paths cannot be inspected: '.mb_substr($exception->getMessage(), 0, 500),
+            );
+        }
+
+        if ($samples->isEmpty()) {
+            return new MediaDoctorCheckData(
+                'storage.persisted_paths',
+                $production ? 'error' : 'warning',
+                true,
+                'No persisted media rows require representative path verification.',
+            );
+        }
+
+        $missing = [];
+
+        foreach ($samples as $media) {
+            try {
+                if (! $this->existence->existsFresh($media->disk, $media->buildPath())) {
+                    $missing[] = $media->disk.':'.$media->buildPath();
+                }
+            } catch (Throwable $exception) {
+                $missing[] = $media->disk.':'.$media->buildPath().' ('.$exception->getMessage().')';
+            }
+        }
+
+        $passed = $missing === [];
+        $root = MediaPathResolver::rootFolder();
+        $rootLabel = $root === '' ? '<empty>' : $root;
+
+        return new MediaDoctorCheckData(
+            'storage.persisted_paths',
+            $production ? 'error' : 'warning',
+            $passed,
+            $passed
+                ? "Representative persisted media paths exist with root_folder [{$rootLabel}]."
+                : sprintf(
+                    'Representative persisted paths are missing with root_folder [%s]: %s. Existing complete folders require an empty media.root_folder, or move the objects through nvl:media:migrate-disk before cutover.',
+                    $rootLabel,
+                    implode(', ', array_slice($missing, 0, 5)),
+                ),
+        );
     }
 
     /**
@@ -684,6 +756,7 @@ final readonly class MediaDoctor
     {
         return match ($table) {
             MediaTables::MEDIA => [
+                'media_hash_idx',
                 'media_visibility_created_idx',
                 'media_uploader_created_idx',
                 'media_disk_created_idx',

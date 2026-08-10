@@ -16,7 +16,32 @@ php artisan nvl:media:doctor --strict --format=json
 - `--strict`: treats failed warnings as failures.
 - `--format=text|json`: human table or machine-readable output.
 
-Checks package tables/columns/indexes, allowlisted disks and exception-enabled writes, local/public delivery, integrity policy, image drivers/encoders, durable queue timing, management-route authentication, remote cURL/bounds, multi-node locks, authorization/scanner bindings, and multipart recovery/attestation. Disabled multipart is valid; enabled multipart must use a recoverable gateway, central locks, and scanner attestation. Run it after configuration cache is built and before accepting traffic.
+Checks package tables/columns/indexes, allowlisted disks and exception-enabled writes, representative persisted object paths under the configured root folder, local/public delivery, integrity policy, image drivers/encoders, durable queue timing, management-route authentication, remote cURL/bounds, multi-node locks, authorization/scanner bindings, and multipart recovery/attestation. Disabled multipart is valid; enabled multipart must use a recoverable gateway, central locks, and scanner attestation. Run it after configuration cache is built and before accepting traffic.
+
+## `nvl:media:adopt-spatie`
+
+Maps a staged Spatie-style media table into package media, association, translation, and variation rows. It is a non-mutating dry run unless `--apply` is explicit:
+
+```bash
+php artisan nvl:media:adopt-spatie --source=media_spatie_legacy --format=json
+php artisan nvl:media:adopt-spatie \
+  --source=media_spatie_legacy \
+  --translations=media_translations_legacy \
+  --variations=media_variations_legacy \
+  --uploader-type='App\\Models\\User' \
+  --apply
+```
+
+- `--source=`: staged legacy media table. It must differ from the configured canonical media table.
+- `--translations=` / `--variations=`: optional staged companion tables with `id` and `media_id`; variations must expose a persisted `storage_path` or `path`.
+- `--uploader-type=`: fallback morph type only when a legacy row already has `uploaded_by` but no type.
+- `--locale=en`: fallback locale for translation rows without one.
+- `--apply`: insert deterministic, idempotent target rows. The source tables are never changed or dropped.
+- `--format=text|json`: reconciliation table or machine-readable result.
+
+The importer accepts UUID identifiers directly and derives stable UUIDs for integer/string legacy keys. It maps `model_type`, `model_id`, and `collection_name` into package associations; carries lifecycle, visibility, uploader, metadata, translations, and variations; computes missing digests from backing objects; and reconciles source versus matched target counts. Apply is refused when any row cannot map or any original/variation object is missing.
+
+Standard Spatie paths map to `<legacy id>/<file_name>`. If adopted rows already store complete disk-relative folders, set `MEDIA_ROOT_FOLDER=` before dry-run. If the desired target uses the default `media` prefix, move and verify the physical objects first rather than changing metadata alone.
 
 ## `nvl:media:reconcile`
 

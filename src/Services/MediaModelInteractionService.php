@@ -157,6 +157,21 @@ final readonly class MediaModelInteractionService
     }
 
     /**
+     * Create an adder from generated binary content with byte-detected MIME.
+     */
+    public function addMediaFromBinary(
+        Model&HasMedia $model,
+        string $contents,
+        string $filename,
+        string ...$allowedMimeTypes,
+    ): MediaAdder {
+        return $this->newAdder(
+            $model,
+            $this->sourceResolver->fromBinary($contents, $filename, ...$allowedMimeTypes),
+        );
+    }
+
+    /**
      * Create an adder from an existing disk object.
      */
     public function addMediaFromDisk(Model&HasMedia $model, string $key, ?string $disk = null): MediaAdder

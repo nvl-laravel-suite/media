@@ -24,6 +24,7 @@ use Nvl\Media\Data\Multipart\SignedMultipartPartData;
 use Nvl\Media\Data\Multipart\SignMultipartPartData;
 use Nvl\Media\Data\Mutations\UpdateMediaPayload;
 use Nvl\Media\Enums\MediaAbility;
+use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\MediaAdder;
 use Nvl\Media\MediaLibrary;
 use Nvl\Media\Models\Media as MediaModel;
@@ -39,9 +40,11 @@ use Nvl\Media\Models\MediaImageVariation;
  * @method static MediaAdder fromUrl(Model&HasMedia $owner, string $url, string ...$allowedMimeTypes)
  * @method static MediaAdder fromBase64(Model&HasMedia $owner, string $payload, string ...$allowedMimeTypes)
  * @method static MediaAdder fromString(Model&HasMedia $owner, string $contents)
+ * @method static MediaAdder fromBinary(Model&HasMedia $owner, string $contents, string $filename, string ...$allowedMimeTypes)
  * @method static MediaAdder fromDisk(Model&HasMedia $owner, string $key, ?string $disk = null)
  * @method static LengthAwarePaginator<int, MediaModel> paginate(MediaFilter|array<string, mixed> $filters = [], ?Authenticatable $actor = null, bool $includeVariations = false)
  * @method static MediaModel findOrFail(string $id, bool $includeVariations = true)
+ * @method static string|null urlIfExists(MediaModel|null $media, string $variation = '')
  * @method static Collection<int, MediaUsage> usages(string $id)
  * @method static MediaAssociation attach(MediaModel $media, Model&HasMedia $owner, string $collection = 'default', ?string $locale = null, ?int $order = null, array<string, mixed> $metadata = [], bool $dispatchVariations = true)
  * @method static MediaModel reuse(MediaModel|string $media, Model&HasMedia $owner, string $collection = 'default', ?string $locale = null, ?int $order = null, array<string, mixed> $metadata = [], bool $dispatchVariations = true)
@@ -49,6 +52,7 @@ use Nvl\Media\Models\MediaImageVariation;
  * @method static bool delete(MediaModel|string $media, bool $force = false)
  * @method static MediaModel replace(MediaModel|string $media, UploadedFile $file)
  * @method static MediaModel rename(MediaModel|string $media, string $filename)
+ * @method static MediaModel relocate(MediaModel|string $media, string $disk, MediaVisibility $visibility, ?int $expectedRevision = null)
  * @method static MediaModel updateMetadata(MediaModel|string $media, UpdateMediaPayload $data)
  * @method static MediaImageVariation|null generateVariation(MediaModel $media, ConversionDefinition $definition, ?int $expectedRevision = null)
  * @method static MediaModel finalizeScan(MediaModel|string $media, MediaScanResultData $result)

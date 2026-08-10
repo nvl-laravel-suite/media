@@ -26,8 +26,7 @@ Route::prefix('media')
 
         Route::prefix('{media}')->group(function (): void {
             Route::get('/', [MediaLibraryController::class, 'show'])->name('show');
-            Route::put('/', [MediaMutationController::class, 'update'])->name('update');
-            Route::patch('/', [MediaMutationController::class, 'update'])->name('update.patch');
+            Route::match(['put', 'patch'], '/', [MediaMutationController::class, 'update'])->name('update');
             Route::delete('/', [MediaMutationController::class, 'destroy'])->name('destroy');
             Route::post('/attach', [MediaAssociationController::class, 'attach'])->name('attach');
             Route::post('/detach', [MediaAssociationController::class, 'detach'])->name('detach');

@@ -4,6 +4,8 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+- Replaced the global media-hash uniqueness constraint with an indexed reusable hash, added generated-binary ingestion, existence-safe nullable URLs, one-record cross-disk relocation, and a single PUT/PATCH management route declaration.
+- Added dry-run-first `nvl:media:adopt-spatie` conversion with deterministic identifiers, association/translation/variation mapping, backing-path and count reconciliation, plus Doctor checks and empty-root guidance for in-place storage adoption.
 - Registered migration publication through Laravel's timestamp-aware API and made Doctor warn when automatic vendor loading overlaps a published host copy.
 - Fixed the Spatie-compatible granular permission fallback so Eloquent's
   dynamic method proxy cannot prevent `hasPermissionTo` from being evaluated.

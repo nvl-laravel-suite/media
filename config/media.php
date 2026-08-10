@@ -94,8 +94,14 @@ return [
     |--------------------------------------------------------------------------
     | All media files are stored under this folder within the selected disk.
     | Models define their own subfolder structure via collection path templates.
+    | During in-place adoption, set this to an empty string when persisted folder
+    | values already contain the complete path below the disk root.
     */
     'root_folder' => env('MEDIA_ROOT_FOLDER', 'media'),
+
+    'adoption' => [
+        'path_sample_size' => 25,
+    ],
 
     /*
     |--------------------------------------------------------------------------

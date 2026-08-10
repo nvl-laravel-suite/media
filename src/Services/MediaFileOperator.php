@@ -170,10 +170,16 @@ final class MediaFileOperator
      * @param  string  $fromPath  Source object path
      * @param  string  $toDisk  Destination disk
      * @param  string  $toPath  Destination object path
+     * @param  MediaVisibility|null  $visibility  Optional target visibility override
      * @return bool True when the object copied
      */
-    public function copy(string $fromDisk, string $fromPath, string $toDisk, string $toPath): bool
-    {
+    public function copy(
+        string $fromDisk,
+        string $fromPath,
+        string $toDisk,
+        string $toPath,
+        ?MediaVisibility $visibility = null,
+    ): bool {
         $stream = $this->disks->readStream($fromDisk, $fromPath);
 
         if (! is_resource($stream)) {
@@ -185,7 +191,10 @@ final class MediaFileOperator
             $result = $this->disk($toDisk)->put(
                 $toPath,
                 $stream,
-                $this->writeOptions($toDisk, $this->disks->visibility($fromDisk, $fromPath)),
+                $this->writeOptions(
+                    $toDisk,
+                    $visibility ?? $this->disks->visibility($fromDisk, $fromPath),
+                ),
             );
             $this->existence->forget($toDisk, $toPath);
 

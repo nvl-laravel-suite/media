@@ -23,6 +23,7 @@ use Nvl\Media\Data\Multipart\SignedMultipartPartData;
 use Nvl\Media\Data\Multipart\SignMultipartPartData;
 use Nvl\Media\Data\Mutations\UpdateMediaPayload;
 use Nvl\Media\Enums\MediaAbility;
+use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Models\MediaImageVariation;
@@ -31,6 +32,7 @@ use Nvl\Media\Services\MediaModelInteractionService;
 use Nvl\Media\Services\MediaMultipartService;
 use Nvl\Media\Services\MediaMutationService;
 use Nvl\Media\Services\MediaQueryService;
+use Nvl\Media\Services\MediaUrlResolver;
 
 /**
  * Thin consumer API that delegates to the package's focused services and actions.
@@ -43,6 +45,7 @@ final readonly class MediaLibrary implements MediaLibraryContract
         private MediaMutationService $mutations,
         private MediaMultipartService $multipart,
         private MediaAccessService $access,
+        private MediaUrlResolver $urls,
     ) {}
 
     public function add(
@@ -88,6 +91,23 @@ final readonly class MediaLibrary implements MediaLibraryContract
         return $this->interactions->addMediaFromString($owner, $contents);
     }
 
+    /**
+     * Create an upload builder from generated binary content.
+     */
+    public function fromBinary(
+        Model&HasMedia $owner,
+        string $contents,
+        string $filename,
+        string ...$allowedMimeTypes,
+    ): MediaAdder {
+        return $this->interactions->addMediaFromBinary(
+            $owner,
+            $contents,
+            $filename,
+            ...$allowedMimeTypes,
+        );
+    }
+
     public function fromDisk(
         Model&HasMedia $owner,
         string $key,
@@ -115,6 +135,14 @@ final readonly class MediaLibrary implements MediaLibraryContract
     public function findOrFail(string $id, bool $includeVariations = true): Media
     {
         return $this->queries->show($id, $includeVariations);
+    }
+
+    /**
+     * Resolve a URL only for an existing row and canonical backing object.
+     */
+    public function urlIfExists(?Media $media, string $variation = ''): ?string
+    {
+        return $this->urls->forExistingMedia($media, $variation);
     }
 
     /**
@@ -192,6 +220,18 @@ final readonly class MediaLibrary implements MediaLibraryContract
     public function rename(Media|string $media, string $filename): Media
     {
         return $this->mutations->rename($media, $filename);
+    }
+
+    /**
+     * Relocate one media record and its variations to another disk.
+     */
+    public function relocate(
+        Media|string $media,
+        string $disk,
+        MediaVisibility $visibility,
+        ?int $expectedRevision = null,
+    ): Media {
+        return $this->mutations->relocate($media, $disk, $visibility, $expectedRevision);
     }
 
     public function updateMetadata(Media|string $media, UpdateMediaPayload $data): Media

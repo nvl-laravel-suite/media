@@ -21,7 +21,7 @@ return new class extends Migration
             $table->string('filename')
                 ->comment('Original display filename of the uploaded file.');
 
-            $table->string('hash')->unique()
+            $table->string('hash')
                 ->comment('Hashed filename used for storage on disk.');
 
             $table->string('extension', 10)
@@ -99,6 +99,7 @@ return new class extends Migration
             $table->softDeletes();
 
             $table->index(['filename', 'type']);
+            $table->index('hash', 'media_hash_idx');
             $table->index('disk');
             $table->index('type');
             $table->index(['uploaded_by_type', 'uploaded_by'], 'media_uploader_index');

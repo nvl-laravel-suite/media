@@ -55,7 +55,7 @@ All route names have the `nvl.media.management.` prefix.
 | `POST` | `/media/bulk` | `nvl.media.management.bulk` | `200` |
 | `GET` | `/media/{media}` | `nvl.media.management.show` | `200` |
 | `PUT` | `/media/{media}` | `nvl.media.management.update` | `200` |
-| `PATCH` | `/media/{media}` | `nvl.media.management.update.patch` | `200` |
+| `PATCH` | `/media/{media}` | `nvl.media.management.update` | `200` |
 | `DELETE` | `/media/{media}` | `nvl.media.management.destroy` | `200` |
 | `POST` | `/media/{media}/attach` | `nvl.media.management.attach` | `200` |
 | `POST` | `/media/{media}/detach` | `nvl.media.management.detach` | `200` |

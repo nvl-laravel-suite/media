@@ -239,6 +239,22 @@ trait InteractsWithMedia
         return $this->mediaInteractionService()->addMediaFromString($this, $text);
     }
 
+    /**
+     * Create an upload builder from generated binary content.
+     */
+    public function addMediaFromBinary(
+        string $contents,
+        string $filename,
+        string ...$allowedMimeTypes,
+    ): MediaAdder {
+        return $this->mediaInteractionService()->addMediaFromBinary(
+            $this,
+            $contents,
+            $filename,
+            ...$allowedMimeTypes,
+        );
+    }
+
     public function addMediaFromDisk(string $key, ?string $disk = null): MediaAdder
     {
         return $this->mediaInteractionService()->addMediaFromDisk($this, $key, $disk);
