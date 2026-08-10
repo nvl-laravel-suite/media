@@ -43,11 +43,21 @@ Media owns the complete lifecycle of binary assets: ingestion, validation, conte
 composer require nvl/laravel-suite:^1.0
 php artisan migrate
 php artisan vendor:publish --tag=media-config
-php artisan vendor:publish --tag=media-migrations
 php artisan vendor:publish --tag=media-skills
 ```
 
 The package does not assume an application user model, UUID owner keys, storage provider, authorization package, or application middleware.
+
+Choose exactly one migration owner:
+
+1. **Automatic vendor loading (default):** leave `media.migrations.enabled=true`, do not publish `media-migrations`, and run `php artisan migrate`.
+2. **Host-owned published migrations:** publish `media-migrations`, set `media.migrations.enabled=false` before migrating, and maintain the published files as application migrations.
+
+   ```bash
+   php artisan vendor:publish --tag=media-migrations
+   ```
+
+Never run both sources. Laravel retimestamps files published through the migration tag. `php artisan nvl:media:doctor` reports a warning when automatic loading remains enabled and `database/migrations` contains a timestamp-independent name matching a package migration; `--strict` promotes that warning to failure.
 
 English and Bulgarian media copy ships with the package. Publish conventional Laravel overrides with `php artisan vendor:publish --tag=media-translations`. Localized asset metadata remains database-backed through `nvl/translatable`.
 

@@ -3,9 +3,11 @@
 declare(strict_types=1);
 
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\ServiceProvider;
 use Nvl\Media\Contracts\MediaContentScanner;
 use Nvl\Media\Contracts\MultipartUploadGateway;
 use Nvl\Media\Exceptions\MediaUploadException;
+use Nvl\Media\Providers\MediaServiceProvider;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDoctor;
 use Nvl\Media\Services\MediaScannerPolicy;
@@ -16,6 +18,45 @@ it('reports a healthy standalone installation as machine-readable output', funct
         '--strict' => true,
         '--format' => 'json',
     ])->assertSuccessful();
+});
+
+it('registers timestamp-aware migration publishing and warns about duplicate ownership', function () {
+    $migrationPath = realpath(dirname(__DIR__, 2).'/database/migrations');
+    $publishableMigrationPaths = array_map(
+        static fn (string $path): string|false => realpath($path),
+        ServiceProvider::publishableMigrationPaths(),
+    );
+
+    expect(MediaServiceProvider::pathsToPublish(
+        MediaServiceProvider::class,
+        'media-migrations',
+    ))->not->toBeEmpty()
+        ->and($publishableMigrationPaths)->toContain($migrationPath);
+
+    $published = database_path(
+        'migrations/2099_01_01_000000_create_media_table.php',
+    );
+    file_put_contents($published, "<?php\n");
+
+    try {
+        $check = collect(app(MediaDoctor::class)->inspect())
+            ->firstWhere('key', 'migrations.ownership');
+
+        expect($check)
+            ->not->toBeNull()
+            ->passed->toBeFalse()
+            ->severity->toBe('warning')
+            ->message->toContain('create_media_table');
+
+        $this->artisan('nvl:media:doctor', ['--format' => 'json'])
+            ->assertSuccessful();
+        $this->artisan('nvl:media:doctor', [
+            '--strict' => true,
+            '--format' => 'json',
+        ])->assertFailed();
+    } finally {
+        unlink($published);
+    }
 });
 
 it('fails closed when production scanning is required without a scanner binding', function () {

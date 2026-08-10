@@ -96,7 +96,7 @@ final class MediaServiceProvider extends ServiceProvider
         $this->registerPolicies();
         $this->registerTranslations();
         $this->registerConfig();
-        $this->publishes([
+        $this->publishesMigrations([
             __DIR__.'/../../database/migrations' => database_path('migrations'),
         ], 'media-migrations');
         if ((bool) config('media.migrations.enabled', true)) {

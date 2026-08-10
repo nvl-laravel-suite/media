@@ -4,6 +4,7 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+- Registered migration publication through Laravel's timestamp-aware API and made Doctor warn when automatic vendor loading overlaps a published host copy.
 - Fixed the Spatie-compatible granular permission fallback so Eloquent's
   dynamic method proxy cannot prevent `hasPermissionTo` from being evaluated.
 - Allowed association detachment from soft-deleted Media tombstones so owning
