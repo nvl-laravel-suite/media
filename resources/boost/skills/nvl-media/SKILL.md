@@ -11,11 +11,19 @@ The supported 1.x production profile is PHP 8.3/8.4, Laravel 12/13, PostgreSQL, 
 
 ## Read the canonical references
 
-- Use `docs/php-api.md` for exact facade, contract, trait, adder, slot, conversion, model-helper, DTO, Action, exception, and transaction contracts.
-- Use `docs/http-api.md` for every management/asset route, payload, response, status, authorization, and error shape.
-- Use `docs/configuration.md` for every configuration key, default, environment variable, and production constraint.
-- Use `docs/extending.md` before replacing authorization, scanning, search, DNS, multipart, library, upload, association, deletion, or reuse boundaries, and before consuming lifecycle events.
-- Use `docs/images-and-queues.md`, `docs/s3.md`, and `docs/commands.md` for operational rollout.
+- Resolve canonical references from
+  `vendor/nvl/laravel-suite/packages/nvl/media/docs/` in a consumer application
+  or `packages/nvl/media/docs/` in the suite repository.
+- Use `php-api.md` for exact facade, contract, trait, adder, slot, conversion,
+  model-helper, DTO, Action, exception, and transaction contracts.
+- Use `http-api.md` for every management/asset route, payload, response, status,
+  authorization, and error shape.
+- Use `configuration.md` for every configuration key, default, environment
+  variable, and production constraint.
+- Use `extending.md` before replacing authorization, scanning, search, DNS,
+  multipart, library, upload, association, deletion, or reuse boundaries, and
+  before consuming lifecycle events.
+- Use `images-and-queues.md`, `s3.md`, and `commands.md` for operational rollout.
 - Keep these references aligned with source. The package documentation coverage test treats missing public-surface documentation as a failure.
 
 ## Choose ownership semantics
