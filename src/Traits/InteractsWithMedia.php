@@ -11,7 +11,6 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\MediaAdder;
@@ -560,20 +559,28 @@ trait InteractsWithMedia
 
         $cases = [];
         $bindings = [];
+        $association = new MediaAssociation;
+        $connection = $association->getConnection();
+        $grammar = $connection->getQueryGrammar();
+        $table = $grammar->wrapTable($association->getTable());
+        $mediaId = $grammar->wrap('media_id');
+        $orderColumn = $grammar->wrap('order');
 
         foreach ($ordered_ids as $order => $media_id) {
-            $cases[] = 'WHEN media_id = ? THEN ?';
+            $cases[] = "WHEN {$mediaId} = ? THEN ?";
             $bindings[] = $media_id;
             $bindings[] = (int) $order;
         }
 
         $caseStatement = implode(' ', $cases);
 
-        DB::update(
-            'UPDATE '.MediaTables::MEDIA_ASSOCIATIONS
-            .' SET "order" = CASE '.$caseStatement.' ELSE "order" END'
-            .' WHERE associable_type = ? AND associable_id = ? AND collection = ?'
-            .' AND media_id IN ('.implode(',', array_fill(0, count($ordered_ids), '?')).')',
+        $connection->update(
+            "UPDATE {$table}"
+            ." SET {$orderColumn} = CASE {$caseStatement} ELSE {$orderColumn} END"
+            .' WHERE '.$grammar->wrap('associable_type').' = ?'
+            .' AND '.$grammar->wrap('associable_id').' = ?'
+            .' AND '.$grammar->wrap('collection').' = ?'
+            .' AND '.$mediaId.' IN ('.implode(',', array_fill(0, count($ordered_ids), '?')).')',
             array_merge($bindings, [$this->getMorphClass(), $this->getKey(), $collection], $ordered_ids),
         );
     }

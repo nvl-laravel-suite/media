@@ -2,9 +2,7 @@
 
 declare(strict_types=1);
 
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Enums\MediaType;
@@ -14,21 +12,6 @@ use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Tests\Stubs\TestMediaModel;
 use Nvl\Media\Tests\Stubs\TestMediaUser;
-
-/*
- * Anonymous test model that uses InteractsWithMedia.
- * We create a simple table in setUp since the User model doesn't have the trait.
- */
-beforeEach(function () {
-    if (! Schema::hasTable('test_media_models')) {
-        Schema::create('test_media_models', function (Blueprint $table) {
-            $table->uuid('id')->primary();
-            $table->string('name');
-            $table->timestamps();
-            $table->softDeletes();
-        });
-    }
-});
 
 function testModelClass(): string
 {

@@ -2,13 +2,11 @@
 
 declare(strict_types=1);
 
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Auth\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use League\Flysystem\FilesystemAdapter as FlysystemAdapter;
@@ -604,15 +602,6 @@ describe('AttachMediaAction', function () {
 describe('ReplaceMediaFileAction', function () {
 
     beforeEach(function () {
-        if (! Schema::hasTable('test_media_models')) {
-            Schema::create('test_media_models', function (Blueprint $table): void {
-                $table->uuid('id')->primary();
-                $table->string('name');
-                $table->timestamps();
-                $table->softDeletes();
-            });
-        }
-
         Storage::fake('public');
         Storage::fake('s3');
         config([

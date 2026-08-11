@@ -2,9 +2,7 @@
 
 declare(strict_types=1);
 
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaLifecycleService;
@@ -12,15 +10,6 @@ use Nvl\Media\Tests\Stubs\TestMediaModel;
 
 beforeEach(function () {
     Storage::fake('public');
-
-    if (! Schema::hasTable('test_media_models')) {
-        Schema::create('test_media_models', function (Blueprint $table) {
-            $table->uuid('id')->primary();
-            $table->string('name');
-            $table->timestamps();
-            $table->softDeletes();
-        });
-    }
 
     config([
         'filesystems.default' => 'public',

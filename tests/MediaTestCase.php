@@ -38,20 +38,23 @@ abstract class MediaTestCase extends Orchestra
         ];
     }
 
-    protected function setUp(): void
+    protected function defineDatabaseMigrationsAfterDatabaseRefreshed(): void
     {
-        parent::setUp();
+        Schema::create('users', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name');
+            $table->string('email')->unique();
+            $table->string('password');
+            $table->rememberToken();
+            $table->timestamps();
+        });
 
-        if (! Schema::hasTable('users')) {
-            Schema::create('users', function (Blueprint $table): void {
-                $table->id();
-                $table->string('name');
-                $table->string('email')->unique();
-                $table->string('password');
-                $table->rememberToken();
-                $table->timestamps();
-            });
-        }
+        Schema::create('test_media_models', function (Blueprint $table): void {
+            $table->uuid('id')->primary();
+            $table->string('name');
+            $table->timestamps();
+            $table->softDeletes();
+        });
     }
 
     protected function defineEnvironment($app): void

@@ -2,12 +2,10 @@
 
 declare(strict_types=1);
 
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Exceptions\FileUnacceptableForCollection;
@@ -26,15 +24,6 @@ use Nvl\Media\Tests\Stubs\TestMediaUser;
 
 beforeEach(function () {
     Storage::fake('public');
-
-    if (! Schema::hasTable('test_media_models')) {
-        Schema::create('test_media_models', function (Blueprint $table) {
-            $table->uuid('id')->primary();
-            $table->string('name');
-            $table->timestamps();
-            $table->softDeletes();
-        });
-    }
 
     config([
         'filesystems.default' => 'public',

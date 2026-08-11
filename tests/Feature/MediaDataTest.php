@@ -2,8 +2,6 @@
 
 declare(strict_types=1);
 
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Nvl\Media\Data\Display\MediaPayload;
 use Nvl\Media\Data\Display\PublicMedia;
 use Nvl\Media\Enums\MediaType;
@@ -21,14 +19,6 @@ beforeEach(function () {
         ],
     ]);
 
-    if (! Schema::hasTable('test_media_models')) {
-        Schema::create('test_media_models', function (Blueprint $table) {
-            $table->uuid('id')->primary();
-            $table->string('name');
-            $table->timestamps();
-            $table->softDeletes();
-        });
-    }
 });
 
 function createMediaDataTestModel(array $overrides = []): TestMediaModel

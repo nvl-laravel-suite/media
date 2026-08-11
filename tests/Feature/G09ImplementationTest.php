@@ -25,15 +25,6 @@ use Nvl\Media\Tests\Stubs\TestMediaModel;
 beforeEach(function (): void {
     Storage::fake('public');
 
-    if (! Schema::hasTable('test_media_models')) {
-        Schema::create('test_media_models', function (Blueprint $table): void {
-            $table->uuid('id')->primary();
-            $table->string('name');
-            $table->timestamps();
-            $table->softDeletes();
-        });
-    }
-
     config([
         'media.allowed_disks' => ['public'],
         'media.auto_generate_variations' => false,

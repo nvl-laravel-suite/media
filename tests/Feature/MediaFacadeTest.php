@@ -2,9 +2,7 @@
 
 declare(strict_types=1);
 
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Schema;
 use Nvl\Media\Contracts\MediaLibraryContract;
 use Nvl\Media\Contracts\UploadMediaContract;
 use Nvl\Media\Enums\MediaAbility;
@@ -16,15 +14,6 @@ use Nvl\Media\Tests\Stubs\TestMediaModel;
 use Nvl\Media\Tests\Stubs\TestPermissionMediaUser;
 
 beforeEach(function (): void {
-    if (! Schema::hasTable('test_media_models')) {
-        Schema::create('test_media_models', function (Blueprint $table): void {
-            $table->uuid('id')->primary();
-            $table->string('name');
-            $table->timestamps();
-            $table->softDeletes();
-        });
-    }
-
     MediaFacade::clearResolvedInstance(MediaLibraryContract::class);
 });
 
