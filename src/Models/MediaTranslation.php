@@ -28,7 +28,7 @@ class MediaTranslation extends Model
 {
     use HasUuids;
 
-    public const string TABLE = MediaTables::MEDIA_I18N;
+    public const string TABLE = MediaTables::I18n;
 
     protected $table = self::TABLE;
 

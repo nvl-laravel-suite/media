@@ -77,7 +77,7 @@ class Media extends Model implements TranslatableModel
     use SoftDeletes;
     use Translatable;
 
-    public const string TABLE = MediaTables::MEDIA;
+    public const string TABLE = MediaTables::Media;
 
     protected $table = self::TABLE;
 

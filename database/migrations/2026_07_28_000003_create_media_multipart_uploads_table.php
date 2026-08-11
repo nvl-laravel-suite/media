@@ -11,11 +11,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable(MediaTables::MEDIA_MULTIPART_UPLOADS)) {
+        if (Schema::hasTable(MediaTables::MultipartUploads)) {
             return;
         }
 
-        Schema::create(MediaTables::MEDIA_MULTIPART_UPLOADS, function (Blueprint $table): void {
+        Schema::create(MediaTables::MultipartUploads, function (Blueprint $table): void {
             $table->uuid('id')->primary();
             $table->text('provider_state')->nullable();
             $table->string('disk', 64);
@@ -56,13 +56,13 @@ return new class extends Migration
 
             $table->foreign('completed_media_id')
                 ->references('id')
-                ->on(MediaTables::MEDIA)
+                ->on(MediaTables::Media)
                 ->nullOnDelete();
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists(MediaTables::MEDIA_MULTIPART_UPLOADS);
+        Schema::dropIfExists(MediaTables::MultipartUploads);
     }
 };

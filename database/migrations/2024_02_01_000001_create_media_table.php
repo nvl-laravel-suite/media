@@ -11,11 +11,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable(MediaTables::MEDIA)) {
+        if (Schema::hasTable(MediaTables::Media)) {
             return;
         }
 
-        Schema::create(MediaTables::MEDIA, function (Blueprint $table) {
+        Schema::create(MediaTables::Media, function (Blueprint $table) {
             $table->uuid('id')->primary();
 
             $table->string('filename')
@@ -122,6 +122,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists(MediaTables::MEDIA);
+        Schema::dropIfExists(MediaTables::Media);
     }
 };

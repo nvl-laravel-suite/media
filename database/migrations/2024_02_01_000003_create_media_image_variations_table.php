@@ -11,11 +11,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable(MediaTables::MEDIA_IMAGE_VARIATIONS)) {
+        if (Schema::hasTable(MediaTables::ImageVariations)) {
             return;
         }
 
-        Schema::create(MediaTables::MEDIA_IMAGE_VARIATIONS, function (Blueprint $table) {
+        Schema::create(MediaTables::ImageVariations, function (Blueprint $table) {
             $table->uuid('id')->primary();
 
             $table->uuid('media_id')
@@ -61,13 +61,13 @@ return new class extends Migration
 
             $table->foreign('media_id')
                 ->references('id')
-                ->on(MediaTables::MEDIA)
+                ->on(MediaTables::Media)
                 ->cascadeOnDelete();
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists(MediaTables::MEDIA_IMAGE_VARIATIONS);
+        Schema::dropIfExists(MediaTables::ImageVariations);
     }
 };

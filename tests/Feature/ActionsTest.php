@@ -541,7 +541,7 @@ describe('AttachMediaAction', function () {
             ->and($association->associable_id)->toBe($user->id)
             ->and($association->collection)->toBe('avatar');
 
-        $this->assertDatabaseHas(MediaTables::MEDIA_ASSOCIATIONS, [
+        $this->assertDatabaseHas(MediaTables::Associations, [
             'media_id' => $media->id,
             'associable_type' => User::class,
             'associable_id' => $user->id,
@@ -849,7 +849,7 @@ describe('DetachMediaAction', function () {
 
         expect($deleted)->toBe(1);
 
-        $this->assertDatabaseMissing(MediaTables::MEDIA_ASSOCIATIONS, [
+        $this->assertDatabaseMissing(MediaTables::Associations, [
             'media_id' => $media->id,
             'associable_id' => $user->id,
         ]);
@@ -881,7 +881,7 @@ describe('DetachMediaAction', function () {
         expect($deleted)->toBe(1);
         expect(MediaAssociation::where('media_id', $media->id)->count())->toBe(1);
 
-        $this->assertDatabaseHas(MediaTables::MEDIA_ASSOCIATIONS, [
+        $this->assertDatabaseHas(MediaTables::Associations, [
             'media_id' => $media->id,
             'collection' => 'gallery',
         ]);

@@ -47,7 +47,7 @@ final class MediaMultipartUpload extends Model
 {
     use HasUuids;
 
-    public const string TABLE = MediaTables::MEDIA_MULTIPART_UPLOADS;
+    public const string TABLE = MediaTables::MultipartUploads;
 
     protected $table = self::TABLE;
 

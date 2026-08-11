@@ -37,7 +37,7 @@ class MediaImageVariation extends Model
 {
     use HasUuids;
 
-    public const string TABLE = MediaTables::MEDIA_IMAGE_VARIATIONS;
+    public const string TABLE = MediaTables::ImageVariations;
 
     protected $table = self::TABLE;
 

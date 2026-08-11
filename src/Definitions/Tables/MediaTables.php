@@ -4,16 +4,30 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Definitions\Tables;
 
-/** MediaTables: table name constants for the media module schema. */
+/**
+ * Defines the canonical table names owned by the Media package.
+ */
 final class MediaTables
 {
-    public const MEDIA = 'px_media';
+    public const string Media = 'px_media';
 
-    public const MEDIA_ASSOCIATIONS = 'px_media_associations';
+    public const string Associations = 'px_media_associations';
 
-    public const MEDIA_IMAGE_VARIATIONS = 'px_media_image_variations';
+    public const string ImageVariations = 'px_media_image_variations';
 
-    public const MEDIA_I18N = 'px_media_i18n';
+    public const string I18n = 'px_media_i18n';
 
-    public const MEDIA_MULTIPART_UPLOADS = 'px_media_multipart_uploads';
+    public const string MultipartUploads = 'px_media_multipart_uploads';
+
+    public const string MEDIA = self::Media;
+
+    public const string MEDIA_ASSOCIATIONS = self::Associations;
+
+    public const string MEDIA_IMAGE_VARIATIONS = self::ImageVariations;
+
+    public const string MEDIA_I18N = self::I18n;
+
+    public const string MEDIA_MULTIPART_UPLOADS = self::MultipartUploads;
+
+    private function __construct() {}
 }

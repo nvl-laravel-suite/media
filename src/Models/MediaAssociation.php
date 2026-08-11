@@ -32,7 +32,7 @@ class MediaAssociation extends Model
 {
     use HasUuids;
 
-    public const string TABLE = MediaTables::MEDIA_ASSOCIATIONS;
+    public const string TABLE = MediaTables::Associations;
 
     protected $table = self::TABLE;
 

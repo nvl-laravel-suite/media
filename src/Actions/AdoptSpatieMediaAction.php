@@ -140,14 +140,14 @@ final readonly class AdoptSpatieMediaAction
                 $translationRows,
                 $variationRows,
             ): void {
-                $this->insertRows(MediaTables::MEDIA, $mediaRows);
-                $this->insertRows(MediaTables::MEDIA_ASSOCIATIONS, $associationRows);
-                $this->insertRows(MediaTables::MEDIA_I18N, $translationRows);
-                $this->insertRows(MediaTables::MEDIA_IMAGE_VARIATIONS, $variationRows);
-                $this->assertReconciled(MediaTables::MEDIA, $mediaRows);
-                $this->assertReconciled(MediaTables::MEDIA_ASSOCIATIONS, $associationRows);
-                $this->assertReconciled(MediaTables::MEDIA_I18N, $translationRows);
-                $this->assertReconciled(MediaTables::MEDIA_IMAGE_VARIATIONS, $variationRows);
+                $this->insertRows(MediaTables::Media, $mediaRows);
+                $this->insertRows(MediaTables::Associations, $associationRows);
+                $this->insertRows(MediaTables::I18n, $translationRows);
+                $this->insertRows(MediaTables::ImageVariations, $variationRows);
+                $this->assertReconciled(MediaTables::Media, $mediaRows);
+                $this->assertReconciled(MediaTables::Associations, $associationRows);
+                $this->assertReconciled(MediaTables::I18n, $translationRows);
+                $this->assertReconciled(MediaTables::ImageVariations, $variationRows);
             });
         }
 
@@ -158,10 +158,10 @@ final readonly class AdoptSpatieMediaAction
             sourceAssociations: count($associationRows),
             sourceTranslations: count($translationRows),
             sourceVariations: count($variationRows),
-            matchedMedia: $this->matchedCount(MediaTables::MEDIA, $mediaRows),
-            matchedAssociations: $this->matchedCount(MediaTables::MEDIA_ASSOCIATIONS, $associationRows),
-            matchedTranslations: $this->matchedCount(MediaTables::MEDIA_I18N, $translationRows),
-            matchedVariations: $this->matchedCount(MediaTables::MEDIA_IMAGE_VARIATIONS, $variationRows),
+            matchedMedia: $this->matchedCount(MediaTables::Media, $mediaRows),
+            matchedAssociations: $this->matchedCount(MediaTables::Associations, $associationRows),
+            matchedTranslations: $this->matchedCount(MediaTables::I18n, $translationRows),
+            matchedVariations: $this->matchedCount(MediaTables::ImageVariations, $variationRows),
             missingPaths: $missingPaths,
             errors: $errors,
         );
@@ -175,7 +175,7 @@ final readonly class AdoptSpatieMediaAction
         ?string $translationTable,
         ?string $variationTable,
     ): void {
-        if ($sourceTable === MediaTables::MEDIA) {
+        if ($sourceTable === MediaTables::Media) {
             throw new LogicException(
                 'Stage the legacy Spatie media table under a different name before adoption.',
             );
@@ -183,10 +183,10 @@ final readonly class AdoptSpatieMediaAction
 
         foreach ([
             $sourceTable,
-            MediaTables::MEDIA,
-            MediaTables::MEDIA_ASSOCIATIONS,
-            MediaTables::MEDIA_I18N,
-            MediaTables::MEDIA_IMAGE_VARIATIONS,
+            MediaTables::Media,
+            MediaTables::Associations,
+            MediaTables::I18n,
+            MediaTables::ImageVariations,
         ] as $table) {
             if (! Schema::hasTable($table)) {
                 throw new LogicException("Required media adoption table [{$table}] is missing.");

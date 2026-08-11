@@ -702,7 +702,7 @@ describe('POST /api/v1/media/{id}/attach', function () {
 
         $response->assertStatus(200);
 
-        $this->assertDatabaseHas(MediaTables::MEDIA_ASSOCIATIONS, [
+        $this->assertDatabaseHas(MediaTables::Associations, [
             'media_id' => $media->id,
             'associable_type' => TestMediaUser::class,
             'associable_id' => $user->id,
@@ -721,7 +721,7 @@ describe('POST /api/v1/media/{id}/attach', function () {
             'collection' => 'avatar',
         ])->assertForbidden();
 
-        $this->assertDatabaseMissing(MediaTables::MEDIA_ASSOCIATIONS, [
+        $this->assertDatabaseMissing(MediaTables::Associations, [
             'media_id' => $media->id,
             'associable_type' => TestMediaUser::class,
             'associable_id' => $user->id,
@@ -755,7 +755,7 @@ describe('POST /api/v1/media/{id}/attach', function () {
 
         $response->assertStatus(403);
 
-        $this->assertDatabaseMissing(MediaTables::MEDIA_ASSOCIATIONS, [
+        $this->assertDatabaseMissing(MediaTables::Associations, [
             'media_id' => $media->id,
             'associable_type' => TestMediaUser::class,
             'associable_id' => $target->id,
@@ -812,7 +812,7 @@ describe('POST /api/v1/media/{id}/detach', function () {
 
         $response->assertStatus(200);
 
-        $this->assertDatabaseMissing(MediaTables::MEDIA_ASSOCIATIONS, [
+        $this->assertDatabaseMissing(MediaTables::Associations, [
             'media_id' => $media->id,
             'associable_id' => $user->id,
         ]);
@@ -839,7 +839,7 @@ describe('POST /api/v1/media/{id}/detach', function () {
 
         $response->assertStatus(403);
 
-        $this->assertDatabaseHas(MediaTables::MEDIA_ASSOCIATIONS, [
+        $this->assertDatabaseHas(MediaTables::Associations, [
             'media_id' => $media->id,
             'associable_type' => TestMediaUser::class,
             'associable_id' => $target->id,
@@ -907,7 +907,7 @@ describe('POST /api/v1/media/reorder', function () {
 
         $response->assertStatus(403);
 
-        $this->assertDatabaseHas(MediaTables::MEDIA_ASSOCIATIONS, [
+        $this->assertDatabaseHas(MediaTables::Associations, [
             'media_id' => $firstMedia->id,
             'associable_type' => TestMediaUser::class,
             'associable_id' => $target->id,
@@ -915,7 +915,7 @@ describe('POST /api/v1/media/reorder', function () {
             'order' => 0,
         ]);
 
-        $this->assertDatabaseHas(MediaTables::MEDIA_ASSOCIATIONS, [
+        $this->assertDatabaseHas(MediaTables::Associations, [
             'media_id' => $secondMedia->id,
             'associable_type' => TestMediaUser::class,
             'associable_id' => $target->id,

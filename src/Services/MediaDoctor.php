@@ -140,7 +140,7 @@ final readonly class MediaDoctor
     private function schemaChecks(): array
     {
         $requirements = [
-            MediaTables::MEDIA => [
+            MediaTables::Media => [
                 'id',
                 'digest',
                 'disk',
@@ -152,21 +152,21 @@ final readonly class MediaDoctor
                 'revision',
                 'variation_definitions',
             ],
-            MediaTables::MEDIA_ASSOCIATIONS => [
+            MediaTables::Associations => [
                 'media_id',
                 'associable_type',
                 'associable_id',
                 'collection',
                 'is_active',
             ],
-            MediaTables::MEDIA_IMAGE_VARIATIONS => [
+            MediaTables::ImageVariations => [
                 'media_id',
                 'label',
                 'status',
                 'source_revision',
                 'storage_path',
             ],
-            MediaTables::MEDIA_I18N => [
+            MediaTables::I18n => [
                 'media_id',
                 'locale',
                 'title',
@@ -174,7 +174,7 @@ final readonly class MediaDoctor
                 'caption',
                 'description',
             ],
-            MediaTables::MEDIA_MULTIPART_UPLOADS => [
+            MediaTables::MultipartUploads => [
                 'id',
                 'provider_state',
                 'object_key',
@@ -329,7 +329,7 @@ final readonly class MediaDoctor
      */
     private function representativeStoragePathCheck(bool $production): MediaDoctorCheckData
     {
-        if (! Schema::hasTable(MediaTables::MEDIA)) {
+        if (! Schema::hasTable(MediaTables::Media)) {
             return new MediaDoctorCheckData(
                 'storage.persisted_paths',
                 $production ? 'error' : 'warning',
@@ -755,7 +755,7 @@ final readonly class MediaDoctor
     private function requiredIndexes(string $table): array
     {
         return match ($table) {
-            MediaTables::MEDIA => [
+            MediaTables::Media => [
                 'media_hash_idx',
                 'media_visibility_created_idx',
                 'media_uploader_created_idx',
@@ -763,7 +763,7 @@ final readonly class MediaDoctor
                 'media_type_created_idx',
                 'media_status_created_idx',
             ],
-            MediaTables::MEDIA_MULTIPART_UPLOADS => [
+            MediaTables::MultipartUploads => [
                 'media_multipart_disk_object_hash_unique',
                 'media_multipart_actor_created_idx',
                 'media_multipart_status_expiry_idx',

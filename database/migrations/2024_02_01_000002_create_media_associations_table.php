@@ -11,11 +11,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable(MediaTables::MEDIA_ASSOCIATIONS)) {
+        if (Schema::hasTable(MediaTables::Associations)) {
             return;
         }
 
-        Schema::create(MediaTables::MEDIA_ASSOCIATIONS, function (Blueprint $table) {
+        Schema::create(MediaTables::Associations, function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('media_id');
             $table->string('associable_type');
@@ -52,13 +52,13 @@ return new class extends Migration
 
             $table->foreign('media_id')
                 ->references('id')
-                ->on(MediaTables::MEDIA)
+                ->on(MediaTables::Media)
                 ->cascadeOnDelete();
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists(MediaTables::MEDIA_ASSOCIATIONS);
+        Schema::dropIfExists(MediaTables::Associations);
     }
 };
