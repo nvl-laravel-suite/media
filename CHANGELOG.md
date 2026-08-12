@@ -4,6 +4,20 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Added a missing-binary incident recovery runbook and explicit multipart
+  scheduler ownership guidance.
+
+## [1.0.3] - 2026-08-12
+
+### Changed
+
+- Released unchanged under the suite's shared version after the v1.0.2 Media
+  hardening work.
+
+## [1.0.2] - 2026-08-12
+
 - Replaced the global media-hash uniqueness constraint with an indexed reusable hash, added generated-binary ingestion, existence-safe nullable URLs, one-record cross-disk relocation, and a single PUT/PATCH management route declaration.
 - Added dry-run-first `nvl:media:adopt-spatie` conversion with deterministic identifiers, association/translation/variation mapping, backing-path and count reconciliation, plus Doctor checks and empty-root guidance for in-place storage adoption.
 - Registered migration publication through Laravel's timestamp-aware API and made Doctor warn when automatic vendor loading overlaps a published host copy.
@@ -35,7 +49,7 @@ All notable changes to `nvl/media` are documented here.
 - Extended the doctor with S3, image driver/encoder, and queue timeout diagnostics.
 - Added dedicated S3, image/queue, and command operations guides.
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-08-08
 
 - Added private one-to-one media and reusable public assets with policy-bounded deduplication.
 - Added proxied and multipart uploads, checksums, scanning, quarantine, lifecycle states, and idempotent finalization.

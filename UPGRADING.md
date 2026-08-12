@@ -14,6 +14,10 @@ Version 1.0 uses UUID media records, string-compatible morph identifiers, explic
 
 If existing `folder` values are already complete disk-relative paths, set `MEDIA_ROOT_FOLDER=` during in-place adoption. Leaving the default `media` prefix would point every imported row at a different object. Keep the empty root only for a dedicated disk, or move objects through `nvl:media:migrate-disk` into the prefixed layout. `nvl:media:doctor` samples persisted rows and flags this mismatch.
 
+Treat any strict `storage.persisted_paths` failure as a data incident. Diagnose
+and restore missing objects before considering association or row removal; do
+not schedule `nvl:media:reconcile --cleanup-orphans` as an adoption shortcut.
+
 ### Image and queue configuration
 
 The v1 configuration uses `media.queue.enabled`, `media.queue.connection`, `media.queue.name`, and `media.queue.jobs.*`. Remove the pre-v1 flat `queue_conversions`, `queue_connection`, and `queue_name` keys.

@@ -71,6 +71,24 @@ php artisan nvl:media:reconcile --production --disk=s3 --cleanup-orphans --older
 
 Use live writes only in a controlled non-production probe. Reconciliation remains read-only unless `--live-write` or `--cleanup-orphans` is explicit. Objects with unavailable/unreliable age metadata are always retained and reported. Objects referenced only by soft-deleted media are cleanup candidates, but their database tombstones remain for diagnosis.
 
+### Missing-binary incident recovery
+
+A strict Doctor failure for `storage.persisted_paths` is a data incident, not
+permission to delete database records. Start with read-only diagnostics:
+
+```bash
+php artisan nvl:media:doctor --strict --format=json
+php artisan nvl:media:reconcile --production --orphans
+```
+
+Verify the configured disk and `root_folder`, the row's persisted folder and
+hash, backups or object-store history, and every association/current use. Restore
+the original object whenever possible. An intentional relocation must use the
+Media relocation or migration API; never update a persisted path directly. If
+the binary is unrecoverable, require an explicit business decision before
+removing associations or the media record. Never automate
+`nvl:media:reconcile --cleanup-orphans` as a replacement for legacy cleanup.
+
 ## `nvl:media:multipart:prune`
 
 Idempotently aborts unfinished provider uploads that require cleanup and records their persisted session as `aborted`:
@@ -83,6 +101,19 @@ php artisan nvl:media:multipart:prune --limit=500
 - `--limit=500`: maximum cleanup candidates processed in one invocation.
 
 Candidates include expired `initiated`/`completing` sessions, legacy sessions already marked `expired`, and failed initiations whose provider cleanup remains pending. Successful cleanup clears encrypted provider state and records the terminal reason. Run this on a schedule wherever multipart sessions are enabled and the configured recoverable gateway and central lock store are available. Provider cleanup failures remain retryable, are logged, and produce a non-zero exit status.
+
+The host owns that schedule. When `media.multipart.enabled=true`, use:
+
+```php
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::command('nvl:media:multipart:prune')
+    ->everyFiveMinutes()
+    ->onOneServer()
+    ->withoutOverlapping();
+```
+
+Multipart schedule readiness is irrelevant while multipart is disabled.
 
 ## `nvl:media:regenerate`
 

@@ -415,6 +415,14 @@ Set `media.migrations.enabled=false` only while staging a legacy table whose can
 
 For in-place adoption, `media.root_folder` must describe the physical object layout, not the desired future layout. When persisted `folder` values already contain the complete path below the disk root, set `MEDIA_ROOT_FOLDER=` (empty) before dry-run and cutover. Otherwise physically move objects through `nvl:media:migrate-disk` and reconcile them. Doctor samples persisted rows against storage and reports root-folder drift before URLs are enabled.
 
+A strict `storage.persisted_paths` failure is a data incident. Run read-only
+Doctor and `nvl:media:reconcile --production --orphans`, verify disk/root/path,
+hash, backups, and associations, and restore the original object when possible.
+Use the relocation/migration API for intentional moves; never edit paths
+directly or automate `--cleanup-orphans` to erase legacy discrepancies. An
+unrecoverable object requires an explicit business decision before records or
+associations are removed. See [the recovery runbook](docs/commands.md#missing-binary-incident-recovery).
+
 ## Public and privileged DTOs
 
 Use `PublicMedia` for public rendering. It exposes safe identity, type, localized copy, MIME/extension, URLs, responsive image sizes, and basic file size. It never exposes storage identity or security-boundary fields.
