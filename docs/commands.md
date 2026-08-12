@@ -113,7 +113,9 @@ Schedule::command('nvl:media:multipart:prune')
     ->withoutOverlapping();
 ```
 
-Multipart schedule readiness is irrelevant while multipart is disabled.
+Configure Laravel's scheduler mutex cache to use one shared lock store across
+every application node. Multipart schedule readiness is irrelevant while
+multipart is disabled.
 
 ## `nvl:media:regenerate`
 

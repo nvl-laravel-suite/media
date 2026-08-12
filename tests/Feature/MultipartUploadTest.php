@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Actions\AbortMultipartUploadAction;
 use Nvl\Media\Actions\CompleteMultipartUploadAction;
@@ -29,6 +30,18 @@ use Nvl\Media\Tests\Stubs\TestMediaUser;
 beforeEach(function (): void {
     config(['media.multipart.enabled' => true]);
     Storage::fake('public');
+});
+
+it('leaves multipart pruning cadence to the host application', function (): void {
+    $commands = collect(app(Schedule::class)->events())
+        ->map(static fn ($event): string => (string) $event->command);
+
+    expect($commands->contains(
+        static fn (string $command): bool => str_contains(
+            $command,
+            'nvl:media:multipart:prune',
+        ),
+    ))->toBeFalse();
 });
 
 function multipartGateway(

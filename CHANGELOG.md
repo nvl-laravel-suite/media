@@ -4,10 +4,12 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-08-12
+
 ### Changed
 
-- Added a missing-binary incident recovery runbook and explicit multipart
-  scheduler ownership guidance.
+- Added a missing-binary incident recovery runbook and verified explicit,
+  shared-lock multipart scheduler ownership guidance.
 
 ## [1.0.3] - 2026-08-12
 
