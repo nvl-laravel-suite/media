@@ -31,7 +31,7 @@ Media owns the complete lifecycle of binary assets: ingestion, validation, conte
 
 ## Requirements and installation
 
-- PHP 8.3+
+- PHP 8.4+
 - Laravel 12 or 13
 - `ext-curl` for DNS-pinned remote ingestion
 - `nvl/translatable` for localized media copy
@@ -63,7 +63,7 @@ English and Bulgarian media copy ships with the package. Publish conventional La
 
 ### Production support boundary
 
-The supported 1.x production path is PHP 8.3/8.4, Laravel 12/13, PostgreSQL, an S3-compatible private bucket, Redis-backed cache/locks/queues, and a real `MediaContentScanner`. Multipart remains opt-in; when enabled, production additionally requires a recoverable gateway, central multipart locks, scanner attestation, and the PostgreSQL/Redis/S3 integration gate. Run `php artisan nvl:media:doctor --production --strict` against the deployed configuration before accepting traffic.
+The supported 1.x production path is PHP 8.4+, Laravel 12/13, PostgreSQL, an S3-compatible private bucket, Redis-backed cache/locks/queues, and a real `MediaContentScanner`. Multipart remains opt-in; when enabled, production additionally requires a recoverable gateway, central multipart locks, scanner attestation, and the PostgreSQL/Redis/S3 integration gate. Run `php artisan nvl:media:doctor --production --strict` against the deployed configuration before accepting traffic.
 
 SQLite, local disks, array locks, and synchronous queues remain supported for development and the fast test suite. They do not prove the multi-node production guarantees.
 
@@ -182,7 +182,31 @@ Completion is idempotent by persisted session ID. Repeating a completed request 
 
 Every completed direct upload enters `pending_scan`, regardless of ordinary scanner defaults. An out-of-band scanner must call `FinalizeMediaScanAction` with `MediaScanResultData`, including clean/rejected state plus attested MIME, extension, size, SHA-256, and diagnostics. Only an exact clean attestation makes the media available and dispatches variations; a rejection or technical mismatch quarantines it.
 
-Multipart limits include session duration, minimum/maximum part size, maximum parts, maximum object size, and central lock bounds. Schedule `nvl:media:multipart:prune` to idempotently abort expired provider uploads. Enable multipart in production only after the package’s PostgreSQL/Redis/S3 integration job passes against the target provider and `nvl:media:doctor --production --strict` reports a recoverable gateway, central lock store, and real scanner.
+Multipart limits include session duration, minimum/maximum part size, maximum parts, maximum object size, and central lock bounds. Schedule `nvl:media:multipart:prune` to idempotently abort expired provider uploads. Enable multipart in production only after the package’s PostgreSQL/Redis/S3 integration test passes against the target provider and `nvl:media:doctor --production --strict` reports a recoverable gateway, central lock store, and real scanner.
+
+Run the production-stack proof locally against disposable PostgreSQL data,
+shared Redis, and the target S3-compatible provider. The command creates Media
+tables in the selected database and may create the configured bucket, so never
+point it at an application database or shared production bucket.
+
+```bash
+DB_CONNECTION=pgsql \
+DB_HOST=127.0.0.1 \
+DB_PORT=5432 \
+DB_DATABASE=nvl_media_production_test \
+DB_USERNAME=nvl \
+DB_PASSWORD=nvl \
+REDIS_HOST=127.0.0.1 \
+REDIS_PORT=6379 \
+MINIO_ENDPOINT=http://127.0.0.1:9000 \
+MINIO_BUCKET=nvl-media \
+MINIO_ACCESS_KEY=minioadmin \
+MINIO_SECRET_KEY=minioadmin \
+composer test:media-production
+```
+
+Omit the `MINIO_*` overrides when the documented local defaults match. The test
+must report one passing test; a skip is not a production-stack proof.
 
 ## Lifecycle states
 
@@ -462,7 +486,7 @@ composer install
 composer quality
 ```
 
-`composer quality` verifies the manifest, Pint formatting, PHPStan at maximum strictness, direct dependency declarations, installed-package security advisories, and the isolated Testbench/Pest suite. Release CI for this package must run PHP 8.3 + Laravel 12/Testbench 10, PHP 8.4 + Laravel 12/Testbench 10, and PHP 8.4 + Laravel 13/Testbench 11. Production integration runs additionally require PostgreSQL, Redis, and MinIO or equivalent S3-compatible storage; monorepo CI jobs added for Media must scope their commands to `packages/nvl/media`.
+`composer quality` verifies the manifest, Pint formatting, PHPStan at maximum strictness, direct dependency declarations, generated TypeScript freshness and compilation, and the isolated Testbench/Pest suite. Run Composer and npm security audits separately against their lockfiles. Compatibility verification covers Laravel 12/Testbench 10 and Laravel 13/Testbench 11 on the suite's PHP 8.4+ runtime. The local production integration command additionally requires PostgreSQL, Redis, and MinIO or equivalent S3-compatible storage.
 
 The documentation coverage test keeps facade, trait, adder, slot, conversion, model-helper, management-route, contract, event, and top-level configuration references synchronized with their public source surfaces.
 

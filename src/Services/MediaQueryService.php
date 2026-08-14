@@ -179,6 +179,23 @@ final class MediaQueryService
     }
 
     /**
+     * Retrieve one active association in an exact owner collection context.
+     */
+    public function activeAssociation(
+        string $id,
+        string $associableType,
+        string $collection,
+    ): MediaAssociation {
+        return MediaAssociation::query()
+            ->whereKey($id)
+            ->where('associable_type', $associableType)
+            ->where('collection', $collection)
+            ->where('is_active', true)
+            ->with(['media.imageVariations', 'media.translations'])
+            ->firstOrFail();
+    }
+
+    /**
      * List all associations for a media record.
      *
      * @return Collection<int, MediaUsage>

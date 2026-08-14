@@ -4,6 +4,15 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-08-13
+
+### Added
+
+- Added an exact active-association query boundary for owner packages that need
+  association-scoped projections or delivery without querying Media internals.
+- Added an explicit local command and disposable-service contract for the
+  PostgreSQL, Redis, and S3-compatible multipart recovery proof.
+
 ## [1.0.5] - 2026-08-12
 
 ### Changed
