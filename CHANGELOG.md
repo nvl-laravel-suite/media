@@ -4,7 +4,7 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
-## [1.0.6] - 2026-08-13
+## [1.0.7] - 2026-08-22
 
 ### Added
 
@@ -12,6 +12,11 @@ All notable changes to `nvl/media` are documented here.
   association-scoped projections or delivery without querying Media internals.
 - Added an explicit local command and disposable-service contract for the
   PostgreSQL, Redis, and S3-compatible multipart recovery proof.
+
+### Changed
+
+- Aligned production support and quality guidance with the PHP 8.4+ runtime
+  baseline and local production-stack verification workflow.
 
 ## [1.0.5] - 2026-08-12
 
