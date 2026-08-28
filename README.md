@@ -392,12 +392,13 @@ The default `MediaAuthorization` grants cross-owner mutations only to the owning
             'mutate' => 'media.update-any',
             'delete' => 'media.delete-any',
             'reuse' => 'media.reuse-any',
+            'manage_staging' => 'media.manage-staging',
         ],
     ],
 ],
 ```
 
-`MEDIA_GLOBAL_ROLES=admin,super-admin` is the environment shortcut for the role list. Role names are empty by default, so installing an authorization package cannot silently elevate a pre-existing role during an upgrade. The `media.manage` permission grants every Media ability; the `*-any` permissions are granular. Missing roles, permissions, guard mismatches, or an absent Spatie package fail closed and normal ownership policy continues.
+`MEDIA_GLOBAL_ROLES=admin,super-admin` is the environment shortcut for the role list. Role names are empty by default, so installing an authorization package cannot silently elevate a pre-existing role during an upgrade. The `media.manage` permission grants every Media ability; the `*-any` permissions are granular. `media.manage-staging` is the narrow cross-owner grant used when an owner-slot workflow adopts another actor's staged asset. Missing roles, permissions, guard mismatches, or an absent Spatie package fail closed and normal ownership policy continues.
 
 Global access bypasses uploader ownership, including list scoping and private delivery, but does not bypass shared-asset reference integrity, scanner quarantine, mutation locks, or storage verification. Applications may disable the bridge or replace `MediaAuthorization` for a fully custom policy.
 
@@ -433,7 +434,7 @@ Every option, safety rule, exit status, and production sequence is documented in
 
 ## Database schema and adoption
 
-Package-owned media, association, variation, multipart-session, and translation rows use UUID primary keys. Uploader and owner morph identifiers are strings so integer, UUID, ULID, and string application keys remain compatible. The clean create migrations include composite indexes for visibility, uploader, disk, type and status listings by creation time; multipart indexes cover actor history, status/expiry, and completed media.
+Package-owned media, association, variation, multipart-session, owner-slot-operation, and translation rows use UUID primary keys. Uploader and owner morph identifiers are strings so integer, UUID, ULID, and string application keys remain compatible. The clean create migrations include composite indexes for visibility, uploader, disk, type and status listings by creation time; multipart indexes cover actor history, status/expiry, and completed media. The owner-slot ledger uniquely indexes UUID idempotency keys and indexes owner/slot and creation-time lookups. Its connection, table, processing lease, retention, and pruning chunk are configured under `media.owner_slots.idempotency`; Doctor checks its schema and lifecycle bounds. Expired processing attempts recover under a new operation UUID so stale workers cannot complete the replacement claim. A custom ledger connection is a recoverable saga boundary rather than a cross-database atomic transaction.
 
 Set `media.migrations.enabled=false` only while staging a legacy table whose canonical name would collide with the package migration. Rename that source, create the package schema, then run `nvl:media:adopt-spatie` without `--apply`. The command maps standard Spatie ownership columns into associations, preserves UUIDs or derives stable UUIDs from integer identifiers, accepts optional translation and variation tables, verifies every backing path, and reports source/matched counts. `--apply` is refused until the dry run has no mapping or path errors; it never drops the staged source tables and is idempotent by deterministic identifiers.
 

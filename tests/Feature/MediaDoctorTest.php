@@ -150,3 +150,48 @@ it('accepts the supported production multipart safety contract', function () {
             static fn (object $check): bool => $check->passed === true,
         ))->toBeTrue();
 });
+
+it('reports a missing configured owner-slot operation ledger', function (): void {
+    config([
+        'media.owner_slots.idempotency.table' => 'missing_media_owner_slot_operations',
+    ]);
+
+    $check = collect(app(MediaDoctor::class)->inspect())
+        ->firstWhere(
+            'key',
+            'schema.table.missing_media_owner_slot_operations',
+        );
+
+    expect($check)->not->toBeNull()
+        ->and($check->passed)->toBeFalse()
+        ->and($check->severity)->toBe('error');
+});
+
+it('reports invalid owner-slot operation storage configuration', function (): void {
+    config([
+        'media.owner_slots.idempotency.table' => 'unsafe-name',
+    ]);
+
+    $check = collect(app(MediaDoctor::class)->inspect())
+        ->firstWhere('key', 'schema.connection');
+
+    expect($check)->not->toBeNull()
+        ->and($check->passed)->toBeFalse()
+        ->and($check->severity)->toBe('error')
+        ->and($check->message)->toContain('safe table name');
+});
+
+it('reports invalid owner-slot idempotency lifecycle bounds', function (): void {
+    config([
+        'media.owner_slots.idempotency.processing_timeout_minutes' => 0,
+        'media.owner_slots.idempotency.retention_days' => 0,
+        'media.owner_slots.idempotency.prune_chunk' => 1_001,
+    ]);
+
+    $check = collect(app(MediaDoctor::class)->inspect())
+        ->firstWhere('key', 'owner_slots.idempotency.bounds');
+
+    expect($check)->not->toBeNull()
+        ->and($check->passed)->toBeFalse()
+        ->and($check->severity)->toBe('error');
+});

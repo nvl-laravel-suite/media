@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use InvalidArgumentException;
 use Nvl\Media\Data\Display\MediaLibraryItem;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Models\MediaAssociation;
 use Throwable;
 
 /** MediaLibraryItemDataFactory builds the Inertia media library index payload from Media models. */
@@ -22,6 +24,39 @@ final readonly class MediaLibraryItemDataFactory
      */
     public function fromModel(Media $media): MediaLibraryItem
     {
+        return $this->build(
+            $media,
+            $media->associations->first()?->collection,
+        );
+    }
+
+    /**
+     * Build a library item using one explicitly selected owner association.
+     */
+    public function fromAssociation(
+        Media $media,
+        MediaAssociation $association,
+    ): MediaLibraryItem {
+        if (! $association->exists) {
+            throw new InvalidArgumentException(
+                'The selected Media association must be persisted.',
+            );
+        }
+
+        if ((string) $association->media_id !== (string) $media->id) {
+            throw new InvalidArgumentException(
+                'The selected Media association does not belong to the supplied Media record.',
+            );
+        }
+
+        return $this->build($media, $association->collection);
+    }
+
+    /**
+     * Build the stable library projection with an explicit collection.
+     */
+    private function build(Media $media, ?string $collection): MediaLibraryItem
+    {
         $safeUrl = $this->safeUrl($media);
 
         return new MediaLibraryItem(
@@ -34,7 +69,7 @@ final readonly class MediaLibraryItemDataFactory
             humanReadableSize: $media->humanReadableSize(),
             disk: $media->disk,
             folder: $media->folder,
-            collection: $media->associations->first()?->collection,
+            collection: $collection,
             isPublic: (bool) $media->is_public,
             type: $media->type->value,
             tags: is_array($media->tags) ? $media->tags : [],

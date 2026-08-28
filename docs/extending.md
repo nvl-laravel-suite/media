@@ -263,6 +263,7 @@ The abilities are:
 | `MediaAbility::Mutate` | Update, rename, replace, move, or regenerate |
 | `MediaAbility::Delete` | Delete |
 | `MediaAbility::Reuse` | Reuse a public asset |
+| `MediaAbility::ManageStaging` | Adopt another actor's staged asset through an owner-slot workflow |
 
 ## Content scanner
 

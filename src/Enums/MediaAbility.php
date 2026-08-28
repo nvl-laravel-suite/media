@@ -21,4 +21,5 @@ enum MediaAbility: string
     case Mutate = 'mutate';
     case Delete = 'delete';
     case Reuse = 'reuse';
+    case ManageStaging = 'manage_staging';
 }

@@ -56,6 +56,7 @@ use Nvl\Media\Services\MediaMultipartSessionMapper;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaMutationService;
 use Nvl\Media\Services\MediaOwnedSourceLifecycle;
+use Nvl\Media\Services\MediaOwnerSlotIdempotency;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\MediaPrivilegedAccess;
 use Nvl\Media\Services\MediaQueryService;
@@ -157,6 +158,7 @@ final class MediaServiceProvider extends ServiceProvider
         $this->app->scoped(MediaMultipartSessionMapper::class);
         $this->app->scoped(MediaMultipartService::class);
         $this->app->scoped(MediaOwnedSourceLifecycle::class);
+        $this->app->scoped(MediaOwnerSlotIdempotency::class);
         $this->app->scoped(MediaTemporaryFileRegistry::class);
         $this->app->scoped(MediaPathResolver::class);
         $this->app->scoped(MediaUrlResolver::class);

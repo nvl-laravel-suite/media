@@ -531,6 +531,29 @@ The facade covers common application operations. Advanced consumers may inject t
 
 Upload, attach, detach, delete, and reuse also have focused contracts. Application code that replaces one of those contracts is honored consistently by the model trait, facade, package controllers, and lifecycle services.
 
+### Owner-slot operation identity
+
+`MediaOwnerSlotIdempotency` is the low-level durable boundary for
+actor-aware owner-slot workflows. `begin()` accepts a UUID key, actor,
+persisted owner, slot, operation enum, and nested scalar payload. It returns an
+immutable `MediaOwnerSlotOperationClaim` containing the operation UUID, request
+hash, replay flag, and nullable result Media UUID.
+
+Canonical map ordering makes equivalent payloads stable. A completed exact
+request replays; an in-progress request or a key reused for another request
+fails closed; an exact failed request may be reclaimed. `complete()` and
+`fail()` require the claim's request hash and perform one terminal transition.
+`renew()` extends a processing lease for bounded long-running work. An expired
+processing request may be reclaimed with a new operation UUID, permanently
+invalidating the stale claim. Failure values are bounded machine codes, never
+exception messages.
+
+Ledger work on another database connection cannot share an atomic transaction
+with Media or owner persistence. Treat that configuration as a recoverable
+saga: the mutation must be safe to reconcile or retry after a crash before
+`complete()`. Consumers should keep this orchestration behind an application
+boundary and never write or query the operation model directly.
+
 ## Exceptions and transaction semantics
 
 Expected domain failures include:

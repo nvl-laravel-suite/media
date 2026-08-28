@@ -41,6 +41,7 @@ See [HTTP API](http-api.md).
 | `ability_permissions.mutate` | `media.update-any` | Cross-owner update/replace/move/variation work |
 | `ability_permissions.delete` | `media.delete-any` | Cross-owner delete |
 | `ability_permissions.reuse` | `media.reuse-any` | Cross-owner public reuse |
+| `ability_permissions.manage_staging` | `media.manage-staging` | Adopt another actor's staged media through owner-slot workflows |
 
 Environment:
 
@@ -58,6 +59,34 @@ Role names are empty by default so an installation cannot silently elevate an ex
 | `media.migrations.enabled` | `true` | Load package migrations automatically |
 
 Set this to `false` only for controlled adoption of an existing schema. Published migrations are still available through the `media-migrations` publish tag.
+
+## Owner-slot operation identity
+
+The owner-slot mutation ledger is package workflow infrastructure. Consumers do
+not query or write this table directly.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `media.owner_slots.idempotency.connection` | application default | Optional database connection dedicated to the operation ledger |
+| `media.owner_slots.idempotency.table` | `px_media_owner_slot_operations` | Validated operation-ledger table name |
+| `media.owner_slots.idempotency.processing_timeout_minutes` | `30` | Processing lease before an exact request may recover; range 1-1,440 |
+| `media.owner_slots.idempotency.retention_days` | `7` | Age after which completed and failed claims may be pruned |
+| `media.owner_slots.idempotency.prune_chunk` | `500` | Maximum terminal rows deleted per bounded pruning query; hard maximum 1,000 |
+
+The ledger stores actor/owner/slot identity, a SHA-256 request digest, lifecycle
+state, stable failure code, and nullable result Media UUID. It never stores the
+request payload or exception messages. The same UUID and canonical request may
+replay a completed result; using that UUID for another actor, owner, slot,
+operation, or payload fails closed. A failed exact request may be claimed again.
+Processing claims use a renewable lease. Recovery rotates the operation UUID so
+the stale claim can no longer complete. Long-running orchestrators renew before
+the configured timeout.
+
+A separate ledger connection is a durable saga boundary, not a cross-database
+transaction. The owner mutation must be safe to reconcile or retry after a
+crash between the durable mutation and ledger completion. Prefer the Media
+database connection when operational isolation is unnecessary. Doctor validates
+the configured table, columns, indexes, and lifecycle bounds.
 
 ## Storage
 

@@ -19,6 +19,8 @@ final class MediaTables
 
     public const string MultipartUploads = 'px_media_multipart_uploads';
 
+    public const string OwnerSlotOperations = 'px_media_owner_slot_operations';
+
     public const string MEDIA = self::Media;
 
     public const string MEDIA_ASSOCIATIONS = self::Associations;
@@ -28,6 +30,8 @@ final class MediaTables
     public const string MEDIA_I18N = self::I18n;
 
     public const string MEDIA_MULTIPART_UPLOADS = self::MultipartUploads;
+
+    public const string MEDIA_OWNER_SLOT_OPERATIONS = self::OwnerSlotOperations;
 
     private function __construct() {}
 }
