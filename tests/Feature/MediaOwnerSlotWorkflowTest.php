@@ -34,7 +34,9 @@ use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Services\MediaLibraryItemDataFactory;
 use Nvl\Media\Services\MediaOwnerSlotIdempotency;
+use Nvl\Media\Services\MediaStagingPolicy;
 use Nvl\Media\Services\MediaTemporaryFileRegistry;
+use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaOwnerSlotOperationClaim;
 use Nvl\Media\Tests\Stubs\OwnerSlotWorkflowModel;
 use Nvl\Media\Tests\Stubs\TestMediaModel;
@@ -215,6 +217,23 @@ it('uses configured owner-slot operation storage', function (): void {
 
     expect(fn (): string => (new MediaOwnerSlotOperation)->getTable())
         ->toThrow(InvalidArgumentException::class, 'must not collide');
+});
+
+it('rejects deleted and unavailable media before staging cleanup', function (): void {
+    $policy = app(MediaStagingPolicy::class);
+    $slot = (new MediaSlot('document'))->acceptsMimeTypes(['application/pdf']);
+    $deleted = ownerSlotMedia();
+    $deleted->delete();
+
+    expect(fn () => $policy->assertFitsSlot($deleted, $slot))
+        ->toThrow(MediaUploadException::class, 'is deleted and cannot be associated');
+
+    $unavailable = ownerSlotMedia([
+        'status' => MediaLifecycleStatus::Quarantined,
+    ]);
+
+    expect(fn () => $policy->assertFitsSlot($unavailable, $slot))
+        ->toThrow(MediaUploadException::class, 'is not available for association');
 });
 
 it('claims, completes, and exactly replays canonical requests', function (): void {

@@ -18,6 +18,7 @@ use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDoctor;
 use Nvl\Media\Services\MediaScannerPolicy;
 use Nvl\Media\Services\S3MultipartUploadGateway;
+use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Tests\Stubs\NonLockingMediaDoctorStore;
 use Nvl\Media\Tests\Stubs\OwnerSlotWorkflowModel;
 
@@ -203,6 +204,15 @@ it('reports invalid owner-slot operation storage configuration', function (): vo
         ->and($check->message)->toContain('safe table name');
 });
 
+it('rejects a non-string owner-slot operation connection', function (): void {
+    config([
+        'media.owner_slots.idempotency.connection' => ['sqlite'],
+    ]);
+
+    expect(fn (): ?string => MediaConfiguration::ownerSlotOperationConnection())
+        ->toThrow(InvalidArgumentException::class, 'must be a string or null');
+});
+
 it('reports invalid owner-slot idempotency lifecycle bounds', function (): void {
     config([
         'media.owner_slots.idempotency.processing_timeout_minutes' => 0,
@@ -271,6 +281,13 @@ it('registers bounded owner-slot pruning and protects production retention', fun
         $this->artisan('nvl:media:owner-slots:prune', ['--chunk' => 1_001])
             ->expectsOutputToContain('between 1 and 1000')
             ->assertFailed();
+
+        $this->artisan('nvl:media:owner-slots:prune', [
+            '--days' => 0,
+            '--chunk' => 100,
+        ])
+            ->expectsOutputToContain('between 1 and 36500')
+            ->assertFailed();
     } finally {
         app()->detectEnvironment(static fn (): string => 'testing');
     }
@@ -313,4 +330,87 @@ it('reports observed owner-slot registrations that no longer resolve', function 
         ->and($check->passed)->toBeFalse()
         ->and($check->severity)->toBe('error')
         ->and($check->message)->toContain('missing');
+});
+
+it('bounds owner-slot registration diagnostics before resolving entries', function (): void {
+    foreach (range(1, 101) as $index) {
+        MediaOwnerSlotOperation::query()->forceCreate([
+            'idempotency_key' => Str::uuid()->toString(),
+            'owner_type' => 'MissingOwner'.$index,
+            'owner_id' => 'owner-'.$index,
+            'slot' => 'document',
+            'operation' => MediaOwnerSlotOperationType::Clear,
+            'request_hash' => hash('sha256', 'owner-slot-registration-'.$index),
+            'status' => MediaOwnerSlotOperationStatus::Completed,
+            'completed_at' => now(),
+        ]);
+    }
+
+    $check = collect(app(MediaDoctor::class)->inspect())
+        ->firstWhere('key', 'owner_slots.registrations');
+
+    expect($check)->not->toBeNull()
+        ->and($check->passed)->toBeFalse()
+        ->and($check->message)->toContain('at most 100 observed owner type and slot pairs');
+});
+
+it('reports unavailable owner models in observed owner-slot registrations', function (): void {
+    MediaOwnerSlotOperation::query()->forceCreate([
+        'idempotency_key' => Str::uuid()->toString(),
+        'owner_type' => 'MissingOwnerModel',
+        'owner_id' => 'missing-owner',
+        'slot' => 'document',
+        'operation' => MediaOwnerSlotOperationType::Clear,
+        'request_hash' => hash('sha256', 'missing-owner-slot-model'),
+        'status' => MediaOwnerSlotOperationStatus::Completed,
+        'completed_at' => now(),
+    ]);
+
+    $check = collect(app(MediaDoctor::class)->inspect())
+        ->firstWhere('key', 'owner_slots.registrations');
+
+    expect($check)->not->toBeNull()
+        ->and($check->passed)->toBeFalse()
+        ->and($check->message)->toContain(
+            'MissingOwnerModel:document (owner model is unavailable)',
+        );
+});
+
+it('falls back to the default mutation cache and fails closed for an unknown store', function (): void {
+    Cache::extend(
+        'media-default-non-locking',
+        static fn (): Repository => new Repository(new NonLockingMediaDoctorStore),
+    );
+    config([
+        'cache.default' => 'media-default-non-locking',
+        'cache.stores.media-default-non-locking' => [
+            'driver' => 'media-default-non-locking',
+        ],
+        'media.mutation_lock.store' => null,
+    ]);
+
+    $fallbackCheck = collect(app(MediaDoctor::class)->inspect())
+        ->firstWhere('key', 'locks.mutation.atomic');
+
+    expect($fallbackCheck)->not->toBeNull()
+        ->and($fallbackCheck->passed)->toBeFalse();
+
+    config([
+        'cache.default' => [],
+        'media.mutation_lock.store' => '',
+    ]);
+
+    $malformedDefaultCheck = collect(app(MediaDoctor::class)->inspect())
+        ->firstWhere('key', 'locks.mutation.atomic');
+
+    expect($malformedDefaultCheck)->not->toBeNull()
+        ->and($malformedDefaultCheck->passed)->toBeFalse();
+
+    config(['media.mutation_lock.store' => 'missing-media-cache-store']);
+
+    $missingStoreCheck = collect(app(MediaDoctor::class)->inspect())
+        ->firstWhere('key', 'locks.mutation.atomic');
+
+    expect($missingStoreCheck)->not->toBeNull()
+        ->and($missingStoreCheck->passed)->toBeFalse();
 });
