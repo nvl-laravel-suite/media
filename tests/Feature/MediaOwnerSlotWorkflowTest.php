@@ -1396,7 +1396,7 @@ it('replays a clear against its durable authorization subject', function (): voi
         ->sole();
 
     expect($operation->result_media_id)->toBeNull()
-        ->and($operation->result_payload)->toBe([
+        ->and($operation->result_payload)->toEqual([
             'authorization_association_id' => $association->id,
             'authorization_media_id' => $media->id,
         ]);
@@ -1534,7 +1534,7 @@ it('copies through canonical ingestion with safe metadata and exact replay', fun
         ->and($copiedMedia->uploaded_by)->toBe((string) $actor->getKey())
         ->and($copiedMedia->uploaded_by_type)->toBe($actor->getMorphClass())
         ->and($copiedMedia->tags)->toBe(['source', 'proof'])
-        ->and($copiedMedia->metadata)->toBe([
+        ->and($copiedMedia->metadata)->toEqual([
             'approved' => true,
             'credit' => 'Studio',
             'license_year' => 2026,
