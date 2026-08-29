@@ -4,6 +4,14 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-29
+
+### Changed
+
+- Established Media Actions, `MediaLibrary`, `MediaQueryService`, and owner
+  traits as the 2.0 consumer boundary; direct consumer Media-model queries and
+  relation aggregates now fail Suite audit.
+
 ## [1.0.7] - 2026-08-22
 
 ### Added
