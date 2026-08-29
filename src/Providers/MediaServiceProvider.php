@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Providers;
 
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\Gate;
@@ -18,6 +19,7 @@ use Nvl\Media\Console\Commands\AdoptSpatieMediaCommand;
 use Nvl\Media\Console\Commands\MediaDoctorCommand;
 use Nvl\Media\Console\Commands\MigrateDiskCommand;
 use Nvl\Media\Console\Commands\PruneExpiredMultipartUploadsCommand;
+use Nvl\Media\Console\Commands\PruneMediaOwnerSlotOperationsCommand;
 use Nvl\Media\Console\Commands\RegenerateVariationsCommand;
 use Nvl\Media\Console\Commands\StorageHealthCommand;
 use Nvl\Media\Contracts\AttachMediaContract;
@@ -80,6 +82,8 @@ use Nvl\Translatable\Services\TranslationResourceRegistry;
 /** Registers Media configuration, migrations, contracts, and optional routes. */
 final class MediaServiceProvider extends ServiceProvider
 {
+    private const string OWNER_SLOT_COPY_METADATA_KEYS = 'media.owner_slots.copy.metadata_keys';
+
     /**
      * Boot Media resources and its single transaction rollback listener.
      */
@@ -123,6 +127,7 @@ final class MediaServiceProvider extends ServiceProvider
                 MigrateDiskCommand::class,
                 MediaDoctorCommand::class,
                 PruneExpiredMultipartUploadsCommand::class,
+                PruneMediaOwnerSlotOperationsCommand::class,
                 RegenerateVariationsCommand::class,
                 StorageHealthCommand::class,
             ]);
@@ -134,10 +139,34 @@ final class MediaServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->replaceConfigRecursivelyFrom(__DIR__.'/../../config/media.php', 'media');
+        $this->mergeConfiguration();
         $this->app->register(RouteServiceProvider::class);
         $this->app->singleton(MediaTransactionRollbackRegistry::class);
         $this->registerScopedServices();
+    }
+
+    /**
+     * Merge package defaults while preserving the consumer metadata allowlist.
+     */
+    private function mergeConfiguration(): void
+    {
+        /** @var Repository $configuration */
+        $configuration = $this->app->make('config');
+        $hasConsumerMetadataKeys = $configuration->has(
+            self::OWNER_SLOT_COPY_METADATA_KEYS,
+        );
+        $consumerMetadataKeys = $configuration->get(
+            self::OWNER_SLOT_COPY_METADATA_KEYS,
+        );
+
+        $this->replaceConfigRecursivelyFrom(__DIR__.'/../../config/media.php', 'media');
+
+        if ($hasConsumerMetadataKeys) {
+            $configuration->set(
+                self::OWNER_SLOT_COPY_METADATA_KEYS,
+                $consumerMetadataKeys,
+            );
+        }
     }
 
     /**

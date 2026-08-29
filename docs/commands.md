@@ -117,6 +117,35 @@ Configure Laravel's scheduler mutex cache to use one shared lock store across
 every application node. Multipart schedule readiness is irrelevant while
 multipart is disabled.
 
+## `nvl:media:owner-slots:prune`
+
+Deletes only completed or failed owner-slot idempotency rows older than the
+retention cutoff, using deterministic bounded database chunks:
+
+```bash
+php artisan nvl:media:owner-slots:prune
+php artisan nvl:media:owner-slots:prune --days=7 --chunk=500
+```
+
+- `--days=`: retention cutoff in days; defaults to
+  `media.owner_slots.idempotency.retention_days` and is bounded to 1-36,500.
+- `--chunk=`: rows per delete chunk; defaults to
+  `media.owner_slots.idempotency.prune_chunk` and cannot exceed 1,000.
+- `--force`: in production only, permits `--days` shorter than configured
+  retention. It is unnecessary for normal configured-retention pruning.
+
+Processing rows are never deleted. The host owns the schedule; use one shared
+scheduler lock in multi-node deployments:
+
+```php
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::command('nvl:media:owner-slots:prune')
+    ->daily()
+    ->onOneServer()
+    ->withoutOverlapping();
+```
+
 ## `nvl:media:regenerate`
 
 Regenerates configured variations:

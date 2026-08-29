@@ -67,6 +67,7 @@ not query or write this table directly.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
+| `media.owner_slots.copy.metadata_keys` | safe presentation/provenance key list | Scalar Media metadata keys inherited by canonical copies; consumer lists replace the default list |
 | `media.owner_slots.idempotency.connection` | application default | Optional database connection dedicated to the operation ledger |
 | `media.owner_slots.idempotency.table` | `px_media_owner_slot_operations` | Validated operation-ledger table name |
 | `media.owner_slots.idempotency.processing_timeout_minutes` | `30` | Processing lease before an exact request may recover; range 1-1,440 |
@@ -86,7 +87,12 @@ A separate ledger connection is a durable saga boundary, not a cross-database
 transaction. The owner mutation must be safe to reconcile or retry after a
 crash between the durable mutation and ledger completion. Prefer the Media
 database connection when operational isolation is unnecessary. Doctor validates
-the configured table, columns, indexes, and lifecycle bounds.
+the configured table, columns, indexes, lifecycle bounds, atomic mutation store,
+and the bounded owner type/slot pairs observed in retained operations.
+
+Copy metadata is deny-by-default outside the configured list. Values must be
+scalar or null. Do not include secrets, credentials, provider responses,
+redaction/workflow state, storage paths/hashes, or association metadata.
 
 ## Storage
 

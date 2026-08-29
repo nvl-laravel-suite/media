@@ -528,10 +528,23 @@ The facade covers common application operations. Advanced consumers may inject t
 | `SignMultipartPartAction` | Validate and sign one part |
 | `CompleteMultipartUploadAction` | Recoverable, idempotent completion |
 | `AbortMultipartUploadAction` | Idempotent actor-owned abort |
+| `GetOwnerMediaSlotAction` | Authorized DTO read for one registered single-file owner slot |
+| `ReplaceOwnerMediaSlotAction` | Adopt compatible staged Media and atomically replace one slot |
+| `ClearOwnerMediaSlotAction` | Detach one slot and delete an orphaned exclusive asset after commit |
+| `CopyOwnerMediaSlotAction` | Verify source bytes and canonically ingest a distinct destination asset |
 
 Upload, attach, detach, delete, and reuse also have focused contracts. Application code that replaces one of those contracts is honored consistently by the model trait, facade, package controllers, and lifecycle services.
 
-### Owner-slot operation identity
+### Owner-slot workflows and operation identity
+
+The four owner-slot Actions accept `MediaActorData`, a persisted
+`Model&HasMedia`, and a registered single-file slot name. Get returns
+`?MediaLibraryItem`; replace and copy return `MediaLibraryItem`; clear returns
+`void`. Mutation Actions accept an optional UUID idempotency key. They own
+authorization, compatibility/staging checks, owner and Media locks,
+association transitions, exclusive-orphan cleanup, exact replay, and immutable
+result projection. Copy creates a distinct identity through the upload pipeline
+and inherits only allowlisted scalar metadata plus normalized tags.
 
 `MediaOwnerSlotIdempotency` is the low-level durable boundary for
 actor-aware owner-slot workflows. `begin()` accepts a UUID key, actor,
@@ -551,8 +564,9 @@ exception messages.
 Ledger work on another database connection cannot share an atomic transaction
 with Media or owner persistence. Treat that configuration as a recoverable
 saga: the mutation must be safe to reconcile or retry after a crash before
-`complete()`. Consumers should keep this orchestration behind an application
-boundary and never write or query the operation model directly.
+`complete()`. `nvl:media:owner-slots:prune` removes only expired completed or
+failed rows in chunks of at most 1,000. Consumers should call the Actions and
+never write or query the operation model directly.
 
 ## Exceptions and transaction semantics
 

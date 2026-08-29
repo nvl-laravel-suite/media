@@ -61,6 +61,30 @@ invalidates stale claims. A separate ledger connection is not transactionally
 atomic with owner/Media mutations, so custom workflows must reconcile or safely
 retry a crash between mutation and ledger completion.
 
+Replace application concerns that manually query `mediaAssociations`, copy all
+custom properties, detach old files, or delete storage objects with
+`GetOwnerMediaSlotAction`, `ReplaceOwnerMediaSlotAction`,
+`ClearOwnerMediaSlotAction`, and `CopyOwnerMediaSlotAction`. Keep only the
+model's registered `MediaSlot` policy and domain convenience accessors. Existing
+staged files must satisfy the registered MIME, size, visibility, ownership, and
+sharing rules; slots with a custom file acceptor receive new uploads/copies, not
+already-persisted replacement rows. Configure
+`media.owner_slots.copy.metadata_keys` as an explicit list of safe scalar
+presentation/provenance fields instead of copying arbitrary metadata.
+
+After migration, run the owner-slot workflow tests, then schedule:
+
+```bash
+php artisan nvl:media:owner-slots:prune --days=7 --chunk=500
+```
+
+Production rejects a `--days` value shorter than configured retention unless
+`--force` is explicit. `nvl:media:doctor --production --strict` also checks the
+ledger, retention bounds, atomic mutation lock store, and observed owner-slot
+model registrations. Idempotent workflows may participate in a host outer
+transaction; events, file effects, and split-ledger completion follow the real
+root outcome.
+
 Replacement now re-applies the policies of every persisted association slot. Copy/move uses copy–verify–database-swap–delete, deletion keeps a soft-deleted diagnostic tombstone, and external cleanup/events/variation dispatch follow the real root transaction outcome. Applications that assumed immediate file deletion inside an outer transaction must wait for commit.
 
 `addMedia($explicitLocalPath)` now implements its documented ownership contract: it deletes that explicit caller source only after the real successful commit. Use `copyMedia()` or `preservingOriginal()` when the path must remain. Request uploads and package-created temporary files are unaffected.
