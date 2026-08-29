@@ -1,6 +1,6 @@
 # PHP API reference
 
-This reference documents the supported PHP integration surface of NVL Media 1.x. The shortest path is the `HasMedia` contract plus `InteractsWithMedia`; application services may use `MediaLibraryContract` or the `Nvl\Media\Facades\Media` facade; advanced integrations may inject a focused Action or contract.
+This reference documents the supported PHP integration surface of NVL Media 2.x. The shortest path is the `HasMedia` contract plus `InteractsWithMedia`; application services may use `MediaLibraryContract` or the `Nvl\Media\Facades\Media` facade; advanced integrations may inject a focused Action or contract.
 
 ## Choosing an entry point
 

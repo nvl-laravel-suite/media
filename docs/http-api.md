@@ -5,7 +5,7 @@ NVL Media ships two independent HTTP surfaces:
 - An optional authenticated management API for library interfaces.
 - Asset-delivery routes for public and signed private binaries.
 
-The management API is disabled by default. Asset delivery is enabled by default. Multipart orchestration is intentionally not exposed through these 1.x management routes; applications expose their own actor-aware endpoints around the typed multipart facade or Actions when direct uploads are enabled.
+The management API is disabled by default. Asset delivery is enabled by default. Multipart orchestration is intentionally not exposed through these 2.x management routes; applications expose their own actor-aware endpoints around the typed multipart facade or Actions when direct uploads are enabled.
 
 ## Enable the management API
 

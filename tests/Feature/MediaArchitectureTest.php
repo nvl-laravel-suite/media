@@ -17,7 +17,7 @@ test('media controllers remain final and delegate bulk record queries to the que
     }
 });
 
-test('media rollback handling supports the original Laravel 12 transaction record API', function (): void {
+test('media rollback handling uses only standard transaction record APIs', function (): void {
     $filesystem = new Filesystem;
 
     foreach ([

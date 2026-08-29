@@ -1,13 +1,13 @@
 ---
 name: nvl-media
-description: Implement, integrate, test, or review nvl/media in Laravel 12–13. Use for private single-file media, reusable public assets, uploads, multipart object storage, scanning, checksum deduplication, associations, delivery, ranges, localized metadata, image variations, reconciliation, or media authorization.
+description: Implement, integrate, test, or review nvl/media in Laravel 13. Use for private single-file media, reusable public assets, uploads, multipart object storage, scanning, checksum deduplication, associations, delivery, ranges, localized metadata, image variations, reconciliation, or media authorization.
 ---
 
 # NVL Media
 
 Treat binary lifecycle, database lifecycle, associations, delivery, and localized metadata as one security boundary. Never expose internal storage paths through public DTOs.
 
-The supported 1.x production profile is PHP 8.3/8.4, Laravel 12/13, PostgreSQL, S3-compatible private storage with exception-enabled writes, Redis cache/locks/queues, and a real scanner. Multipart is opt-in and requires the recoverable gateway, central session locks, scanner attestation, pruning, and the PostgreSQL/Redis/S3 integration gate. SQLite/local/array/sync are development-compatible but do not prove production concurrency guarantees.
+The supported 2.x production profile is PHP 8.3/8.4, Laravel 13, PostgreSQL, S3-compatible private storage with exception-enabled writes, Redis cache/locks/queues, and a real scanner. Multipart is opt-in and requires the recoverable gateway, central session locks, scanner attestation, pruning, and the PostgreSQL/Redis/S3 integration gate. SQLite/local/array/sync are development-compatible but do not prove production concurrency guarantees.
 
 ## Read the canonical references
 

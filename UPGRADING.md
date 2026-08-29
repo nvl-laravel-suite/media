@@ -28,7 +28,7 @@ S3 omits per-object ACLs by default for Bucket Owner Enforced compatibility. Set
 
 Preserve identifiers and verify row counts, checksums, associations, physical objects, signatures, and rollback before removing old code.
 
-## Upgrading to the production-hardened 1.x release
+## Upgrading to the production-hardened 2.x release
 
 The clean v1 schema includes immutable variation paths, persisted upload-specific definitions/listing indexes, and server-owned multipart sessions directly in its create migrations.
 
@@ -93,4 +93,4 @@ Replacement now re-applies the policies of every persisted association slot. Cop
 
 The clean 1.0 API has no pre-release compatibility controller. Multipart signing/completion/abort requests use only the server-issued upload ID, scan finalization requires `MediaScanResultData`, dynamic asset transformations are unsupported, and tag writes go through `MutateMediaTagsAction` or `BulkTagMediaAction`.
 
-Review the dedicated [PHP API](docs/php-api.md), [HTTP API](docs/http-api.md), [configuration reference](docs/configuration.md), and [extension/event reference](docs/extending.md) during adoption. These references distinguish trusted PHP mutation calls from authorized HTTP entry points and document every supported 1.x public surface. Documentation coverage tests fail when a public facade, trait, fluent-adder, slot, conversion, model-helper, management-route, contract, event, or top-level configuration surface is added without corresponding reference documentation.
+Review the dedicated [PHP API](docs/php-api.md), [HTTP API](docs/http-api.md), [configuration reference](docs/configuration.md), and [extension/event reference](docs/extending.md) during adoption. These references distinguish trusted PHP mutation calls from authorized HTTP entry points and document every supported 2.x public surface. Documentation coverage tests fail when a public facade, trait, fluent-adder, slot, conversion, model-helper, management-route, contract, event, or top-level configuration surface is added without corresponding reference documentation.

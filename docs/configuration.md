@@ -8,7 +8,7 @@ php artisan vendor:publish --tag=media-config
 
 Keep environment reads in `config/media.php`, then use `php artisan config:cache` for production. Run `php artisan nvl:media:doctor --production --strict` against the cached configuration.
 
-The values below are the shipped 1.x defaults. Application-published configuration is recursively merged with package defaults so newly added nested safety settings continue to exist after an upgrade; review `UPGRADING.md` whenever publishing or merging a new version.
+The values below are the shipped 2.x defaults. Application-published configuration is recursively merged with package defaults so newly added nested safety settings continue to exist after an upgrade; review `UPGRADING.md` whenever publishing or merging a new version.
 
 ## Routes
 
@@ -362,7 +362,7 @@ Keep private URLs short-lived and use package URL builders. The `v` parameter se
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `media.hash_filenames` | `true` | Compatibility setting; storage identities remain cryptographically random in hardened 1.x |
+| `media.hash_filenames` | `true` | Compatibility setting; storage identities remain cryptographically random in hardened 2.x |
 | `media.transliterate` | `false` | Transliterate non-ASCII display filenames during sanitization |
 | `media.allow_duplicates` | `false` | Global default for caller-requested duplicate records |
 | `media.deduplication.allow_anonymous_private` | `false` | Permit anonymous private digest reuse |
