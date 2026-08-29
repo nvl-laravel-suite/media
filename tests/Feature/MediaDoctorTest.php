@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Illuminate\Cache\Repository;
-use Illuminate\Contracts\Cache\Store;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\ServiceProvider;
@@ -19,65 +18,8 @@ use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDoctor;
 use Nvl\Media\Services\MediaScannerPolicy;
 use Nvl\Media\Services\S3MultipartUploadGateway;
+use Nvl\Media\Tests\Stubs\NonLockingMediaDoctorStore;
 use Nvl\Media\Tests\Stubs\OwnerSlotWorkflowModel;
-
-final class NonLockingMediaDoctorStore implements Store
-{
-    public function get(mixed $key): mixed
-    {
-        return null;
-    }
-
-    public function many(array $keys): array
-    {
-        return array_fill_keys($keys, null);
-    }
-
-    public function put(mixed $key, mixed $value, mixed $seconds): bool
-    {
-        return true;
-    }
-
-    public function putMany(array $values, mixed $seconds): bool
-    {
-        return true;
-    }
-
-    public function increment(mixed $key, mixed $value = 1): int|bool
-    {
-        return 1;
-    }
-
-    public function decrement(mixed $key, mixed $value = 1): int|bool
-    {
-        return 0;
-    }
-
-    public function forever(mixed $key, mixed $value): bool
-    {
-        return true;
-    }
-
-    public function touch(mixed $key, mixed $seconds): bool
-    {
-        return true;
-    }
-
-    public function forget(mixed $key): bool
-    {
-        return true;
-    }
-
-    public function flush(): bool
-    {
-        return true;
-    }
-
-    public function getPrefix(): string
-    {
-        return '';
-    }
-}
 
 it('reports a healthy standalone installation as machine-readable output', function () {
     $this->artisan('nvl:media:doctor', [
