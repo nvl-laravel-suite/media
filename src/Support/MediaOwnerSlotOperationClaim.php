@@ -9,10 +9,14 @@ namespace Nvl\Media\Support;
  */
 final readonly class MediaOwnerSlotOperationClaim
 {
+    /**
+     * @param  array<string, mixed>|null  $resultPayload
+     */
     public function __construct(
         public string $operationId,
         public string $requestHash,
         public bool $replayed,
         public ?string $resultMediaId,
+        public ?array $resultPayload = null,
     ) {}
 }

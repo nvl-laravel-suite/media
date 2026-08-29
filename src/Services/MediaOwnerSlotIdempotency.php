@@ -107,10 +107,13 @@ final class MediaOwnerSlotIdempotency
 
     /**
      * Complete a claimed operation with its optional resulting Media UUID.
+     *
+     * @param  array<string, mixed>|null  $resultPayload
      */
     public function complete(
         MediaOwnerSlotOperationClaim $claim,
         ?string $resultMediaId,
+        ?array $resultPayload = null,
     ): void {
         if ($resultMediaId !== null && ! Str::isUuid($resultMediaId)) {
             throw new InvalidArgumentException(
@@ -123,6 +126,7 @@ final class MediaOwnerSlotIdempotency
             attributes: [
                 'status' => MediaOwnerSlotOperationStatus::Completed,
                 'result_media_id' => $resultMediaId,
+                'result_payload' => $this->resultPayload($resultPayload),
                 'failure_code' => null,
                 'completed_at' => now(),
                 'failed_at' => null,
@@ -148,6 +152,7 @@ final class MediaOwnerSlotIdempotency
             attributes: [
                 'status' => MediaOwnerSlotOperationStatus::Failed,
                 'result_media_id' => null,
+                'result_payload' => null,
                 'failure_code' => $failureCode,
                 'completed_at' => null,
                 'failed_at' => now(),
@@ -328,6 +333,7 @@ final class MediaOwnerSlotIdempotency
             'id' => Str::uuid()->toString(),
             'status' => MediaOwnerSlotOperationStatus::Processing,
             'result_media_id' => null,
+            'result_payload' => null,
             'failure_code' => null,
             'completed_at' => null,
             'failed_at' => null,
@@ -401,6 +407,57 @@ final class MediaOwnerSlotIdempotency
             requestHash: $operation->request_hash,
             replayed: $replayed,
             resultMediaId: $operation->result_media_id,
+            resultPayload: is_array($operation->result_payload)
+                ? $operation->result_payload
+                : null,
+        );
+    }
+
+    /**
+     * Validate and canonicalize one immutable completed-result snapshot.
+     *
+     * @param  array<string, mixed>|null  $payload
+     * @return array<string, mixed>|null
+     */
+    private function resultPayload(?array $payload): ?array
+    {
+        if ($payload === null) {
+            return null;
+        }
+
+        $canonical = $this->canonicalMap($payload);
+
+        try {
+            json_encode(
+                $canonical,
+                JSON_PRESERVE_ZERO_FRACTION
+                    | JSON_THROW_ON_ERROR
+                    | JSON_UNESCAPED_SLASHES
+                    | JSON_UNESCAPED_UNICODE,
+            );
+        } catch (JsonException $exception) {
+            throw new InvalidArgumentException(
+                'Media owner-slot result payloads must contain JSON-compatible scalar values.',
+                previous: $exception,
+            );
+        }
+
+        return $canonical;
+    }
+
+    /**
+     * Canonicalize one result map while preserving its string-keyed contract.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function canonicalMap(array $payload): array
+    {
+        ksort($payload, SORT_STRING);
+
+        return array_map(
+            fn (mixed $item): mixed => $this->canonicalValue($item),
+            $payload,
         );
     }
 

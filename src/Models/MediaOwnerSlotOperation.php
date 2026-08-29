@@ -25,6 +25,7 @@ use Nvl\Media\Support\MediaConfiguration;
  * @property string $request_hash
  * @property MediaOwnerSlotOperationStatus $status
  * @property string|null $result_media_id
+ * @property array<string, mixed>|null $result_payload
  * @property string|null $failure_code
  * @property Carbon|null $completed_at
  * @property Carbon|null $failed_at
@@ -47,6 +48,7 @@ final class MediaOwnerSlotOperation extends Model
         'request_hash',
         'status',
         'result_media_id',
+        'result_payload',
         'failure_code',
         'completed_at',
         'failed_at',
@@ -71,6 +73,7 @@ final class MediaOwnerSlotOperation extends Model
         return [
             'operation' => MediaOwnerSlotOperationType::class,
             'status' => MediaOwnerSlotOperationStatus::class,
+            'result_payload' => 'array',
             'completed_at' => 'immutable_datetime',
             'failed_at' => 'immutable_datetime',
             'created_at' => 'immutable_datetime',

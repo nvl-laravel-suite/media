@@ -32,6 +32,7 @@ return new class extends Migration
             $table->char('request_hash', 64);
             $table->string('status', 32);
             $table->uuid('result_media_id')->nullable();
+            $table->json('result_payload')->nullable();
             $table->string('failure_code', 80)->nullable();
             $table->timestamp('completed_at')->nullable();
             $table->timestamp('failed_at')->nullable();

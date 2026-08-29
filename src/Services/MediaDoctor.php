@@ -231,6 +231,7 @@ final readonly class MediaDoctor
                     'request_hash',
                     'status',
                     'result_media_id',
+                    'result_payload',
                     'failure_code',
                     'completed_at',
                     'failed_at',
