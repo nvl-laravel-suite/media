@@ -1433,15 +1433,13 @@ it('rolls back clear when same-connection idempotency completion fails', functio
     attachOwnerSlotMedia($media, $owner, 'document');
     $key = Str::uuid()->toString();
 
-    DB::unprepared(sprintf(
-        'CREATE TRIGGER media_owner_slot_clear_completion_failure
-        BEFORE UPDATE OF status ON %s
-        WHEN NEW.status = "completed"
-        BEGIN
-            SELECT RAISE(ABORT, "injected clear completion failure");
-        END',
-        MediaTables::OwnerSlotOperations,
-    ));
+    MediaOwnerSlotOperation::updating(
+        static function (MediaOwnerSlotOperation $operation): void {
+            if ($operation->status === MediaOwnerSlotOperationStatus::Completed) {
+                throw new RuntimeException('Injected clear completion failure.');
+            }
+        },
+    );
 
     try {
         expect(fn () => app(ClearOwnerMediaSlotAction::class)->execute(
@@ -1449,9 +1447,9 @@ it('rolls back clear when same-connection idempotency completion fails', functio
             $owner,
             'document',
             $key,
-        ))->toThrow(QueryException::class, 'injected clear completion failure');
+        ))->toThrow(RuntimeException::class, 'Injected clear completion failure.');
     } finally {
-        DB::unprepared('DROP TRIGGER IF EXISTS media_owner_slot_clear_completion_failure');
+        MediaOwnerSlotOperation::flushEventListeners();
     }
 
     expect($owner->fresh()->getFirstMedia('document')?->id)->toBe($media->id)
@@ -1801,15 +1799,13 @@ it('rolls back a copied slot when same-connection idempotency completion fails',
     sort($startingFiles);
     useOwnerSlotAuthorization(static fn (): bool => true);
 
-    DB::unprepared(sprintf(
-        'CREATE TRIGGER media_owner_slot_completion_failure
-        BEFORE UPDATE OF status ON %s
-        WHEN NEW.status = "completed"
-        BEGIN
-            SELECT RAISE(ABORT, "injected owner-slot completion failure");
-        END',
-        MediaTables::OwnerSlotOperations,
-    ));
+    MediaOwnerSlotOperation::updating(
+        static function (MediaOwnerSlotOperation $operation): void {
+            if ($operation->status === MediaOwnerSlotOperationStatus::Completed) {
+                throw new RuntimeException('Injected owner-slot completion failure.');
+            }
+        },
+    );
 
     try {
         expect(fn () => app(CopyOwnerMediaSlotAction::class)->execute(
@@ -1818,9 +1814,9 @@ it('rolls back a copied slot when same-connection idempotency completion fails',
             'document',
             $source->id,
             $key,
-        ))->toThrow(QueryException::class, 'injected owner-slot completion failure');
+        ))->toThrow(RuntimeException::class, 'Injected owner-slot completion failure.');
     } finally {
-        DB::unprepared('DROP TRIGGER IF EXISTS media_owner_slot_completion_failure');
+        MediaOwnerSlotOperation::flushEventListeners();
     }
 
     $remainingFiles = Storage::disk('public')->allFiles();
