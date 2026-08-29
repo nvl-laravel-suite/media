@@ -77,11 +77,14 @@ use Nvl\Media\Services\SvgScanner;
 use Nvl\Media\Services\SystemMediaHostResolver;
 use Nvl\Media\Services\UnsupportedMultipartUploadGateway;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Support\Traits\MergesPackageConfiguration;
 use Nvl\Translatable\Services\TranslationResourceRegistry;
 
 /** Registers Media configuration, migrations, contracts, and optional routes. */
 final class MediaServiceProvider extends ServiceProvider
 {
+    use MergesPackageConfiguration;
+
     private const string OWNER_SLOT_COPY_METADATA_KEYS = 'media.owner_slots.copy.metadata_keys';
 
     /**
@@ -159,7 +162,7 @@ final class MediaServiceProvider extends ServiceProvider
             self::OWNER_SLOT_COPY_METADATA_KEYS,
         );
 
-        $this->replaceConfigRecursivelyFrom(__DIR__.'/../../config/media.php', 'media');
+        $this->mergePackageConfiguration(__DIR__.'/../../config/media.php', 'media');
 
         if ($hasConsumerMetadataKeys) {
             $configuration->set(
