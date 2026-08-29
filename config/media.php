@@ -62,6 +62,27 @@ return [
     ],
 
     'owner_slots' => [
+        'copy' => [
+            // Only explicitly approved, user-facing metadata is inherited by a
+            // copied Media record. Consumers may replace this list when their
+            // domain defines additional safe scalar metadata keys.
+            'metadata_keys' => [
+                'alt',
+                'alt_text',
+                'attribution',
+                'author',
+                'caption',
+                'copyright',
+                'credit',
+                'description',
+                'license',
+                'license_url',
+                'photographer',
+                'source',
+                'source_url',
+                'title',
+            ],
+        ],
         'idempotency' => [
             'connection' => null,
             'table' => MediaTables::OwnerSlotOperations,

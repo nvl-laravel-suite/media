@@ -101,8 +101,11 @@ final readonly class MediaStagingPolicy
      * @throws FileUnacceptableForCollection
      * @throws MediaUploadException
      */
-    public function assertFitsSlot(Media $media, MediaSlot $slot): void
-    {
+    public function assertFitsSlot(
+        Media $media,
+        MediaSlot $slot,
+        bool $customAcceptorSatisfied = false,
+    ): void {
         if ($media->trashed()) {
             throw new MediaUploadException(
                 "Media [{$media->id}] is deleted and cannot be associated.",
@@ -143,7 +146,7 @@ final readonly class MediaStagingPolicy
             );
         }
 
-        if ($slot->fileAcceptor !== null) {
+        if ($slot->fileAcceptor !== null && ! $customAcceptorSatisfied) {
             throw new FileUnacceptableForCollection(
                 "Existing Media cannot satisfy the custom file validator for slot [{$slot->name}]; upload directly into the slot instead.",
             );

@@ -106,6 +106,73 @@ final class MediaOwnerSlotIdempotency
     }
 
     /**
+     * Read an exact completed claim without creating or mutating ledger state.
+     *
+     * @param  array<array-key, mixed>  $payload
+     */
+    public function completed(
+        string $key,
+        MediaActorData $actor,
+        Model $owner,
+        string $slot,
+        MediaOwnerSlotOperationType $operation,
+        array $payload,
+    ): ?MediaOwnerSlotOperationClaim {
+        $key = $this->idempotencyKey($key);
+        $requestHash = $this->requestHash(
+            actor: $this->actorIdentity($actor),
+            owner: $this->ownerIdentity($owner),
+            slot: $this->slot($slot),
+            operation: $operation,
+            payload: $payload,
+        );
+        $existing = MediaOwnerSlotOperation::query()
+            ->where('idempotency_key', $key)
+            ->where('request_hash', $requestHash)
+            ->where('status', MediaOwnerSlotOperationStatus::Completed->value)
+            ->first();
+
+        if (! $existing instanceof MediaOwnerSlotOperation) {
+            return null;
+        }
+
+        return $this->claim($existing, replayed: true);
+    }
+
+    /**
+     * Read an exact processing claim that contains durable recovery proof.
+     *
+     * @param  array<array-key, mixed>  $payload
+     */
+    public function checkpointed(
+        string $key,
+        MediaActorData $actor,
+        Model $owner,
+        string $slot,
+        MediaOwnerSlotOperationType $operation,
+        array $payload,
+    ): ?MediaOwnerSlotOperationClaim {
+        $key = $this->idempotencyKey($key);
+        $requestHash = $this->requestHash(
+            actor: $this->actorIdentity($actor),
+            owner: $this->ownerIdentity($owner),
+            slot: $this->slot($slot),
+            operation: $operation,
+            payload: $payload,
+        );
+        $existing = MediaOwnerSlotOperation::query()
+            ->where('idempotency_key', $key)
+            ->where('request_hash', $requestHash)
+            ->where('status', MediaOwnerSlotOperationStatus::Processing->value)
+            ->whereNotNull('result_payload')
+            ->first();
+
+        return $existing instanceof MediaOwnerSlotOperation
+            ? $this->claim($existing, replayed: false)
+            : null;
+    }
+
+    /**
      * Complete a claimed operation with its optional resulting Media UUID.
      *
      * @param  array<string, mixed>|null  $resultPayload
@@ -130,6 +197,33 @@ final class MediaOwnerSlotIdempotency
                 'failure_code' => null,
                 'completed_at' => now(),
                 'failed_at' => null,
+            ],
+        );
+    }
+
+    /**
+     * Persist a recoverable result correlation while an operation is still processing.
+     *
+     * @param  array<string, mixed>|null  $resultPayload
+     */
+    public function checkpoint(
+        MediaOwnerSlotOperationClaim $claim,
+        ?string $resultMediaId,
+        ?array $resultPayload = null,
+    ): void {
+        if ($resultMediaId !== null && ! Str::isUuid($resultMediaId)) {
+            throw new InvalidArgumentException(
+                'A Media owner-slot checkpoint requires a valid Media UUID or null.',
+            );
+        }
+
+        $this->transition(
+            claim: $claim,
+            attributes: [
+                'result_media_id' => $resultMediaId !== null
+                    ? Str::lower($resultMediaId)
+                    : null,
+                'result_payload' => $this->resultPayload($resultPayload),
             ],
         );
     }
@@ -329,11 +423,19 @@ final class MediaOwnerSlotIdempotency
     private function reclaim(
         MediaOwnerSlotOperation $operation,
     ): MediaOwnerSlotOperationClaim {
+        $checkpointMediaId = $operation->status === MediaOwnerSlotOperationStatus::Processing
+            ? $operation->result_media_id
+            : null;
+        $checkpointPayload = $operation->status === MediaOwnerSlotOperationStatus::Processing
+            && is_array($operation->result_payload)
+                ? $operation->result_payload
+                : null;
+
         $operation->forceFill([
             'id' => Str::uuid()->toString(),
             'status' => MediaOwnerSlotOperationStatus::Processing,
-            'result_media_id' => null,
-            'result_payload' => null,
+            'result_media_id' => $checkpointMediaId,
+            'result_payload' => $checkpointPayload,
             'failure_code' => null,
             'completed_at' => null,
             'failed_at' => null,

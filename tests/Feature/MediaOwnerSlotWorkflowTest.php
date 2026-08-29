@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Nvl\Media\Actions\ClearOwnerMediaSlotAction;
+use Nvl\Media\Actions\CopyOwnerMediaSlotAction;
 use Nvl\Media\Actions\GetOwnerMediaSlotAction;
 use Nvl\Media\Actions\ReplaceOwnerMediaSlotAction;
 use Nvl\Media\Contracts\DetachMediaContract;
@@ -31,6 +34,7 @@ use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Services\MediaLibraryItemDataFactory;
 use Nvl\Media\Services\MediaOwnerSlotIdempotency;
+use Nvl\Media\Services\MediaTemporaryFileRegistry;
 use Nvl\Media\Support\MediaOwnerSlotOperationClaim;
 use Nvl\Media\Tests\Stubs\OwnerSlotWorkflowModel;
 use Nvl\Media\Tests\Stubs\TestMediaModel;
@@ -59,6 +63,17 @@ function ownerSlotMedia(array $overrides = []): Media
         'type' => MediaType::DOCUMENT,
         'digest' => hash('sha256', Str::uuid()->toString()),
     ], $overrides));
+}
+
+function ownerSlotStoredMedia(string $contents, array $overrides = []): Media
+{
+    $media = ownerSlotMedia(array_merge([
+        'size' => strlen($contents),
+        'digest' => hash('sha256', $contents),
+    ], $overrides));
+    Storage::disk($media->disk)->put($media->buildPath(), $contents);
+
+    return $media;
 }
 
 function ownerSlotWorkflowOwner(string $name = 'Workflow owner'): OwnerSlotWorkflowModel
@@ -112,6 +127,36 @@ function attachOwnerSlotMedia(
         'order' => 0,
         'metadata' => ['slot' => $collection],
     ]);
+}
+
+function useOwnerSlotLedger(string $connection, string $prefix): string
+{
+    $path = tempnam(sys_get_temp_dir(), $prefix);
+
+    if (! is_string($path)) {
+        throw new RuntimeException('Unable to create the owner-slot ledger database.');
+    }
+
+    config([
+        "database.connections.{$connection}" => [
+            'driver' => 'sqlite',
+            'database' => $path,
+            'prefix' => '',
+            'foreign_key_constraints' => true,
+        ],
+        'media.owner_slots.idempotency.connection' => $connection,
+        'media.owner_slots.idempotency.processing_timeout_minutes' => 5,
+    ]);
+    $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_create_media_owner_slot_operations_table.php';
+    $migration->up();
+
+    return $path;
+}
+
+function releaseOwnerSlotLedger(string $connection, string $path): void
+{
+    DB::purge($connection);
+    unlink($path);
 }
 
 it('installs the owner-slot operation ledger with its portable indexes', function (): void {
@@ -378,10 +423,13 @@ it('recovers expired processing leases while invalidating the stale claim', func
         operation: MediaOwnerSlotOperationType::Clear,
         payload: [],
     );
+    $checkpointMediaId = Str::uuid()->toString();
+
+    $service->checkpoint($claim, $checkpointMediaId);
 
     MediaOwnerSlotOperation::query()
         ->whereKey($claim->operationId)
-        ->update(['updated_at' => now()->subMinutes(6)]);
+        ->update(['updated_at' => now()->subHour()]);
 
     $recovered = $service->begin(
         key: $key,
@@ -393,7 +441,8 @@ it('recovers expired processing leases while invalidating the stale claim', func
     );
 
     expect($recovered->operationId)->not->toBe($claim->operationId)
-        ->and($recovered->replayed)->toBeFalse();
+        ->and($recovered->replayed)->toBeFalse()
+        ->and($recovered->resultMediaId)->toBe($checkpointMediaId);
 
     expect(fn () => $service->complete($claim, null))
         ->toThrow(LogicException::class, 'no longer exists');
@@ -1193,4 +1242,1272 @@ it('rolls back the slot transition and records a retryable failure', function ()
         ->and($operation->failure_code)->toBe('replace_failed');
 
     Event::assertNothingDispatched();
+});
+
+it('clears empty, shared, and exclusive owner slots with exact replay', function (): void {
+    Storage::fake('public');
+
+    $owner = ownerSlotWorkflowOwner();
+    $otherOwner = ownerSlotWorkflowOwner('Other owner');
+    $actor = ownerSlotWorkflowActor();
+    $actorData = ownerSlotWorkflowActorData($actor);
+    useOwnerSlotAuthorization(static fn (): bool => false);
+
+    expect(fn () => app(ClearOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $owner,
+        'document',
+    ))->toThrow(AuthorizationException::class, 'associate');
+
+    useOwnerSlotAuthorization(static fn (): bool => true);
+
+    $emptyKey = Str::uuid()->toString();
+    app(ClearOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $owner,
+        'document',
+        $emptyKey,
+    );
+    app(ClearOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $owner,
+        'document',
+        $emptyKey,
+    );
+
+    $emptyOperation = MediaOwnerSlotOperation::query()
+        ->where('idempotency_key', $emptyKey)
+        ->sole();
+
+    expect($emptyOperation->status)->toBe(MediaOwnerSlotOperationStatus::Completed)
+        ->and($emptyOperation->result_media_id)->toBeNull()
+        ->and($owner->fresh()->getFirstMedia('document'))->toBeNull();
+
+    useOwnerSlotAuthorization(static fn (): bool => false);
+    $unauthorizedKey = Str::uuid()->toString();
+
+    expect(fn () => app(ClearOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $owner,
+        'document',
+        $emptyKey,
+    ))->toThrow(AuthorizationException::class, 'associate');
+
+    expect(fn () => app(ClearOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $owner,
+        'document',
+        $unauthorizedKey,
+    ))->toThrow(AuthorizationException::class, 'associate');
+
+    expect(MediaOwnerSlotOperation::query()
+        ->where('idempotency_key', $unauthorizedKey)
+        ->exists())->toBeFalse();
+
+    useOwnerSlotAuthorization(static fn (): bool => true);
+
+    $shared = ownerSlotStoredMedia('%PDF-1.4 shared', ['is_public' => true]);
+    attachOwnerSlotMedia($shared, $owner, 'library');
+    attachOwnerSlotMedia($shared, $otherOwner, 'library');
+
+    app(ClearOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $owner,
+        'library',
+    );
+
+    expect($shared->fresh()->associations()->count())->toBe(1)
+        ->and(Media::query()->find($shared->id))->not->toBeNull()
+        ->and(Storage::disk('public')->exists($shared->buildPath()))->toBeTrue();
+
+    $exclusive = ownerSlotStoredMedia('%PDF-1.4 exclusive', [
+        'uploaded_by' => (string) $actor->getKey(),
+        'uploaded_by_type' => $actor->getMorphClass(),
+    ]);
+    attachOwnerSlotMedia($exclusive, $owner, 'document');
+    $exclusiveKey = Str::uuid()->toString();
+
+    app(ClearOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $owner,
+        'document',
+        $exclusiveKey,
+    );
+    app(ClearOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $owner,
+        'document',
+        $exclusiveKey,
+    );
+
+    expect(Media::query()->find($exclusive->id))->toBeNull()
+        ->and(Media::withTrashed()->find($exclusive->id)?->trashed())->toBeTrue()
+        ->and(Storage::disk('public')->exists($exclusive->buildPath()))->toBeFalse()
+        ->and($owner->fresh()->getFirstMedia('document'))->toBeNull();
+});
+
+it('replays a clear against its durable authorization subject', function (): void {
+    Storage::fake('public');
+
+    $owner = ownerSlotWorkflowOwner();
+    $actor = ownerSlotWorkflowActor();
+    $actorData = ownerSlotWorkflowActorData($actor);
+    $media = ownerSlotStoredMedia('%PDF-1.4 durable clear subject', [
+        'uploaded_by' => (string) $actor->getKey(),
+        'uploaded_by_type' => $actor->getMorphClass(),
+    ]);
+    $association = attachOwnerSlotMedia($media, $owner, 'document');
+    $key = Str::uuid()->toString();
+
+    app(ClearOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $owner,
+        'document',
+        $key,
+    );
+    app(ClearOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $owner,
+        'document',
+        $key,
+    );
+
+    $operation = MediaOwnerSlotOperation::query()
+        ->where('idempotency_key', $key)
+        ->sole();
+
+    expect($operation->result_media_id)->toBeNull()
+        ->and($operation->result_payload)->toBe([
+            'authorization_association_id' => $association->id,
+            'authorization_media_id' => $media->id,
+        ]);
+
+    $otherActor = ownerSlotWorkflowActor('Other clear actor');
+
+    expect(fn () => app(ClearOwnerMediaSlotAction::class)->execute(
+        ownerSlotWorkflowActorData($otherActor),
+        $owner,
+        'document',
+        $key,
+    ))->toThrow(AuthorizationException::class, 'associate');
+
+    useOwnerSlotAuthorization(static fn (): bool => false);
+
+    expect(fn () => app(ClearOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $owner,
+        'document',
+        $key,
+    ))->toThrow(AuthorizationException::class, 'associate');
+});
+
+it('rolls back clear when same-connection idempotency completion fails', function (): void {
+    Storage::fake('public');
+
+    $owner = ownerSlotWorkflowOwner();
+    $actor = ownerSlotWorkflowActor();
+    $actorData = ownerSlotWorkflowActorData($actor);
+    $media = ownerSlotStoredMedia('%PDF-1.4 clear completion rollback', [
+        'uploaded_by' => (string) $actor->getKey(),
+        'uploaded_by_type' => $actor->getMorphClass(),
+    ]);
+    attachOwnerSlotMedia($media, $owner, 'document');
+    $key = Str::uuid()->toString();
+
+    DB::unprepared(sprintf(
+        'CREATE TRIGGER media_owner_slot_clear_completion_failure
+        BEFORE UPDATE OF status ON %s
+        WHEN NEW.status = "completed"
+        BEGIN
+            SELECT RAISE(ABORT, "injected clear completion failure");
+        END',
+        MediaTables::OwnerSlotOperations,
+    ));
+
+    try {
+        expect(fn () => app(ClearOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $owner,
+            'document',
+            $key,
+        ))->toThrow(QueryException::class, 'injected clear completion failure');
+    } finally {
+        DB::unprepared('DROP TRIGGER IF EXISTS media_owner_slot_clear_completion_failure');
+    }
+
+    expect($owner->fresh()->getFirstMedia('document')?->id)->toBe($media->id)
+        ->and(Media::query()->find($media->id))->not->toBeNull()
+        ->and(Storage::disk('public')->exists($media->buildPath()))->toBeTrue();
+
+    $operation = MediaOwnerSlotOperation::query()
+        ->where('idempotency_key', $key)
+        ->sole();
+
+    expect($operation->status)->toBe(MediaOwnerSlotOperationStatus::Failed)
+        ->and($operation->failure_code)->toBe('clear_failed');
+});
+
+it('copies through canonical ingestion with safe metadata and exact replay', function (): void {
+    Storage::fake('public');
+    config([
+        'media.owner_slots.copy.metadata_keys' => [
+            'approved',
+            'credit',
+            'license_year',
+            'note',
+        ],
+    ]);
+
+    $sourceOwner = ownerSlotWorkflowOwner('Source owner');
+    $destination = ownerSlotWorkflowOwner('Destination');
+    $actor = ownerSlotWorkflowActor();
+    $actorData = ownerSlotWorkflowActorData($actor);
+    $source = ownerSlotStoredMedia('%PDF-1.4 canonical copy', [
+        'filename' => 'source-document.pdf',
+        'tags' => [' source ', 'proof', 'proof', ''],
+        'metadata' => [
+            'credit' => 'Studio',
+            'license_year' => 2026,
+            'approved' => true,
+            'note' => null,
+            'provider_payload' => 'secret',
+            'redaction_reason' => 'private',
+            'storage_path' => 'documents/forged.pdf',
+            'hash' => 'forged',
+            'access_token' => 'secret-token',
+            'client_secret' => 'secret-client',
+            'password' => 'secret-password',
+            'credential' => 'secret-credential',
+            'nested' => ['not' => 'copied'],
+        ],
+        'uploaded_by' => (string) $actor->getKey(),
+        'uploaded_by_type' => $actor->getMorphClass(),
+    ]);
+    attachOwnerSlotMedia($source, $sourceOwner, 'document');
+    $previous = ownerSlotStoredMedia('%PDF-1.4 previous destination', [
+        'uploaded_by' => (string) $actor->getKey(),
+        'uploaded_by_type' => $actor->getMorphClass(),
+    ]);
+    attachOwnerSlotMedia($previous, $destination, 'document');
+    $key = Str::uuid()->toString();
+
+    $copy = app(CopyOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $destination,
+        'document',
+        $source->id,
+        $key,
+    );
+    $replay = app(CopyOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $destination,
+        'document',
+        $source->id,
+        $key,
+    );
+    $copiedMedia = Media::query()->findOrFail($copy->id);
+
+    expect($copy->id)->not->toBe($source->id)
+        ->and($copy->filename)->toBe('source-document.pdf')
+        ->and($replay->toArray())->toBe($copy->toArray())
+        ->and($destination->fresh()->getFirstMedia('document')?->id)->toBe($copy->id)
+        ->and($copiedMedia->digest)->toBe($source->digest)
+        ->and($copiedMedia->hash)->not->toBe($source->hash)
+        ->and($copiedMedia->is_public)->toBeFalse()
+        ->and($copiedMedia->uploaded_by)->toBe((string) $actor->getKey())
+        ->and($copiedMedia->uploaded_by_type)->toBe($actor->getMorphClass())
+        ->and($copiedMedia->tags)->toBe(['source', 'proof'])
+        ->and($copiedMedia->metadata)->toBe([
+            'approved' => true,
+            'credit' => 'Studio',
+            'license_year' => 2026,
+            'note' => null,
+        ])
+        ->and(Storage::disk('public')->get($copiedMedia->buildPath()))
+        ->toBe('%PDF-1.4 canonical copy')
+        ->and(Storage::disk('public')->exists($source->buildPath()))->toBeTrue()
+        ->and(Storage::disk('public')->exists($previous->buildPath()))->toBeFalse()
+        ->and(Media::withTrashed()->find($previous->id)?->trashed())->toBeTrue()
+        ->and(Media::query()->count())->toBe(2);
+
+    $customDestination = ownerSlotWorkflowOwner('Custom destination');
+    $customCopy = app(CopyOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $customDestination,
+        'custom',
+        $source->id,
+    );
+
+    expect($customDestination->fresh()->getFirstMedia('custom')?->id)
+        ->toBe($customCopy->id);
+
+    $publicDestination = ownerSlotWorkflowOwner('Public destination');
+    $publicCopy = app(CopyOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $publicDestination,
+        'library',
+        $source->id,
+    );
+
+    expect(Media::query()->findOrFail($publicCopy->id)->is_public)->toBeTrue();
+});
+
+it('recovers a committed copy from an expired processing checkpoint', function (): void {
+    Storage::fake('public');
+    config([
+        'media.owner_slots.idempotency.processing_timeout_minutes' => 5,
+    ]);
+
+    $destination = ownerSlotWorkflowOwner();
+    $actor = ownerSlotWorkflowActor();
+    $actorData = ownerSlotWorkflowActorData($actor);
+    $source = ownerSlotStoredMedia('%PDF-1.4 checkpoint source', [
+        'uploaded_by' => (string) $actor->getKey(),
+        'uploaded_by_type' => $actor->getMorphClass(),
+    ]);
+    $committedCopy = ownerSlotStoredMedia('%PDF-1.4 checkpoint copy', [
+        'uploaded_by' => (string) $actor->getKey(),
+        'uploaded_by_type' => $actor->getMorphClass(),
+    ]);
+    attachOwnerSlotMedia($committedCopy, $destination, 'document');
+    useOwnerSlotAuthorization(static fn (): bool => true);
+    $key = Str::uuid()->toString();
+    $idempotency = app(MediaOwnerSlotIdempotency::class);
+    $claim = $idempotency->begin(
+        key: $key,
+        actor: $actorData,
+        owner: $destination,
+        slot: 'document',
+        operation: MediaOwnerSlotOperationType::Copy,
+        payload: ['source_media_id' => $source->id],
+    );
+
+    $idempotency->checkpoint($claim, $committedCopy->id);
+    MediaOwnerSlotOperation::query()
+        ->whereKey($claim->operationId)
+        ->update(['updated_at' => now()->subMinutes(6)]);
+
+    $recovered = app(CopyOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $destination,
+        'document',
+        $source->id,
+        $key,
+    );
+
+    expect($recovered->id)->toBe($committedCopy->id)
+        ->and($destination->fresh()->getFirstMedia('document')?->id)
+        ->toBe($committedCopy->id)
+        ->and(Media::query()->count())->toBe(2);
+
+    $operation = MediaOwnerSlotOperation::query()
+        ->where('idempotency_key', $key)
+        ->sole();
+
+    expect($operation->status)->toBe(MediaOwnerSlotOperationStatus::Completed)
+        ->and($operation->result_media_id)->toBe($committedCopy->id)
+        ->and(MediaLibraryItem::from($operation->result_payload)->toArray())
+        ->toBe($recovered->toArray());
+});
+
+it('exactly replays a copy after its exclusive source is deleted', function (): void {
+    Storage::fake('public');
+
+    $owner = ownerSlotWorkflowOwner();
+    $actor = ownerSlotWorkflowActor();
+    $actorData = ownerSlotWorkflowActorData($actor);
+    $source = ownerSlotStoredMedia('%PDF-1.4 self replacement source', [
+        'uploaded_by' => (string) $actor->getKey(),
+        'uploaded_by_type' => $actor->getMorphClass(),
+    ]);
+    attachOwnerSlotMedia($source, $owner, 'document');
+    $key = Str::uuid()->toString();
+
+    $copy = app(CopyOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $owner,
+        'document',
+        $source->id,
+        $key,
+    );
+    $replay = app(CopyOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $owner,
+        'document',
+        $source->id,
+        $key,
+    );
+
+    expect(Media::withTrashed()->findOrFail($source->id)->trashed())->toBeTrue()
+        ->and($replay->toArray())->toBe($copy->toArray())
+        ->and($owner->fresh()->getFirstMedia('document')?->id)->toBe($copy->id)
+        ->and(Media::query()->count())->toBe(1);
+});
+
+it('rejects unauthorized, missing, and corrupt copy sources before mutation', function (): void {
+    Storage::fake('public');
+
+    $destination = ownerSlotWorkflowOwner();
+    $actor = ownerSlotWorkflowActor();
+    $actorData = ownerSlotWorkflowActorData($actor);
+    $source = ownerSlotStoredMedia('%PDF-1.4 authorized', [
+        'uploaded_by' => (string) $actor->getKey(),
+        'uploaded_by_type' => $actor->getMorphClass(),
+    ]);
+    $startingCount = Media::query()->count();
+
+    useOwnerSlotAuthorization(
+        static fn (
+            MediaActorData $candidateActor,
+            MediaAbility $ability,
+        ): bool => $ability === MediaAbility::Associate,
+    );
+
+    expect(fn () => app(CopyOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $destination,
+        'document',
+        $source->id,
+    ))->toThrow(AuthorizationException::class, 'view');
+
+    useOwnerSlotAuthorization(
+        static fn (
+            MediaActorData $candidateActor,
+            MediaAbility $ability,
+        ): bool => $ability === MediaAbility::View,
+    );
+
+    expect(fn () => app(CopyOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $destination,
+        'document',
+        $source->id,
+    ))->toThrow(AuthorizationException::class, 'associate');
+
+    useOwnerSlotAuthorization(static fn (): bool => true);
+    Storage::disk('public')->delete($source->buildPath());
+
+    expect(fn () => app(CopyOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $destination,
+        'document',
+        $source->id,
+    ))->toThrow(MediaUploadException::class, 'source object');
+
+    Storage::disk('public')->put($source->buildPath(), '%PDF-1.4 tampered');
+
+    expect(fn () => app(CopyOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $destination,
+        'document',
+        $source->id,
+    ))->toThrow(MediaUploadException::class, 'checksum');
+
+    expect(Media::query()->count())->toBe($startingCount)
+        ->and($destination->fresh()->getFirstMedia('document'))->toBeNull();
+});
+
+it('rolls back copied rows and objects when destination replacement fails', function (): void {
+    Storage::fake('public');
+
+    $destination = ownerSlotWorkflowOwner();
+    $actor = ownerSlotWorkflowActor();
+    $actorData = ownerSlotWorkflowActorData($actor);
+    $source = ownerSlotStoredMedia('%PDF-1.4 copy rollback', [
+        'uploaded_by' => (string) $actor->getKey(),
+        'uploaded_by_type' => $actor->getMorphClass(),
+    ]);
+    $current = ownerSlotStoredMedia('%PDF-1.4 current destination', [
+        'uploaded_by' => (string) $actor->getKey(),
+        'uploaded_by_type' => $actor->getMorphClass(),
+    ]);
+    attachOwnerSlotMedia($current, $destination, 'document');
+    $key = Str::uuid()->toString();
+    $startingFiles = Storage::disk('public')->allFiles();
+    sort($startingFiles);
+    useOwnerSlotAuthorization(static fn (): bool => true);
+
+    app()->instance(DetachMediaContract::class, new class implements DetachMediaContract
+    {
+        public function execute(
+            Media|string $media,
+            Model $model,
+            ?string $collection = null,
+        ): int {
+            throw new RuntimeException('Injected copy detach failure.');
+        }
+    });
+
+    expect(fn () => app(CopyOwnerMediaSlotAction::class)->execute(
+        $actorData,
+        $destination,
+        'document',
+        $source->id,
+        $key,
+    ))->toThrow(RuntimeException::class, 'Injected copy detach failure');
+
+    $remainingFiles = Storage::disk('public')->allFiles();
+    sort($remainingFiles);
+
+    expect($destination->fresh()->getFirstMedia('document')?->id)->toBe($current->id)
+        ->and(Media::query()->count())->toBe(2)
+        ->and($remainingFiles)->toBe($startingFiles)
+        ->and(app(MediaTemporaryFileRegistry::class)->count())->toBe(0);
+
+    $operation = MediaOwnerSlotOperation::query()
+        ->where('idempotency_key', $key)
+        ->sole();
+
+    expect($operation->status)->toBe(MediaOwnerSlotOperationStatus::Failed)
+        ->and($operation->failure_code)->toBe('copy_failed');
+});
+
+it('rolls back a copied slot when same-connection idempotency completion fails', function (): void {
+    Storage::fake('public');
+
+    $destination = ownerSlotWorkflowOwner();
+    $actor = ownerSlotWorkflowActor();
+    $actorData = ownerSlotWorkflowActorData($actor);
+    $source = ownerSlotStoredMedia('%PDF-1.4 completion source', [
+        'uploaded_by' => (string) $actor->getKey(),
+        'uploaded_by_type' => $actor->getMorphClass(),
+    ]);
+    $current = ownerSlotStoredMedia('%PDF-1.4 completion current', [
+        'uploaded_by' => (string) $actor->getKey(),
+        'uploaded_by_type' => $actor->getMorphClass(),
+    ]);
+    attachOwnerSlotMedia($current, $destination, 'document');
+    $key = Str::uuid()->toString();
+    $startingFiles = Storage::disk('public')->allFiles();
+    sort($startingFiles);
+    useOwnerSlotAuthorization(static fn (): bool => true);
+
+    DB::unprepared(sprintf(
+        'CREATE TRIGGER media_owner_slot_completion_failure
+        BEFORE UPDATE OF status ON %s
+        WHEN NEW.status = "completed"
+        BEGIN
+            SELECT RAISE(ABORT, "injected owner-slot completion failure");
+        END',
+        MediaTables::OwnerSlotOperations,
+    ));
+
+    try {
+        expect(fn () => app(CopyOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $destination,
+            'document',
+            $source->id,
+            $key,
+        ))->toThrow(QueryException::class, 'injected owner-slot completion failure');
+    } finally {
+        DB::unprepared('DROP TRIGGER IF EXISTS media_owner_slot_completion_failure');
+    }
+
+    $remainingFiles = Storage::disk('public')->allFiles();
+    sort($remainingFiles);
+
+    expect($destination->fresh()->getFirstMedia('document')?->id)->toBe($current->id)
+        ->and(Media::query()->count())->toBe(2)
+        ->and($remainingFiles)->toBe($startingFiles);
+
+    $operation = MediaOwnerSlotOperation::query()
+        ->where('idempotency_key', $key)
+        ->sole();
+
+    expect($operation->status)->toBe(MediaOwnerSlotOperationStatus::Failed)
+        ->and($operation->failure_code)->toBe('copy_failed');
+});
+
+it('preserves and recovers a split-connection checkpoint when completion fails', function (): void {
+    Storage::fake('public');
+    $ledgerPath = tempnam(sys_get_temp_dir(), 'media_owner_slot_ledger_');
+
+    if (! is_string($ledgerPath)) {
+        throw new RuntimeException('Unable to create the owner-slot ledger database.');
+    }
+
+    config([
+        'database.connections.owner_slot_ledger' => [
+            'driver' => 'sqlite',
+            'database' => $ledgerPath,
+            'prefix' => '',
+            'foreign_key_constraints' => true,
+        ],
+        'media.owner_slots.idempotency.connection' => 'owner_slot_ledger',
+        'media.owner_slots.idempotency.processing_timeout_minutes' => 5,
+    ]);
+    $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_create_media_owner_slot_operations_table.php';
+    $migration->up();
+
+    try {
+        $sourceOwner = ownerSlotWorkflowOwner('Split source owner');
+        $destination = ownerSlotWorkflowOwner('Split destination');
+        $actor = ownerSlotWorkflowActor();
+        $actorData = ownerSlotWorkflowActorData($actor);
+        $source = ownerSlotStoredMedia('%PDF-1.4 split checkpoint', [
+            'uploaded_by' => (string) $actor->getKey(),
+            'uploaded_by_type' => $actor->getMorphClass(),
+        ]);
+        attachOwnerSlotMedia($source, $sourceOwner, 'document');
+        $key = Str::uuid()->toString();
+        useOwnerSlotAuthorization(static fn (): bool => true);
+
+        DB::connection('owner_slot_ledger')->unprepared(sprintf(
+            'CREATE TRIGGER media_owner_slot_split_completion_failure
+            BEFORE UPDATE OF status ON %s
+            WHEN NEW.status = "completed"
+            BEGIN
+                SELECT RAISE(ABORT, "injected split completion failure");
+            END',
+            MediaTables::OwnerSlotOperations,
+        ));
+
+        expect(fn () => app(CopyOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $destination,
+            'document',
+            $source->id,
+            $key,
+        ))->toThrow(QueryException::class, 'injected split completion failure');
+
+        $committedCopyId = $destination->fresh()->getFirstMedia('document')?->id;
+        $operation = MediaOwnerSlotOperation::query()
+            ->where('idempotency_key', $key)
+            ->sole();
+
+        expect($committedCopyId)->not->toBeNull()
+            ->and($operation->status)->toBe(MediaOwnerSlotOperationStatus::Processing)
+            ->and($operation->result_media_id)->toBe($committedCopyId)
+            ->and($operation->result_payload)->toBeArray()
+            ->and(Media::query()->count())->toBe(2);
+
+        DB::connection('owner_slot_ledger')->unprepared(
+            'DROP TRIGGER IF EXISTS media_owner_slot_split_completion_failure',
+        );
+        $newer = ownerSlotStoredMedia('%PDF-1.4 newer destination', [
+            'uploaded_by' => (string) $actor->getKey(),
+            'uploaded_by_type' => $actor->getMorphClass(),
+        ]);
+        app(ReplaceOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $destination,
+            'document',
+            $newer->id,
+        );
+        $operation->forceFill(['updated_at' => now()->subMinutes(6)])->save();
+
+        $recovered = app(CopyOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $destination,
+            'document',
+            $source->id,
+            $key,
+        );
+
+        expect($recovered->id)->toBe($committedCopyId)
+            ->and($destination->fresh()->getFirstMedia('document')?->id)
+            ->toBe($newer->id)
+            ->and(Media::withTrashed()->find($committedCopyId)?->trashed())->toBeTrue()
+            ->and(Media::query()->count())->toBe(2)
+            ->and(MediaOwnerSlotOperation::query()
+                ->where('idempotency_key', $key)
+                ->sole()
+                ->status)
+            ->toBe(MediaOwnerSlotOperationStatus::Completed);
+    } finally {
+        DB::connection('owner_slot_ledger')->unprepared(
+            'DROP TRIGGER IF EXISTS media_owner_slot_split_completion_failure',
+        );
+        DB::purge('owner_slot_ledger');
+        unlink($ledgerPath);
+    }
+});
+
+it('preserves a split checkpoint when an after-commit listener throws', function (): void {
+    Storage::fake('public');
+    $ledgerPath = tempnam(sys_get_temp_dir(), 'media_owner_slot_listener_');
+
+    if (! is_string($ledgerPath)) {
+        throw new RuntimeException('Unable to create the owner-slot ledger database.');
+    }
+
+    config([
+        'database.connections.owner_slot_listener' => [
+            'driver' => 'sqlite',
+            'database' => $ledgerPath,
+            'prefix' => '',
+            'foreign_key_constraints' => true,
+        ],
+        'media.owner_slots.idempotency.connection' => 'owner_slot_listener',
+        'media.owner_slots.idempotency.processing_timeout_minutes' => 5,
+    ]);
+    $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_create_media_owner_slot_operations_table.php';
+    $migration->up();
+
+    try {
+        $sourceOwner = ownerSlotWorkflowOwner('Listener source owner');
+        $destination = ownerSlotWorkflowOwner('Listener destination');
+        $actor = ownerSlotWorkflowActor();
+        $actorData = ownerSlotWorkflowActorData($actor);
+        $source = ownerSlotStoredMedia('%PDF-1.4 listener checkpoint', [
+            'uploaded_by' => (string) $actor->getKey(),
+            'uploaded_by_type' => $actor->getMorphClass(),
+        ]);
+        attachOwnerSlotMedia($source, $sourceOwner, 'document');
+        $key = Str::uuid()->toString();
+        useOwnerSlotAuthorization(static fn (): bool => true);
+        Event::listen(
+            MediaAttached::class,
+            static function (): never {
+                throw new RuntimeException('Injected after-commit listener failure.');
+            },
+        );
+
+        expect(fn () => app(CopyOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $destination,
+            'document',
+            $source->id,
+            $key,
+        ))->toThrow(RuntimeException::class, 'Injected after-commit listener failure');
+
+        $committedCopyId = $destination->fresh()->getFirstMedia('document')?->id;
+        $operation = MediaOwnerSlotOperation::query()
+            ->where('idempotency_key', $key)
+            ->sole();
+
+        expect($committedCopyId)->not->toBeNull()
+            ->and($operation->status)->toBe(MediaOwnerSlotOperationStatus::Processing)
+            ->and($operation->result_media_id)->toBe($committedCopyId)
+            ->and($operation->result_payload)->toBeArray();
+
+        Event::forget(MediaAttached::class);
+        $operation->forceFill(['updated_at' => now()->subMinutes(6)])->save();
+
+        $recovered = app(CopyOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $destination,
+            'document',
+            $source->id,
+            $key,
+        );
+
+        expect($recovered->id)->toBe($committedCopyId)
+            ->and(Media::query()->count())->toBe(2);
+    } finally {
+        Event::forget(MediaAttached::class);
+        DB::purge('owner_slot_listener');
+        unlink($ledgerPath);
+    }
+});
+
+it('recovers a split clear checkpoint without clearing a newer attachment', function (): void {
+    Storage::fake('public');
+    $ledgerPath = tempnam(sys_get_temp_dir(), 'media_owner_slot_clear_');
+
+    if (! is_string($ledgerPath)) {
+        throw new RuntimeException('Unable to create the owner-slot ledger database.');
+    }
+
+    config([
+        'database.connections.owner_slot_clear' => [
+            'driver' => 'sqlite',
+            'database' => $ledgerPath,
+            'prefix' => '',
+            'foreign_key_constraints' => true,
+        ],
+        'media.owner_slots.idempotency.connection' => 'owner_slot_clear',
+        'media.owner_slots.idempotency.processing_timeout_minutes' => 5,
+    ]);
+    $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_create_media_owner_slot_operations_table.php';
+    $migration->up();
+
+    try {
+        $owner = ownerSlotWorkflowOwner('Split clear owner');
+        $actor = ownerSlotWorkflowActor();
+        $actorData = ownerSlotWorkflowActorData($actor);
+        $cleared = ownerSlotStoredMedia('%PDF-1.4 split clear', [
+            'uploaded_by' => (string) $actor->getKey(),
+            'uploaded_by_type' => $actor->getMorphClass(),
+        ]);
+        attachOwnerSlotMedia($cleared, $owner, 'document');
+        $key = Str::uuid()->toString();
+        useOwnerSlotAuthorization(static fn (): bool => true);
+
+        DB::connection('owner_slot_clear')->unprepared(sprintf(
+            'CREATE TRIGGER media_owner_slot_split_clear_completion_failure
+            BEFORE UPDATE OF status ON %s
+            WHEN NEW.status = "completed"
+            BEGIN
+                SELECT RAISE(ABORT, "injected split clear completion failure");
+            END',
+            MediaTables::OwnerSlotOperations,
+        ));
+
+        expect(fn () => app(ClearOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $owner,
+            'document',
+            $key,
+        ))->toThrow(QueryException::class, 'injected split clear completion failure');
+
+        $operation = MediaOwnerSlotOperation::query()
+            ->where('idempotency_key', $key)
+            ->sole();
+
+        expect($owner->fresh()->getFirstMedia('document'))->toBeNull()
+            ->and($operation->status)->toBe(MediaOwnerSlotOperationStatus::Processing)
+            ->and($operation->result_media_id)->toBeNull()
+            ->and($operation->result_payload)->toBeArray();
+
+        DB::connection('owner_slot_clear')->unprepared(
+            'DROP TRIGGER IF EXISTS media_owner_slot_split_clear_completion_failure',
+        );
+        $newer = ownerSlotStoredMedia('%PDF-1.4 newer after clear', [
+            'uploaded_by' => (string) $actor->getKey(),
+            'uploaded_by_type' => $actor->getMorphClass(),
+        ]);
+        app(ReplaceOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $owner,
+            'document',
+            $newer->id,
+        );
+        $operation->forceFill(['updated_at' => now()->subMinutes(6)])->save();
+
+        app(ClearOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $owner,
+            'document',
+            $key,
+        );
+
+        expect($owner->fresh()->getFirstMedia('document')?->id)->toBe($newer->id)
+            ->and(Media::query()->count())->toBe(1)
+            ->and(MediaOwnerSlotOperation::query()
+                ->where('idempotency_key', $key)
+                ->sole()
+                ->status)
+            ->toBe(MediaOwnerSlotOperationStatus::Completed);
+    } finally {
+        DB::connection('owner_slot_clear')->unprepared(
+            'DROP TRIGGER IF EXISTS media_owner_slot_split_clear_completion_failure',
+        );
+        DB::purge('owner_slot_clear');
+        unlink($ledgerPath);
+    }
+});
+
+it('completes split clear claims only at an outer transaction root', function (): void {
+    Storage::fake('public');
+    $connection = 'owner_slot_clear_outer';
+    $ledgerPath = useOwnerSlotLedger($connection, 'media_owner_slot_clear_outer_');
+
+    try {
+        $actor = ownerSlotWorkflowActor();
+        $actorData = ownerSlotWorkflowActorData($actor);
+        useOwnerSlotAuthorization(static fn (): bool => true);
+
+        $committedOwner = ownerSlotWorkflowOwner('Outer committed clear');
+        $committedMedia = ownerSlotStoredMedia('%PDF-1.4 outer committed clear');
+        attachOwnerSlotMedia($committedMedia, $committedOwner, 'document');
+        $committedKey = Str::uuid()->toString();
+
+        DB::beginTransaction();
+        app(ClearOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $committedOwner,
+            'document',
+            $committedKey,
+        );
+
+        expect(MediaOwnerSlotOperation::query()
+            ->where('idempotency_key', $committedKey)
+            ->sole()
+            ->status)->toBe(MediaOwnerSlotOperationStatus::Processing);
+
+        DB::commit();
+
+        expect($committedOwner->fresh()->getFirstMedia('document'))->toBeNull()
+            ->and(MediaOwnerSlotOperation::query()
+                ->where('idempotency_key', $committedKey)
+                ->sole()
+                ->status)
+            ->toBe(MediaOwnerSlotOperationStatus::Completed);
+
+        $rolledBackOwner = ownerSlotWorkflowOwner('Outer rolled-back clear');
+        $rolledBackMedia = ownerSlotStoredMedia('%PDF-1.4 outer rolled-back clear');
+        attachOwnerSlotMedia($rolledBackMedia, $rolledBackOwner, 'document');
+        $rolledBackKey = Str::uuid()->toString();
+
+        DB::beginTransaction();
+        app(ClearOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $rolledBackOwner,
+            'document',
+            $rolledBackKey,
+        );
+
+        expect(MediaOwnerSlotOperation::query()
+            ->where('idempotency_key', $rolledBackKey)
+            ->sole()
+            ->status)->toBe(MediaOwnerSlotOperationStatus::Processing);
+
+        DB::rollBack();
+
+        expect($rolledBackOwner->fresh()->getFirstMedia('document')?->id)
+            ->toBe($rolledBackMedia->id)
+            ->and(MediaOwnerSlotOperation::query()
+                ->where('idempotency_key', $rolledBackKey)
+                ->sole()
+                ->status)
+            ->toBe(MediaOwnerSlotOperationStatus::Failed);
+
+        app(ClearOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $rolledBackOwner,
+            'document',
+            $rolledBackKey,
+        );
+
+        expect($rolledBackOwner->fresh()->getFirstMedia('document'))->toBeNull();
+    } finally {
+        if (DB::transactionLevel() > 0) {
+            DB::rollBack();
+        }
+
+        releaseOwnerSlotLedger($connection, $ledgerPath);
+    }
+});
+
+it('completes split copy claims only at an outer transaction root', function (): void {
+    Storage::fake('public');
+    $connection = 'owner_slot_copy_outer';
+    $ledgerPath = useOwnerSlotLedger($connection, 'media_owner_slot_copy_outer_');
+
+    try {
+        $sourceOwner = ownerSlotWorkflowOwner('Outer copy source');
+        $actor = ownerSlotWorkflowActor();
+        $actorData = ownerSlotWorkflowActorData($actor);
+        $source = ownerSlotStoredMedia('%PDF-1.4 outer copy source', [
+            'uploaded_by' => (string) $actor->getKey(),
+            'uploaded_by_type' => $actor->getMorphClass(),
+        ]);
+        attachOwnerSlotMedia($source, $sourceOwner, 'document');
+        useOwnerSlotAuthorization(static fn (): bool => true);
+
+        $committedOwner = ownerSlotWorkflowOwner('Outer committed copy');
+        $committedKey = Str::uuid()->toString();
+
+        DB::beginTransaction();
+        $committedCopy = app(CopyOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $committedOwner,
+            'document',
+            $source->id,
+            $committedKey,
+        );
+
+        expect(MediaOwnerSlotOperation::query()
+            ->where('idempotency_key', $committedKey)
+            ->sole()
+            ->status)->toBe(MediaOwnerSlotOperationStatus::Processing);
+
+        DB::commit();
+
+        expect($committedOwner->fresh()->getFirstMedia('document')?->id)
+            ->toBe($committedCopy->id)
+            ->and(MediaOwnerSlotOperation::query()
+                ->where('idempotency_key', $committedKey)
+                ->sole()
+                ->status)
+            ->toBe(MediaOwnerSlotOperationStatus::Completed);
+
+        $rolledBackOwner = ownerSlotWorkflowOwner('Outer rolled-back copy');
+        $rolledBackKey = Str::uuid()->toString();
+
+        DB::beginTransaction();
+        $rolledBackCopy = app(CopyOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $rolledBackOwner,
+            'document',
+            $source->id,
+            $rolledBackKey,
+        );
+
+        expect(MediaOwnerSlotOperation::query()
+            ->where('idempotency_key', $rolledBackKey)
+            ->sole()
+            ->status)->toBe(MediaOwnerSlotOperationStatus::Processing);
+
+        DB::rollBack();
+
+        expect($rolledBackOwner->fresh()->getFirstMedia('document'))->toBeNull()
+            ->and(Media::withTrashed()->find($rolledBackCopy->id))->toBeNull()
+            ->and(MediaOwnerSlotOperation::query()
+                ->where('idempotency_key', $rolledBackKey)
+                ->sole()
+                ->status)
+            ->toBe(MediaOwnerSlotOperationStatus::Failed);
+
+        $retriedCopy = app(CopyOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $rolledBackOwner,
+            'document',
+            $source->id,
+            $rolledBackKey,
+        );
+
+        expect($retriedCopy->id)->not->toBe($rolledBackCopy->id)
+            ->and($rolledBackOwner->fresh()->getFirstMedia('document')?->id)
+            ->toBe($retriedCopy->id);
+    } finally {
+        if (DB::transactionLevel() > 0) {
+            DB::rollBack();
+        }
+
+        releaseOwnerSlotLedger($connection, $ledgerPath);
+    }
+});
+
+it('rolls back copy before Media callbacks when split checkpoint persistence fails', function (): void {
+    Storage::fake('public');
+    $connection = 'owner_slot_checkpoint_failure';
+    $ledgerPath = useOwnerSlotLedger($connection, 'media_owner_slot_checkpoint_failure_');
+    $attachedEvents = 0;
+
+    try {
+        $sourceOwner = ownerSlotWorkflowOwner('Checkpoint failure source');
+        $destination = ownerSlotWorkflowOwner('Checkpoint failure destination');
+        $actor = ownerSlotWorkflowActor();
+        $actorData = ownerSlotWorkflowActorData($actor);
+        $source = ownerSlotStoredMedia('%PDF-1.4 checkpoint failure source', [
+            'uploaded_by' => (string) $actor->getKey(),
+            'uploaded_by_type' => $actor->getMorphClass(),
+        ]);
+        $current = ownerSlotStoredMedia('%PDF-1.4 checkpoint failure current');
+        attachOwnerSlotMedia($source, $sourceOwner, 'document');
+        attachOwnerSlotMedia($current, $destination, 'document');
+        $key = Str::uuid()->toString();
+        useOwnerSlotAuthorization(static fn (): bool => true);
+        Event::listen(MediaAttached::class, static function () use (&$attachedEvents): void {
+            $attachedEvents++;
+        });
+
+        DB::connection($connection)->unprepared(sprintf(
+            'CREATE TRIGGER media_owner_slot_checkpoint_payload_failure
+            BEFORE UPDATE OF result_payload ON %s
+            WHEN NEW.result_payload IS NOT NULL AND OLD.result_payload IS NULL
+            BEGIN
+                SELECT RAISE(ABORT, "injected split checkpoint payload failure");
+            END',
+            MediaTables::OwnerSlotOperations,
+        ));
+
+        expect(fn () => app(CopyOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $destination,
+            'document',
+            $source->id,
+            $key,
+        ))->toThrow(QueryException::class, 'injected split checkpoint payload failure');
+
+        expect($destination->fresh()->getFirstMedia('document')?->id)->toBe($current->id)
+            ->and(Media::query()->count())->toBe(2)
+            ->and($attachedEvents)->toBe(0)
+            ->and(MediaOwnerSlotOperation::query()
+                ->where('idempotency_key', $key)
+                ->sole()
+                ->status)
+            ->toBe(MediaOwnerSlotOperationStatus::Failed);
+    } finally {
+        Event::forget(MediaAttached::class);
+        DB::connection($connection)->unprepared(
+            'DROP TRIGGER IF EXISTS media_owner_slot_checkpoint_payload_failure',
+        );
+        releaseOwnerSlotLedger($connection, $ledgerPath);
+    }
+});
+
+it('reconciles a clear checkpoint again under the owner mutation lock', function (): void {
+    Storage::fake('public');
+    config(['media.owner_slots.idempotency.processing_timeout_minutes' => 1]);
+    $owner = ownerSlotWorkflowOwner('Clear checkpoint race owner');
+    $actor = ownerSlotWorkflowActor();
+    $actorData = ownerSlotWorkflowActorData($actor);
+    $original = ownerSlotStoredMedia('%PDF-1.4 clear race original');
+    $newer = ownerSlotStoredMedia('%PDF-1.4 clear race newer');
+    $originalAssociation = attachOwnerSlotMedia($original, $owner, 'document');
+    $newerAssociationId = Str::uuid()->toString();
+    $key = Str::uuid()->toString();
+    $idempotency = app(MediaOwnerSlotIdempotency::class);
+    $claim = $idempotency->begin(
+        key: $key,
+        actor: $actorData,
+        owner: $owner,
+        slot: 'document',
+        operation: MediaOwnerSlotOperationType::Clear,
+        payload: [],
+    );
+    $idempotency->checkpoint($claim, null, [
+        'authorization_association_id' => $originalAssociation->id,
+        'authorization_media_id' => $original->id,
+    ]);
+    MediaOwnerSlotOperation::query()
+        ->whereKey($claim->operationId)
+        ->update(['updated_at' => now()->subMinutes(6)]);
+    useOwnerSlotAuthorization(static fn (): bool => true);
+    $retrieved = 0;
+    $event = 'eloquent.retrieved: '.MediaAssociation::class;
+
+    Event::listen($event, static function (MediaAssociation $association) use (
+        &$retrieved,
+        $newer,
+        $newerAssociationId,
+    ): void {
+        $retrieved++;
+
+        if ($retrieved !== 2) {
+            return;
+        }
+
+        DB::table(MediaTables::Associations)
+            ->where('id', $association->id)
+            ->delete();
+        DB::table(MediaTables::Associations)->insert([
+            'id' => $newerAssociationId,
+            'media_id' => $newer->id,
+            'associable_type' => $association->associable_type,
+            'associable_id' => $association->associable_id,
+            'collection' => $association->collection,
+            'locale' => null,
+            'order' => 0,
+            'is_active' => true,
+            'replaced_at' => null,
+            'metadata' => json_encode(['slot' => $association->collection], JSON_THROW_ON_ERROR),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    });
+
+    try {
+        app(ClearOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $owner,
+            'document',
+            $key,
+        );
+
+        expect($owner->fresh()->getFirstMedia('document')?->id)->toBe($newer->id)
+            ->and(MediaAssociation::query()->whereKey($newerAssociationId)->exists())->toBeTrue()
+            ->and(MediaOwnerSlotOperation::query()
+                ->where('idempotency_key', $key)
+                ->sole()
+                ->status)
+            ->toBe(MediaOwnerSlotOperationStatus::Completed);
+    } finally {
+        Event::forget($event);
+    }
+});
+
+it('fences and reconciles a copy checkpoint after acquiring the owner lock', function (): void {
+    Storage::fake('public');
+    $connection = 'owner_slot_copy_fence';
+    $ledgerPath = useOwnerSlotLedger($connection, 'media_owner_slot_copy_fence_');
+    $event = 'eloquent.saving: '.MediaOwnerSlotOperation::class;
+
+    try {
+        $sourceOwner = ownerSlotWorkflowOwner('Copy fence source');
+        $destination = ownerSlotWorkflowOwner('Copy fence destination');
+        $actor = ownerSlotWorkflowActor();
+        $actorData = ownerSlotWorkflowActorData($actor);
+        $source = ownerSlotStoredMedia('%PDF-1.4 copy fence source', [
+            'uploaded_by' => (string) $actor->getKey(),
+            'uploaded_by_type' => $actor->getMorphClass(),
+        ]);
+        attachOwnerSlotMedia($source, $sourceOwner, 'document');
+        $checkpointMedia = ownerSlotStoredMedia('%PDF-1.4 copy fence result', [
+            'uploaded_by' => (string) $actor->getKey(),
+            'uploaded_by_type' => $actor->getMorphClass(),
+        ]);
+        $checkpointAssociation = attachOwnerSlotMedia(
+            $checkpointMedia,
+            $destination,
+            'document',
+        );
+        $mediaAttributes = $checkpointMedia->getAttributes();
+        $associationAttributes = $checkpointAssociation->getAttributes();
+        $checkpointMedia->loadMissing(['translations', 'imageVariations']);
+        $checkpointMedia->loadCount('associations');
+        $checkpointResult = app(MediaLibraryItemDataFactory::class)->fromAssociation(
+            $checkpointMedia,
+            $checkpointAssociation,
+        );
+        DB::table(MediaTables::Associations)
+            ->where('id', $checkpointAssociation->id)
+            ->delete();
+        DB::table(MediaTables::Media)
+            ->where('id', $checkpointMedia->id)
+            ->delete();
+
+        $key = Str::uuid()->toString();
+        $idempotency = app(MediaOwnerSlotIdempotency::class);
+        $claim = $idempotency->begin(
+            key: $key,
+            actor: $actorData,
+            owner: $destination,
+            slot: 'document',
+            operation: MediaOwnerSlotOperationType::Copy,
+            payload: ['source_media_id' => $source->id],
+        );
+        $idempotency->checkpoint(
+            $claim,
+            $checkpointMedia->id,
+            $checkpointResult->toArray(),
+        );
+        MediaOwnerSlotOperation::query()
+            ->whereKey($claim->operationId)
+            ->update(['updated_at' => now()->subHour()]);
+        useOwnerSlotAuthorization(static fn (): bool => true);
+        $restored = false;
+        $operationSaves = 0;
+
+        Event::listen(
+            $event,
+            static function (MediaOwnerSlotOperation $operation) use (
+                &$operationSaves,
+                &$restored,
+                $associationAttributes,
+                $mediaAttributes,
+            ): void {
+                $operationSaves++;
+
+                if ($restored || $operationSaves !== 2) {
+                    return;
+                }
+
+                $restored = true;
+                DB::table(MediaTables::Media)->insert($mediaAttributes);
+                DB::table(MediaTables::Associations)->insert($associationAttributes);
+            },
+        );
+
+        $result = app(CopyOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $destination,
+            'document',
+            $source->id,
+            $key,
+        );
+
+        expect($restored)->toBeTrue()
+            ->and($result->toArray())->toBe($checkpointResult->toArray())
+            ->and($destination->fresh()->getFirstMedia('document')?->id)
+            ->toBe($checkpointMedia->id)
+            ->and(Media::query()->count())->toBe(2);
+    } finally {
+        Event::forget($event);
+        releaseOwnerSlotLedger($connection, $ledgerPath);
+    }
 });
