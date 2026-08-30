@@ -296,7 +296,7 @@ it('registers bounded owner-slot pruning and protects production retention', fun
 it('reports a mutation store without atomic locks', function (): void {
     Cache::extend(
         'media-non-locking',
-        static fn (): Repository => new Repository(new NonLockingMediaDoctorStore),
+        fn (): Repository => new Repository(new NonLockingMediaDoctorStore),
     );
     config([
         'cache.stores.media-non-locking' => ['driver' => 'media-non-locking'],
@@ -379,7 +379,7 @@ it('reports unavailable owner models in observed owner-slot registrations', func
 it('falls back to the default mutation cache and fails closed for an unknown store', function (): void {
     Cache::extend(
         'media-default-non-locking',
-        static fn (): Repository => new Repository(new NonLockingMediaDoctorStore),
+        fn (): Repository => new Repository(new NonLockingMediaDoctorStore),
     );
     config([
         'cache.default' => 'media-default-non-locking',
