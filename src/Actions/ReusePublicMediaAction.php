@@ -7,7 +7,6 @@ namespace Nvl\Media\Actions;
 use Illuminate\Database\Eloquent\Model;
 use Nvl\Media\Contracts\HasMedia;
 use Nvl\Media\Contracts\ReusePublicMediaContract;
-use Nvl\Media\Exceptions\MediaNotReusableException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 
@@ -19,11 +18,16 @@ use Nvl\Media\Models\MediaAssociation;
  */
 final readonly class ReusePublicMediaAction implements ReusePublicMediaContract
 {
+    /**
+     * Create the serialized public media reuse action.
+     */
     public function __construct(
         private AttachMediaAction $attachMedia,
     ) {}
 
     /**
+     * Attach an asset only while its locked, persisted state permits public reuse.
+     *
      * @param  array<string, mixed>  $metadata
      */
     public function execute(
@@ -39,10 +43,6 @@ final readonly class ReusePublicMediaAction implements ReusePublicMediaContract
             ? Media::query()->findOrFail($media)
             : $media;
 
-        if (! $resolvedMedia->is_public) {
-            throw MediaNotReusableException::privateAsset($resolvedMedia->id);
-        }
-
         return $this->attachMedia->execute(
             media: $resolvedMedia,
             model: $model,
@@ -51,6 +51,7 @@ final readonly class ReusePublicMediaAction implements ReusePublicMediaContract
             order: $order,
             metadata: $metadata,
             dispatchVariations: $dispatchVariations,
+            requirePublic: true,
         );
     }
 }

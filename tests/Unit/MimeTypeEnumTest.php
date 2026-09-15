@@ -60,7 +60,9 @@ describe('MimeType Enum', function () {
 
         expect($raster)->toHaveCount(5)
             ->and($raster)->toContain(MimeType::Jpg, MimeType::Png, MimeType::Webp, MimeType::Avif, MimeType::Bmp)
-            ->and($raster)->not->toContain(MimeType::Svg, MimeType::Gif);
+            ->and($raster)
+            ->not->toContain(MimeType::Svg)
+            ->not->toContain(MimeType::Gif);
     });
 
     it('returns all video types from videos()', function () {

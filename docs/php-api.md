@@ -198,6 +198,16 @@ final readonly class ArticleMedia
 | `Media::abortMultipart($uploadId, $actor)` | `void` | Idempotently abort an unfinished session |
 | `Media::allows($actor, $ability, ?$media = null, ?$owner = null)` | `bool` | Evaluate the same authorization bridge used by policies and queries |
 
+Attachment and public reuse reload the persisted media row under the mutation
+lock and a database row lock. Availability is checked on that current row;
+public reuse also checks visibility in the same transaction as attachment.
+Previously loaded model instances supply identity, not authoritative lifecycle
+or visibility state. These integrity checks do not replace caller authorization.
+The concrete `AttachMediaAction::execute()` accepts an optional trailing
+`requirePublic: true` for the reuse workflow; `ReusePublicMediaAction` supplies
+it automatically. Existing attach calls and the `AttachMediaContract` signature
+are unchanged.
+
 `Media::delete($media, force: true)` is an intentional administrative global delete. Authorization does not bypass the shared-asset integrity guard automatically; the caller must both authorize the actor and opt into force.
 
 ### Filtering

@@ -4,6 +4,14 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Recheck attachment availability and public-reuse visibility on the current
+  database row inside the media mutation lock and association transaction.
+  Stale model instances can no longer bypass these guards or reject an asset
+  that has since become eligible. Existing calls remain compatible; the
+  concrete attachment action adds an optional public-visibility requirement.
+
 ## [2.0.0] - 2026-08-29
 
 ### Changed

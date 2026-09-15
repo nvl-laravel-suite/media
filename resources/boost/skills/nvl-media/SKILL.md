@@ -37,6 +37,11 @@ The supported 2.x production profile is PHP 8.3/8.4, Laravel 13, PostgreSQL, S3-
 - Keep private deduplication inside the configured uploader, tenant, or owner boundary.
 - Use the optional Spatie-compatible bridge for cross-owner administrators. Keep global role names explicit; prefer `media.manage` or granular `media.*-any` permissions. Privilege bypasses uploader ownership, not association integrity or quarantine.
 - Use `AttachMediaAction`, `DetachMediaAction`, or `ReusePublicMediaAction`; never write association rows directly.
+- Attachment and public reuse reload current persisted state under the media
+  mutation lock and a database row lock. Recheck availability and public reuse
+  visibility in the same transaction as attachment; an older model instance's
+  `status` or `is_public` is not authoritative. Caller authorization remains
+  required for user-driven operations.
 
 ## Upload and finalize
 

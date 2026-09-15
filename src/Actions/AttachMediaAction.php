@@ -10,6 +10,7 @@ use InvalidArgumentException;
 use Nvl\Media\Contracts\AttachMediaContract;
 use Nvl\Media\Contracts\HasMedia;
 use Nvl\Media\Events\MediaAttached;
+use Nvl\Media\Exceptions\MediaNotReusableException;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
@@ -34,6 +35,7 @@ final class AttachMediaAction implements AttachMediaContract
      *
      * @param  array<string, mixed>  $metadata  Optional pivot metadata
      * @param  bool  $dispatchVariations  Whether to trigger association-driven variation generation
+     * @param  bool  $requirePublic  Require public visibility inside the association transaction
      */
     public function execute(
         Media $media,
@@ -43,13 +45,8 @@ final class AttachMediaAction implements AttachMediaContract
         ?int $order = null,
         array $metadata = [],
         bool $dispatchVariations = true,
+        bool $requirePublic = false,
     ): MediaAssociation {
-        if (! $media->isAvailable()) {
-            throw new MediaUploadException(
-                "Media [{$media->id}] cannot be associated while its status is [{$media->status->value}].",
-            );
-        }
-
         $morph_type = $model->getMorphClass();
         $morph_id = $model->getKey();
 
@@ -57,9 +54,19 @@ final class AttachMediaAction implements AttachMediaContract
             throw new InvalidArgumentException('Cannot attach media to an unsaved model (model key is null).');
         }
 
-        $association = $this->mutationLock->execute($media->id, function () use ($media, $morph_type, $morph_id, $collection, $locale, $order, $metadata): MediaAssociation {
-            return DB::transaction(function () use ($media, $morph_type, $morph_id, $collection, $locale, $order, $metadata): MediaAssociation {
-                Media::query()->lockForUpdate()->findOrFail($media->id);
+        $association = $this->mutationLock->execute($media->id, function () use (&$media, $morph_type, $morph_id, $collection, $locale, $order, $metadata, $requirePublic): MediaAssociation {
+            return DB::transaction(function () use (&$media, $morph_type, $morph_id, $collection, $locale, $order, $metadata, $requirePublic): MediaAssociation {
+                $media = Media::query()->lockForUpdate()->findOrFail($media->id);
+
+                if ($requirePublic && ! $media->is_public) {
+                    throw MediaNotReusableException::privateAsset($media->id);
+                }
+
+                if (! $media->isAvailable()) {
+                    throw new MediaUploadException(
+                        "Media [{$media->id}] cannot be associated while its status is [{$media->status->value}].",
+                    );
+                }
 
                 return MediaAssociation::updateOrCreate(
                     [

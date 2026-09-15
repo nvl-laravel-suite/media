@@ -15,13 +15,19 @@ use Nvl\Media\Actions\AttachMediaAction;
 use Nvl\Media\Actions\DeleteMediaAction;
 use Nvl\Media\Actions\DetachMediaAction;
 use Nvl\Media\Actions\ReplaceMediaFileAction;
+use Nvl\Media\Actions\ReusePublicMediaAction;
+use Nvl\Media\Actions\UpdateMediaMetadataAction;
 use Nvl\Media\Actions\UploadMediaAction;
 use Nvl\Media\Contracts\MediaContentScanner;
+use Nvl\Media\Data\Mutations\UpdateMediaPayload;
 use Nvl\Media\Definitions\Tables\MediaTables;
+use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Enums\MediaType;
+use Nvl\Media\Events\MediaAttached;
 use Nvl\Media\Events\MediaUploadedEvent;
 use Nvl\Media\Exceptions\FileUnacceptableForCollection;
 use Nvl\Media\Exceptions\MediaInUseException;
+use Nvl\Media\Exceptions\MediaNotReusableException;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
@@ -29,6 +35,7 @@ use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Tests\Stubs\RestrictedMediaModel;
+use Nvl\Media\Tests\Stubs\TestMediaModel;
 
 function createMediaRecord(array $overrides = []): Media
 {
@@ -522,6 +529,30 @@ describe('UploadMediaAction', function () {
 
 describe('AttachMediaAction', function () {
 
+    it('rejects an attachment when persisted media is no longer available', function (): void {
+        $media = Media::factory()->create(['status' => MediaLifecycleStatus::Available]);
+        $owner = createTestUser();
+        $media->fresh()->forceFill(['status' => MediaLifecycleStatus::Quarantined])->save();
+        Event::fake([MediaAttached::class]);
+
+        expect(fn () => app(AttachMediaAction::class)->execute($media, $owner))
+            ->toThrow(MediaUploadException::class, 'quarantined');
+
+        expect(MediaAssociation::query()->where('media_id', $media->id)->exists())->toBeFalse();
+        Event::assertNotDispatched(MediaAttached::class);
+    });
+
+    it('accepts an attachment when persisted media has become available', function (): void {
+        $media = Media::factory()->create(['status' => MediaLifecycleStatus::PendingScan]);
+        $owner = createTestUser();
+        $media->fresh()->forceFill(['status' => MediaLifecycleStatus::Available])->save();
+
+        $association = app(AttachMediaAction::class)->execute($media, $owner);
+
+        expect($association->media_id)->toBe($media->id)
+            ->and($association->exists)->toBeTrue();
+    });
+
     it('creates an association between media and model', function () {
         $media = createMediaRecord();
         $user = createTestUser();
@@ -596,6 +627,39 @@ describe('AttachMediaAction', function () {
         );
 
         expect($association->metadata)->toBe(['role' => 'primary', 'display' => true]);
+    });
+});
+
+describe('ReusePublicMediaAction', function (): void {
+    it('rejects reuse after a previously loaded public asset becomes private', function (): void {
+        $media = Media::factory()->create(['is_public' => true]);
+        $owner = TestMediaModel::query()->create(['name' => 'Consumer']);
+        app(UpdateMediaMetadataAction::class)->execute(
+            $media,
+            UpdateMediaPayload::validateAndCreate(['isPublic' => false]),
+        );
+        Event::fake([MediaAttached::class]);
+
+        expect(fn () => app(ReusePublicMediaAction::class)->execute($media, $owner, dispatchVariations: false))
+            ->toThrow(MediaNotReusableException::class);
+
+        expect(MediaAssociation::query()->where('media_id', $media->id)->exists())->toBeFalse();
+        Event::assertNotDispatched(MediaAttached::class);
+    });
+
+    it('allows reuse after a previously loaded private asset becomes public', function (): void {
+        $media = Media::factory()->create(['is_public' => false]);
+        $owner = TestMediaModel::query()->create(['name' => 'Consumer']);
+        app(UpdateMediaMetadataAction::class)->execute(
+            $media,
+            UpdateMediaPayload::validateAndCreate(['isPublic' => true]),
+        );
+
+        $action = new ReusePublicMediaAction(app(AttachMediaAction::class));
+        $association = $action->execute($media, $owner, dispatchVariations: false);
+
+        expect($association->media_id)->toBe($media->id)
+            ->and($association->exists)->toBeTrue();
     });
 });
 
