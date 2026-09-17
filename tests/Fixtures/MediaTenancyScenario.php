@@ -6,6 +6,11 @@ namespace Nvl\Media\Tests\Fixtures;
 
 use Closure;
 use Illuminate\Contracts\Foundation\MaintenanceMode;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
+use Nvl\Media\Actions\UploadMediaAction;
+use Nvl\Media\Models\Media;
+use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Tests\Stubs\TestMediaModel;
 use Nvl\Tenancy\Services\TenantAdoptionCoordinator;
 use Nvl\Tenancy\Services\TenantBoundary;
@@ -40,6 +45,7 @@ final readonly class MediaTenancyScenario
         expect($coordinator->verify($plan)->passed())->toBeTrue();
         $coordinator->activate($plan, $operation);
         app(MaintenanceMode::class)->deactivate();
+        Storage::fake('tenant-disk');
 
         return new self;
     }
@@ -79,6 +85,37 @@ final readonly class MediaTenancyScenario
             $owner->save();
 
             return $owner->refresh();
+        });
+    }
+
+    /** Upload real bytes through Media's public writer under one tenant. */
+    public function upload(string $tenant, string $bytes, bool $public = true): Media
+    {
+        $owner = $this->owner($tenant);
+
+        return $this->run($tenant, function () use ($bytes, $owner, $public): Media {
+            $path = tempnam(sys_get_temp_dir(), 'nvl-media-');
+            if (! is_string($path) || file_put_contents($path, $bytes) === false) {
+                throw new \RuntimeException('Unable to create the Media upload fixture.');
+            }
+
+            try {
+                $file = new UploadedFile($path, 'sample.txt', 'text/plain', null, true);
+
+                return app(UploadMediaAction::class)->execute(
+                    file: $file,
+                    disk: 'tenant-disk',
+                    model: $owner,
+                    slot: new MediaSlot('default'),
+                    fileName: 'sample.txt',
+                    isPublic: $public,
+                    skipAutoVariations: true,
+                );
+            } finally {
+                if (is_file($path)) {
+                    unlink($path);
+                }
+            }
         });
     }
 }

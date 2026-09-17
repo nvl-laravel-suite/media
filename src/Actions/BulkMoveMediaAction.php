@@ -14,6 +14,7 @@ use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaFileOperator;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaPathResolver;
+use Nvl\Media\Services\MediaQueryService;
 use RuntimeException;
 use Throwable;
 
@@ -32,6 +33,7 @@ final class BulkMoveMediaAction
         private readonly MediaFileOperator $files,
         private readonly MediaMutationLock $mutationLock,
         private readonly MediaPathResolver $pathResolver,
+        private readonly MediaQueryService $queries,
     ) {}
 
     /**
@@ -45,8 +47,7 @@ final class BulkMoveMediaAction
     {
         $sanitizedFolder = $this->pathResolver->normalizeFolder($folder);
         $mediaIds = array_values(
-            Media::query()
-                ->whereIn('id', array_values(array_unique($ids)))
+            $this->queries->findMany($ids)
                 ->pluck('id')
                 ->filter(static fn (mixed $id): bool => is_string($id))
                 ->all(),

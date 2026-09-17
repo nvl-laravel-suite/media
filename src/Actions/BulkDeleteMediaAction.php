@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Actions;
 
 use Nvl\Media\Services\MediaMutationLock;
+use Nvl\Media\Services\MediaQueryService;
 
 /**
  * Deletes a set of media records through the single-record delete workflow.
@@ -17,6 +18,7 @@ final class BulkDeleteMediaAction
     public function __construct(
         private readonly DeleteMediaAction $deleteAction,
         private readonly MediaMutationLock $mutationLock,
+        private readonly MediaQueryService $queries,
     ) {}
 
     /**
@@ -28,6 +30,7 @@ final class BulkDeleteMediaAction
     public function execute(array $ids): int
     {
         $ids = array_values(array_unique($ids));
+        $this->queries->findMany($ids);
 
         return $this->mutationLock->executeMany($ids, function () use ($ids): int {
             $count = 0;

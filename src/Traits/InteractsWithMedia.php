@@ -20,7 +20,9 @@ use Nvl\Media\Relations\StringMorphMany;
 use Nvl\Media\Relations\StringMorphToMany;
 use Nvl\Media\Services\MediaLifecycleService;
 use Nvl\Media\Services\MediaModelInteractionService;
+use Nvl\Media\Services\MediaTenantOwnerResolver;
 use Nvl\Media\Slots\MediaSlot;
+use Nvl\Tenancy\Services\TenantBoundary;
 
 /** InteractsWithMedia: provides media attachment, retrieval, and lifecycle management for models. */
 trait InteractsWithMedia
@@ -293,6 +295,8 @@ trait InteractsWithMedia
      */
     public function getMedia(string $collection = 'default', array|callable $filters = []): Collection
     {
+        app(MediaTenantOwnerResolver::class)->resolve($this);
+
         // Use already-loaded relation when available to avoid N+1 queries.
         if ($this->relationLoaded('media')) {
             $media = $this->mediaCollectionFromRelation($this->getRelation('media'))
@@ -302,6 +306,10 @@ trait InteractsWithMedia
             $media = $this->mediaCollectionFromRelation($this->media()
                 ->wherePivot('collection', $collection)
                 ->get());
+        }
+
+        foreach ($media as $item) {
+            app(TenantBoundary::class)->assertRecord($item, 'media.assets');
         }
 
         if (empty($filters)) {
@@ -348,9 +356,10 @@ trait InteractsWithMedia
      */
     public function hasMedia(string $collection = 'default', array|callable $filters = []): bool
     {
+        app(MediaTenantOwnerResolver::class)->resolve($this);
+
         if (empty($filters) && $this->relationLoaded('media')) {
-            return $this->mediaCollectionFromRelation($this->getRelation('media'))
-                ->contains(static fn (Media $media): bool => self::mediaBelongsToCollection($media, $collection));
+            return $this->getMedia($collection)->isNotEmpty();
         }
 
         if (empty($filters)) {

@@ -26,10 +26,12 @@ use Nvl\Media\Services\MediaFileOperator;
 use Nvl\Media\Services\MediaIngestionPipeline;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaPathResolver;
+use Nvl\Media\Services\MediaTenantOwnerResolver;
 use Nvl\Media\Services\MediaVariationDefinitionNormalizer;
 use Nvl\Media\Services\MediaVariationDispatcher;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaHashGenerator;
+use Nvl\Tenancy\Services\TenantBoundary;
 use Throwable;
 
 /**
@@ -49,6 +51,8 @@ final class UploadMediaAction implements UploadMediaContract
         private readonly MediaDeduplicationLock $deduplicationLock,
         private readonly MediaMutationLock $mutationLock,
         private readonly MediaVariationDefinitionNormalizer $definitionNormalizer,
+        private readonly MediaTenantOwnerResolver $owners,
+        private readonly TenantBoundary $tenantBoundary,
     ) {}
 
     /**
@@ -84,6 +88,9 @@ final class UploadMediaAction implements UploadMediaContract
         ?string $uploadedByType = null,
         array $variationDefinitions = [],
     ): Media {
+        if (config('tenancy.enabled') === true) {
+            $model = $this->owners->resolve($model);
+        }
         $this->diskGuard->assertAllowed($disk);
         $this->disks->ensureDefined($disk);
         $validatedFile = $this->ingestion->inspect($file, [$slot], $fileName);
@@ -268,7 +275,12 @@ final class UploadMediaAction implements UploadMediaContract
                     'upload_new_object',
                 );
 
-                return Media::create([
+                $ownership = $this->tenantBoundary->attributes('media.assets');
+                $pathIdentity = config('tenancy.enabled') === true ? ['storage_path' => $stored_path] : [];
+
+                return Media::query()->forceCreate([
+                    ...$ownership,
+                    ...$pathIdentity,
                     'filename' => $fileName,
                     'hash' => $hash,
                     'extension' => $validatedFile->extension,

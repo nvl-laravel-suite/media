@@ -67,6 +67,7 @@ use Nvl\Media\Services\MediaResourceDataFactory;
 use Nvl\Media\Services\MediaScannerPolicy;
 use Nvl\Media\Services\MediaSourceResolver;
 use Nvl\Media\Services\MediaTemporaryFileRegistry;
+use Nvl\Media\Services\MediaTenantOwnerResolver;
 use Nvl\Media\Services\MediaTransactionRollbackRegistry;
 use Nvl\Media\Services\MediaUploadValidator;
 use Nvl\Media\Services\MediaUrlResolver;
@@ -201,6 +202,7 @@ final class MediaServiceProvider extends ServiceProvider
         $this->app->scoped(MediaOwnedSourceLifecycle::class);
         $this->app->scoped(MediaOwnerSlotIdempotency::class);
         $this->app->scoped(MediaTemporaryFileRegistry::class);
+        $this->app->scoped(MediaTenantOwnerResolver::class);
         $this->app->scoped(MediaPathResolver::class);
         $this->app->scoped(MediaUrlResolver::class);
         $this->app->scoped(MediaImageTransformer::class);

@@ -7,6 +7,7 @@ namespace Nvl\Media\Actions;
 use Illuminate\Support\Facades\DB;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaMutationLock;
+use Nvl\Media\Services\MediaQueryService;
 
 /**
  * Adds tags to a set of media records in one transaction.
@@ -15,6 +16,7 @@ final class BulkTagMediaAction
 {
     public function __construct(
         private readonly MediaMutationLock $mutationLock,
+        private readonly MediaQueryService $queries,
     ) {}
 
     /**
@@ -31,6 +33,7 @@ final class BulkTagMediaAction
         if ($ids === []) {
             return 0;
         }
+        $this->queries->findMany($ids);
 
         return $this->mutationLock->executeMany($ids, function () use ($ids, $tags): int {
             return DB::transaction(function () use ($ids, $tags): int {

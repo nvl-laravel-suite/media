@@ -11,6 +11,7 @@ use Nvl\Media\Events\MediaDetached;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Services\MediaMutationLock;
+use Nvl\Media\Services\MediaTenantOwnerResolver;
 use Nvl\Media\Support\MediaAssociationSnapshot;
 
 /**
@@ -18,7 +19,10 @@ use Nvl\Media\Support\MediaAssociationSnapshot;
  */
 final readonly class DetachMediaAction implements DetachMediaContract
 {
-    public function __construct(private MediaMutationLock $mutationLock) {}
+    public function __construct(
+        private MediaMutationLock $mutationLock,
+        private MediaTenantOwnerResolver $owners,
+    ) {}
 
     /**
      * Delete association record(s) for the given media and model, optionally scoped to a collection.
@@ -32,6 +36,7 @@ final readonly class DetachMediaAction implements DetachMediaContract
         Model $model,
         ?string $collection = null,
     ): int {
+        $model = $this->owners->resolve($model);
         $mediaId = $media instanceof Media ? $media->id : $media;
 
         /** @var array{0: int, 1: array<int, array{media_id: string, associable_type: string, associable_id: string, collection: string, locale: string|null}>} $result */

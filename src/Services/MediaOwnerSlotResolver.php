@@ -17,11 +17,14 @@ use Nvl\Media\Slots\MediaSlot;
  */
 final readonly class MediaOwnerSlotResolver
 {
+    public function __construct(private MediaTenantOwnerResolver $owners) {}
+
     /**
      * Resolve and validate a package-owned single-file slot.
      */
     public function slot(Model&HasMedia $owner, string $slot): MediaSlot
     {
+        $owner = $this->canonical($owner);
         $this->ownerIdentity($owner);
 
         $slot = trim($slot);
@@ -56,6 +59,7 @@ final readonly class MediaOwnerSlotResolver
      */
     public function ownerIdentity(Model&HasMedia $owner): array
     {
+        $owner = $this->canonical($owner);
         $ownerId = $owner->getKey();
 
         if (! $owner->exists || (! is_int($ownerId) && ! is_string($ownerId))) {
@@ -88,6 +92,7 @@ final readonly class MediaOwnerSlotResolver
         string $slot,
         bool $lockForUpdate = false,
     ): Collection {
+        $owner = $this->canonical($owner, $lockForUpdate);
         $identity = $this->ownerIdentity($owner);
         $query = MediaAssociation::query()
             ->where('associable_type', $identity['type'])
@@ -119,5 +124,16 @@ final readonly class MediaOwnerSlotResolver
         }
 
         return $associations->first();
+    }
+
+    /** Return an ownership-verified Media-capable owner. */
+    private function canonical(Model&HasMedia $owner, bool $lock = false): Model&HasMedia
+    {
+        $canonical = $this->owners->resolve($owner, $lock);
+        if (! $canonical instanceof HasMedia) {
+            throw new InvalidArgumentException('A Media-capable owner is required.');
+        }
+
+        return $canonical;
     }
 }

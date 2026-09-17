@@ -13,6 +13,8 @@ use Nvl\Media\Contracts\HasMedia;
 /** MediaAssociableResolver validates and loads Media-capable associable models for API mutations. */
 final class MediaAssociableResolver
 {
+    public function __construct(private readonly MediaTenantOwnerResolver $owners) {}
+
     /**
      * Resolve and authorize a Media-capable associable model for a mutation endpoint.
      *
@@ -24,7 +26,9 @@ final class MediaAssociableResolver
         $modelClass = $this->resolveModelClass($type);
         $model = $modelClass::findOrFail($id);
 
-        $associable = $this->requireMediaAssociable($model);
+        $associable = $this->requireMediaAssociable(
+            $this->owners->resolve($this->requireMediaAssociable($model)),
+        );
         $this->authorizeMutation($associable);
 
         return $associable;

@@ -20,6 +20,7 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
 use Spatie\LaravelData\Optional;
 
 /** MediaQueryService: read-only queries for media listing, detail, and usage lookups. */
@@ -218,7 +219,13 @@ final class MediaQueryService
      */
     public function findMany(array $ids): EloquentCollection
     {
-        return Media::query()->whereIn('id', $ids)->get();
+        $ids = array_values(array_unique($ids));
+        $media = Media::query()->whereIn('id', $ids)->get();
+        if ($media->count() !== count($ids)) {
+            throw new TenantBoundaryViolation('One or more Media identifiers are unavailable in the active tenant.');
+        }
+
+        return $media;
     }
 
     /**

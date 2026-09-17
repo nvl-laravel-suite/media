@@ -15,7 +15,9 @@ use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Services\MediaMutationLock;
+use Nvl\Media\Services\MediaTenantOwnerResolver;
 use Nvl\Media\Services\MediaVariationDispatcher;
+use Nvl\Tenancy\Services\TenantBoundary;
 
 /**
  * Attaches a media record to a model via a polymorphic pivot with deduplication.
@@ -25,6 +27,8 @@ final class AttachMediaAction implements AttachMediaContract
     public function __construct(
         private readonly MediaVariationDispatcher $variationDispatcher,
         private readonly MediaMutationLock $mutationLock,
+        private readonly MediaTenantOwnerResolver $owners,
+        private readonly TenantBoundary $tenantBoundary,
     ) {}
 
     /**
@@ -47,6 +51,8 @@ final class AttachMediaAction implements AttachMediaContract
         bool $dispatchVariations = true,
         bool $requirePublic = false,
     ): MediaAssociation {
+        $this->tenantBoundary->assertRecord($media, 'media.assets');
+        $model = $this->owners->resolve($model);
         $morph_type = $model->getMorphClass();
         $morph_id = $model->getKey();
 
@@ -68,19 +74,26 @@ final class AttachMediaAction implements AttachMediaContract
                     );
                 }
 
-                return MediaAssociation::updateOrCreate(
-                    [
-                        'media_id' => $media->id,
-                        'associable_type' => $morph_type,
-                        'associable_id' => $morph_id,
-                        'collection' => $collection,
-                    ],
-                    [
-                        'locale' => $locale,
-                        'order' => $order ?? 0,
-                        'metadata' => ! empty($metadata) ? $metadata : null,
-                    ],
-                );
+                $association = MediaAssociation::query()->firstOrNew([
+                    'media_id' => $media->id,
+                    'associable_type' => $morph_type,
+                    'associable_id' => $morph_id,
+                    'collection' => $collection,
+                ]);
+                $association->fill([
+                    'locale' => $locale,
+                    'order' => $order ?? 0,
+                    'metadata' => ! empty($metadata) ? $metadata : null,
+                ]);
+                if (config('tenancy.enabled') === true) {
+                    $association->forceFill([
+                        'tenant_id' => $media->tenant_id,
+                        'ownership_key' => $media->ownership_key,
+                    ]);
+                }
+                $association->save();
+
+                return $association;
             });
         });
 

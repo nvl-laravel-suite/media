@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Route;
 use Nvl\Media\Http\Controllers\MediaAssetController;
+use Nvl\Tenancy\Http\Middleware\ResolvePublicTenant;
 
 /** @var array<int, string> $publicAssetMiddlewares */
 $publicAssetMiddlewares = array_values(array_filter(
@@ -19,13 +20,14 @@ $privateAssetMiddlewares = array_values(array_filter(
 ));
 
 $prefix = trim((string) config('media.routes.assets_prefix', 'media'), '/');
+$tenantMiddleware = config('tenancy.enabled') === true ? [ResolvePublicTenant::class] : [];
 
-Route::prefix($prefix)->name('media.')->group(function () use ($publicAssetMiddlewares, $privateAssetMiddlewares): void {
+Route::prefix($prefix)->name('media.')->group(function () use ($publicAssetMiddlewares, $privateAssetMiddlewares, $tenantMiddleware): void {
     Route::get('/assets/{media}', [MediaAssetController::class, 'showPublic'])
-        ->middleware(array_merge($publicAssetMiddlewares, [SubstituteBindings::class]))
+        ->middleware(array_merge($tenantMiddleware, $publicAssetMiddlewares, [SubstituteBindings::class]))
         ->name('assets.show');
 
     Route::get('/private/{owner}/{media}', [MediaAssetController::class, 'showPrivate'])
-        ->middleware(array_merge($privateAssetMiddlewares, ['signed', SubstituteBindings::class]))
+        ->middleware(array_merge($tenantMiddleware, $privateAssetMiddlewares, ['signed', SubstituteBindings::class]))
         ->name('private.show');
 });

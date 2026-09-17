@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Nvl\Media\Definitions\Tables\MediaTables;
+use Nvl\Media\Models\Concerns\AppliesTenantBoundary;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
 
 /**
@@ -33,10 +34,16 @@ use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
  */
 class MediaAssociation extends Model
 {
+    use AppliesTenantBoundary;
     use GuardsTenantOwnership;
     use HasUuids;
 
     public const string TABLE = MediaTables::Associations;
+
+    protected static function tenantResourceKey(): string
+    {
+        return 'media.associations';
+    }
 
     protected $table = self::TABLE;
 
