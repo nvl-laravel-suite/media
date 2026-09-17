@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Jobs\GenerateImageVariationJob;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Tests\Fixtures\MediaTenancyScenario;
@@ -67,10 +68,12 @@ it('regenerates only inside the requested tenant boundary', function (): void {
     $scenario = MediaTenancyScenario::install();
     $scenario->run($scenario::A, fn (): Media => Media::factory()->create([
         ...app(TenantBoundary::class)->attributes('media.assets'),
+        'type' => MediaType::IMAGE,
         'storage_path' => 'media/tenants/'.$scenario::A.'/fixture/a.jpg',
     ]));
     $scenario->run($scenario::B, fn (): Media => Media::factory()->create([
         ...app(TenantBoundary::class)->attributes('media.assets'),
+        'type' => MediaType::IMAGE,
         'storage_path' => 'media/tenants/'.$scenario::B.'/fixture/b.jpg',
     ]));
 
