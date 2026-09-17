@@ -90,3 +90,6 @@ All notable changes to `nvl/media` are documented here.
 - Added proxied and multipart uploads, checksums, scanning, quarantine, lifecycle states, and idempotent finalization.
 - Added authorized GET/HEAD/range delivery, asynchronous variations, localized metadata, and reconciliation.
 - Removed consumer-specific contracts, legacy APIs, concrete user assumptions, and internal-path exposure.
+
+<!-- tenancy-program-p2 -->
+Configurable-tenancy implementation and adoption documentation are present. The final consolidated verification matrix is pending; do not treat this package as release-ready until that gate passes.
