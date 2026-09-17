@@ -26,6 +26,7 @@ use Nvl\Media\Contracts\AttachMediaContract;
 use Nvl\Media\Contracts\DeleteMediaContract;
 use Nvl\Media\Contracts\DetachMediaContract;
 use Nvl\Media\Contracts\MediaAuthorization;
+use Nvl\Media\Contracts\MediaCatalogImport;
 use Nvl\Media\Contracts\MediaContentScanner;
 use Nvl\Media\Contracts\MediaHostResolver;
 use Nvl\Media\Contracts\MediaLibraryContract;
@@ -40,6 +41,8 @@ use Nvl\Media\Services\DefaultMediaAuthorization;
 use Nvl\Media\Services\ImageOptimizationService;
 use Nvl\Media\Services\MediaAccessService;
 use Nvl\Media\Services\MediaAssetService;
+use Nvl\Media\Services\MediaCatalogImporter;
+use Nvl\Media\Services\MediaCatalogReader;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDoctor;
 use Nvl\Media\Services\MediaFileEffectScheduler;
@@ -188,6 +191,8 @@ final class MediaServiceProvider extends ServiceProvider
     protected function registerScopedServices(): void
     {
         $this->app->scoped(MediaAccessService::class);
+        $this->app->scoped(MediaCatalogReader::class);
+        $this->app->scoped(MediaCatalogImporter::class);
         $this->app->scoped(MediaDiskGateway::class);
         $this->app->scoped(MediaDoctor::class);
         $this->app->scoped(MediaFileEffectScheduler::class);
@@ -231,6 +236,7 @@ final class MediaServiceProvider extends ServiceProvider
             ),
         );
         $this->app->bind(MediaAuthorization::class, DefaultMediaAuthorization::class);
+        $this->app->scoped(MediaCatalogImport::class, MediaCatalogImporter::class);
         $this->app->bind(MediaHostResolver::class, SystemMediaHostResolver::class);
         $this->app->bind(
             MediaSearchDriver::class,

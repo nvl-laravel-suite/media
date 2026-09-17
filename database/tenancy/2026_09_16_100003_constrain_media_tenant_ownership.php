@@ -26,6 +26,9 @@ return new class extends Migration
             $this->ownershipCheck(DB::connection(), MediaTables::Media);
         }
         $this->unique($schema, MediaTables::Media, [$mixed ? 'ownership_key' : 'tenant_id', 'id'], 'media_partition_id_unique');
+        if ($mixed || $platform) {
+            $this->unique($schema, MediaTables::Media, ['tenant_id', 'id'], 'media_tenant_id_unique');
+        }
         $this->unique($schema, MediaTables::Media, ['tenant_id', 'catalog_import_key'], 'media_tenant_catalog_import_unique');
         $this->index($schema, MediaTables::Media, ['tenant_id', 'digest', 'disk', 'visibility'], 'media_tenant_digest_disk_visibility_idx');
         $this->index($schema, MediaTables::Media, ['tenant_id', 'status', 'created_at'], 'media_tenant_status_created_idx');
