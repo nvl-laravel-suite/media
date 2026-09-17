@@ -22,7 +22,6 @@ use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Enums\MediaVisibility;
-use Nvl\Media\Models\Concerns\AppliesTenantBoundary;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Support\MediaAssetUrl;
@@ -78,7 +77,6 @@ use Nvl\Translatable\Translatable;
  */
 class Media extends Model implements TranslatableModel
 {
-    use AppliesTenantBoundary;
     use GuardsTenantOwnership;
 
     /** @use HasFactory<MediaFactory> */
@@ -90,11 +88,6 @@ class Media extends Model implements TranslatableModel
     use Translatable;
 
     public const string TABLE = MediaTables::Media;
-
-    protected static function tenantResourceKey(): string
-    {
-        return 'media.assets';
-    }
 
     protected $table = self::TABLE;
 
@@ -549,7 +542,11 @@ class Media extends Model implements TranslatableModel
      */
     public function buildPath(): string
     {
-        return app(MediaPathResolver::class)->mediaPath($this);
+        if (is_string($this->storage_path) && $this->storage_path !== '') {
+            return $this->storage_path;
+        }
+
+        return implode('/', array_filter([self::rootFolder(), $this->folder, $this->hash]));
     }
 
     /**

@@ -17,7 +17,7 @@ use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
 use Nvl\Media\Support\MediaQueueConfiguration;
-use Nvl\Tenancy\Contracts\TenantContext;
+use Nvl\Media\Support\MediaQueueEnvelope;
 use Nvl\Tenancy\Contracts\TenantQueuedJob;
 use Nvl\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
@@ -62,7 +62,7 @@ final class RegenerateMediaVariationsJob implements ShouldQueue, TenantQueuedJob
         private readonly int $chunkSize = 500,
         ?TenantJobEnvelope $envelope = null,
     ) {
-        $this->envelope = $envelope ?? TenantJobEnvelope::capture(app(TenantContext::class));
+        $this->envelope = MediaQueueEnvelope::fallback($envelope);
         $this->tries = MediaQueueConfiguration::jobInteger('regenerate', 'tries', 1);
         $this->timeout = MediaQueueConfiguration::jobInteger('regenerate', 'timeout', 60);
         $this->onQueue(MediaQueueConfiguration::name());

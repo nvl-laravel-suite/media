@@ -38,11 +38,11 @@ final readonly class TenancyOwnerAdoptionAdapter implements TenantAdoptionAdapte
         }
     }
 
-    /** Require an empty owner table before fixture adoption. */
+    /** Require every existing fixture owner to retain its reviewed tenant identity. */
     public function backfill(TenantAdoptionPlan $plan, ?string $cursor, int $limit): TenantBackfillResult
     {
-        if ($this->connection()->table((new TestMediaModel)->getTable())->exists()) {
-            throw new RuntimeException('Media owner fixture adoption requires an empty table.');
+        if ($this->connection()->table((new TestMediaModel)->getTable())->whereNull('tenant_id')->exists()) {
+            throw new RuntimeException('Media owner fixture adoption found an unmapped owner.');
         }
 
         return new TenantBackfillResult(null, 0);

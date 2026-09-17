@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Log;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
 use Nvl\Media\Support\MediaQueueConfiguration;
-use Nvl\Tenancy\Contracts\TenantContext;
+use Nvl\Media\Support\MediaQueueEnvelope;
 use Nvl\Tenancy\Contracts\TenantQueuedJob;
 use Nvl\Tenancy\Enums\TenantContextMode;
 use Nvl\Tenancy\ValueObjects\TenantJobEnvelope;
@@ -41,7 +41,7 @@ final class ProcessMediaVariationsJob implements ShouldBeUnique, ShouldQueue, Te
         private readonly bool $includeOutputConversion = true,
         ?TenantJobEnvelope $envelope = null,
     ) {
-        $this->envelope = $envelope ?? TenantJobEnvelope::capture(app(TenantContext::class));
+        $this->envelope = MediaQueueEnvelope::fallback($envelope);
         $this->tries = MediaQueueConfiguration::jobInteger('dispatch', 'tries', 3);
         $this->timeout = MediaQueueConfiguration::jobInteger('dispatch', 'timeout', 60);
         $this->uniqueFor = MediaQueueConfiguration::jobInteger('dispatch', 'unique_for', 1800);

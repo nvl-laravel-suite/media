@@ -15,7 +15,7 @@ use Nvl\Media\Actions\GenerateImageVariationAction;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Support\MediaQueueConfiguration;
-use Nvl\Tenancy\Contracts\TenantContext;
+use Nvl\Media\Support\MediaQueueEnvelope;
 use Nvl\Tenancy\Contracts\TenantQueuedJob;
 use Nvl\Tenancy\Enums\TenantContextMode;
 use Nvl\Tenancy\ValueObjects\TenantJobEnvelope;
@@ -49,7 +49,7 @@ final class GenerateImageVariationJob implements ShouldBeUnique, ShouldQueue, Te
         private readonly int $sourceRevision = 1,
         ?TenantJobEnvelope $envelope = null,
     ) {
-        $this->envelope = $envelope ?? TenantJobEnvelope::capture(app(TenantContext::class));
+        $this->envelope = MediaQueueEnvelope::fallback($envelope);
         $this->definition = $presetConfig instanceof ConversionDefinition
             ? $presetConfig
             : ConversionDefinition::fromPreset($presetName, $presetConfig);

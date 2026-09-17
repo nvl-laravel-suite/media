@@ -176,11 +176,11 @@ final class MediaTenancyConsumerSetupCommand extends Command
         } catch (TenantBoundaryViolation) {
         }
 
-        $this->dispatch($runner, MediaTenancyScenario::A, $a, 'proof', $queue);
-        $this->dispatch($runner, MediaTenancyScenario::B, $b, 'proof', $queue);
-        $this->dispatch($runner, MediaTenancyScenario::A, $a, 'stale', $queue, $a->revision + 1);
-        $this->dispatch($runner, MediaTenancyScenario::A, $failing, 'failure', $queue);
-        $this->dispatch($runner, MediaTenancyScenario::A, $a, 'corrupt-before-read', $queue);
+        $this->dispatch($runner, $context, MediaTenancyScenario::A, $a, 'proof', $queue);
+        $this->dispatch($runner, $context, MediaTenancyScenario::B, $b, 'proof', $queue);
+        $this->dispatch($runner, $context, MediaTenancyScenario::A, $a, 'stale', $queue, $a->revision + 1);
+        $this->dispatch($runner, $context, MediaTenancyScenario::A, $failing, 'failure', $queue);
+        $this->dispatch($runner, $context, MediaTenancyScenario::A, $a, 'corrupt-before-read', $queue);
 
         $connection = DB::connection();
         $job = $connection->table('jobs')->where('queue', $queue)->orderByDesc('id')->first();
@@ -200,18 +200,20 @@ final class MediaTenancyConsumerSetupCommand extends Command
     /** Dispatch one scalar variation job from an admitted producer tenant. */
     private function dispatch(
         TenantRunner $runner,
+        TenantContext $context,
         string $tenant,
         Media $media,
         string $label,
         string $queue,
         ?int $revision = null,
     ): void {
-        $runner->run(new TenantId($tenant), static function () use ($media, $label, $queue, $revision): void {
+        $runner->run(new TenantId($tenant), static function () use ($media, $label, $queue, $revision, $context): void {
             Bus::dispatch((new GenerateImageVariationJob(
                 $media->id,
                 $label,
                 ['width' => 1, 'height' => 1, 'format' => 'png', 'quality' => 80],
                 $revision ?? $media->revision,
+                TenantJobEnvelope::capture($context),
             ))->onConnection('database')->onQueue($queue));
         });
     }

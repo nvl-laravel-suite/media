@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 use Nvl\Media\Definitions\Tables\MediaTables;
-use Nvl\Media\Models\Concerns\AppliesTenantBoundary;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
 
 /**
@@ -28,16 +27,10 @@ use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
  */
 final class MediaTenantGrant extends Model
 {
-    use AppliesTenantBoundary;
     use GuardsTenantOwnership;
     use HasUuids;
 
     public const string TABLE = MediaTables::TenantGrants;
-
-    protected static function tenantResourceKey(): string
-    {
-        return 'media.catalog-grants';
-    }
 
     protected $table = self::TABLE;
 

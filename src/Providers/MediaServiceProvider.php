@@ -6,6 +6,7 @@ namespace Nvl\Media\Providers;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -36,6 +37,11 @@ use Nvl\Media\Contracts\ReusePublicMediaContract;
 use Nvl\Media\Contracts\UploadMediaContract;
 use Nvl\Media\MediaLibrary;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Models\MediaAssociation;
+use Nvl\Media\Models\MediaImageVariation;
+use Nvl\Media\Models\MediaMultipartUpload;
+use Nvl\Media\Models\MediaTenantGrant;
+use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Policies\MediaPolicy;
 use Nvl\Media\Services\DefaultMediaAuthorization;
 use Nvl\Media\Services\ImageOptimizationService;
@@ -85,6 +91,7 @@ use Nvl\Media\Tenancy\MediaAdoptionAdapter;
 use Nvl\Media\Tenancy\MediaTenancyResources;
 use Nvl\Support\Traits\MergesPackageConfiguration;
 use Nvl\Tenancy\Services\TenantAdoptionRegistry;
+use Nvl\Tenancy\Services\TenantBoundary;
 use Nvl\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Translatable\Services\TranslationResourceRegistry;
 
@@ -106,6 +113,7 @@ final class MediaServiceProvider extends ServiceProvider
         MediaTenancyResources $tenancyResources,
         TenantResourceRegistry $tenantResourceRegistry,
         TenantAdoptionRegistry $tenantAdoptions,
+        TenantBoundary $tenantBoundary,
     ): void {
         $events->listen(
             TransactionRolledBack::class,
@@ -114,6 +122,7 @@ final class MediaServiceProvider extends ServiceProvider
         $typeScriptSources->register(__DIR__.'/..', 'nvl/media');
         $tenancyResources->register($tenantResourceRegistry);
         $tenantAdoptions->register('media', MediaAdoptionAdapter::class);
+        $this->registerTenantScopes($tenantBoundary);
 
         $this->registerPolicies();
         $this->registerTranslations();
@@ -183,6 +192,29 @@ final class MediaServiceProvider extends ServiceProvider
                 $consumerMetadataKeys,
             );
         }
+    }
+
+    /** Register ownership scopes from the provider's injected boundary. */
+    private function registerTenantScopes(TenantBoundary $boundary): void
+    {
+        Media::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
+            $boundary->query($query, 'media.assets');
+        });
+        MediaAssociation::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
+            $boundary->query($query, 'media.associations');
+        });
+        MediaImageVariation::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
+            $boundary->query($query, 'media.variations');
+        });
+        MediaTranslation::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
+            $boundary->query($query, 'media.translations');
+        });
+        MediaMultipartUpload::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
+            $boundary->query($query, 'media.multipart');
+        });
+        MediaTenantGrant::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
+            $boundary->query($query, 'media.catalog-grants');
+        });
     }
 
     /**

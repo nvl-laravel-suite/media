@@ -12,8 +12,13 @@ use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Str;
 use Nvl\Media\Definitions\Tables\MediaTables;
+use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaOwnerSlotOperation;
+use Nvl\Media\Services\MediaDiskGateway;
+use Nvl\Media\Services\MediaFileExistence;
+use Nvl\Media\Services\MediaFileOperator;
+use Nvl\Media\Support\MediaVariationFileNamer;
 use Nvl\Tenancy\Contracts\TenantAdoptionAdapter;
 use Nvl\Tenancy\Contracts\TenantAdoptionMetadataValidator;
 use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
@@ -45,6 +50,9 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
         private TenantAdoptionMappings $mappings,
         private EffectiveTenantConnection $connections,
         private Repository $configuration,
+        private MediaDiskGateway $disks,
+        private MediaFileExistence $existence,
+        private MediaFileOperator $files,
     ) {}
 
     /** Validate the exact optional Media mapping metadata. */
@@ -79,7 +87,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
         $tenants = [];
         $destinations = [];
         foreach ($splits as $split) {
-            if (! is_array($split) || array_keys($split) !== ['tenant_id', 'destination_id']
+            if (! is_array($split) || array_diff(array_keys($split), ['tenant_id', 'destination_id']) !== [] || count($split) !== 2
                 || ! is_string($split['tenant_id']) || ! Str::isUuid($split['tenant_id'])
                 || ! is_string($split['destination_id']) || ! Str::isUuid($split['destination_id'])
                 || isset($tenants[$split['tenant_id']]) || isset($destinations[$split['destination_id']])) {
@@ -115,11 +123,9 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
         if ($phase === 'assets') {
             $batch = $this->mappings->assignments($plan, 'media.assets', $after, $limit);
             if ($batch !== []) {
-                $this->connection($plan)->transaction(function () use ($batch, $plan): void {
-                    foreach ($batch as $assignment) {
-                        $this->backfillAsset($plan, $assignment);
-                    }
-                });
+                foreach ($batch as $assignment) {
+                    $this->backfillAsset($plan, $assignment);
+                }
                 $last = $batch[array_key_last($batch)];
 
                 return new TenantBackfillResult('assets:'.$last->recordId, count($batch));
@@ -177,6 +183,10 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
         if ($schema->hasTable((new MediaOwnerSlotOperation)->getTable()) && $connection->table((new MediaOwnerSlotOperation)->getTable())->whereNull('tenant_id')->exists()) {
             $errors[] = 'media.slot-operations.unmapped';
         }
+        if ($schema->hasTable(MediaTables::TenantAdoptionCopies)
+            && $connection->table(MediaTables::TenantAdoptionCopies)->where('adoption_run_id', $plan->id)->where('status', '!=', 'committed')->exists()) {
+            $errors[] = 'media.assets.copy_incomplete';
+        }
 
         return new TenantVerification(array_slice(array_values(array_unique($errors)), 0, 100));
     }
@@ -208,29 +218,370 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
     private function backfillAsset(TenantAdoptionPlan $plan, TenantAssignment $assignment): void
     {
         $connection = $this->connection($plan);
-        $row = $connection->table(MediaTables::Media)->where('id', $assignment->recordId)->lockForUpdate()->first();
-        if (! $row instanceof stdClass || ! is_string($row->digest) || ! is_string($row->hash) || ! is_string($row->disk)) {
+        $row = $connection->table(MediaTables::Media)->where('id', $assignment->recordId)->first();
+        if (! $row instanceof stdClass) {
             throw new TenantBoundaryViolation('A reviewed Media asset is unavailable.');
         }
+        $source = $this->sourceFacts($row);
         $expected = $assignment->metadata['expected_digest'] ?? null;
-        if (is_string($expected) && ! hash_equals($expected, $row->digest)) {
+        if (is_string($expected) && ! hash_equals($expected, $source['digest'])) {
             throw new TenantBoundaryViolation('A reviewed Media digest changed.');
         }
-        if (($assignment->metadata['splits'] ?? []) !== []) {
-            throw new TenantBoundaryViolation('Media split copies require explicit verified owner graph preparation.');
+        $committed = $connection->table(MediaTables::TenantAdoptionCopies)
+            ->where('adoption_run_id', $plan->id)
+            ->where('source_id', $assignment->recordId)
+            ->where('status', 'committed')
+            ->count();
+        $destinations = $this->destinations($assignment);
+        if ($committed === count($destinations)) {
+            return;
         }
-        $folder = is_string($row->folder) ? trim($row->folder, '/') : '';
-        $configuredRoot = $this->configuration->get('media.root_folder', 'media');
-        if (! is_string($configuredRoot)) {
+
+        $sourcePath = $this->legacyPath($source);
+        if (! $this->verifiedObject($source['disk'], $sourcePath, $source['digest'], $source['size'])) {
+            throw new TenantBoundaryViolation('A reviewed Media source binary is unavailable or changed.');
+        }
+
+        $associations = $connection->table(MediaTables::Associations)->where('media_id', $assignment->recordId)->get();
+        $associationTenants = [];
+        $associationDestinations = [];
+        foreach ($associations as $association) {
+            if (! is_string($association->id)) {
+                throw new TenantBoundaryViolation('A reviewed Media association identity is invalid.');
+            }
+            $tenant = $this->associationTenant($association);
+            $associationTenants[$tenant] = true;
+            $associationDestinations[$association->id] = $tenant;
+        }
+        ksort($associationTenants);
+        if ($associations->isNotEmpty()
+            && array_keys($associationTenants) !== array_keys($destinations)) {
+            throw new TenantBoundaryViolation('Media split metadata does not match the complete reviewed owner graph.');
+        }
+
+        $variations = $connection->table(MediaTables::ImageVariations)->where('media_id', $assignment->recordId)->get();
+        $prepared = [];
+        foreach ($destinations as $tenant => $destinationId) {
+            $targetPath = $this->tenantPath($tenant, $source['folder'], $source['hash']);
+            $this->recordCopy($plan, $source, $tenant, $destinationId, $targetPath);
+            $this->copyVerified($source['disk'], $sourcePath, $targetPath, $source['digest'], $source['size']);
+            $variationPaths = [];
+            foreach ($variations as $variation) {
+                $variationFacts = $this->variationFacts($variation);
+                $sourceVariation = $this->legacyVariationPath($source, $variationFacts, $sourcePath);
+                $targetVariation = dirname($targetPath).'/'.$this->conversionsFolder().'/'.basename($sourceVariation);
+                $this->copyVerified(
+                    $source['disk'],
+                    $sourceVariation,
+                    $targetVariation,
+                    $this->disks->checksum($source['disk'], $sourceVariation),
+                    $variationFacts['size'],
+                );
+                $variationPaths[$variationFacts['id']] = $targetVariation;
+            }
+            $connection->table(MediaTables::TenantAdoptionCopies)
+                ->where('adoption_run_id', $plan->id)
+                ->where('source_id', $assignment->recordId)
+                ->where('tenant_id', $tenant)
+                ->update(['status' => 'verified', 'checksum_verified_at' => now(), 'updated_at' => now()]);
+            $prepared[$tenant] = ['id' => $destinationId, 'path' => $targetPath, 'variations' => $variationPaths];
+        }
+
+        $this->persistSplitGraph($plan, $assignment, $source, $destinations, $prepared, $associationDestinations, array_values($variations->all()));
+    }
+
+    /** @return array<string, string> */
+    private function destinations(TenantAssignment $assignment): array
+    {
+        $destinations = [$assignment->tenantId->value => $assignment->recordId];
+        $splits = $assignment->metadata['splits'] ?? [];
+        if (! is_array($splits)) {
+            throw new TenantConfigurationInvalid('Media split metadata is invalid.');
+        }
+        foreach ($splits as $split) {
+            if (! is_array($split) || ! is_string($split['tenant_id'] ?? null) || ! is_string($split['destination_id'] ?? null)) {
+                throw new TenantConfigurationInvalid('Media split metadata is invalid.');
+            }
+            $destinations[$split['tenant_id']] = $split['destination_id'];
+        }
+        ksort($destinations);
+
+        return $destinations;
+    }
+
+    /** @param array{id: string, digest: string, hash: string, disk: string, folder: string, size: int, storage_path: string|null} $source */
+    private function legacyPath(array $source): string
+    {
+        if ($source['storage_path'] !== null && $source['storage_path'] !== '') {
+            return $source['storage_path'];
+        }
+
+        return $this->legacyFolder($source['folder']).'/'.$source['hash'];
+    }
+
+    private function legacyFolder(string $folder): string
+    {
+        $root = $this->configuration->get('media.root_folder', 'media');
+        if (! is_string($root)) {
             throw new TenantConfigurationInvalid('media.root_folder must be a string.');
         }
-        $root = trim($configuredRoot, '/');
-        $path = implode('/', array_filter([$root, $folder, $row->hash], static fn (string $part): bool => $part !== ''));
-        $attributes = $this->ownership($assignment->tenantId->value);
-        $connection->table(MediaTables::Media)->where('id', $assignment->recordId)->update([...$attributes, 'storage_path' => $path]);
-        foreach ([MediaTables::Associations, MediaTables::ImageVariations, MediaTables::I18n] as $child) {
-            $connection->table($child)->where('media_id', $assignment->recordId)->update($attributes);
+
+        return implode('/', array_filter([trim($root, '/'), trim($folder, '/')], static fn (string $part): bool => $part !== ''));
+    }
+
+    private function tenantPath(string $tenant, string $folder, string $filename): string
+    {
+        $root = $this->configuration->get('media.root_folder', 'media');
+        if (! is_string($root)) {
+            throw new TenantConfigurationInvalid('media.root_folder must be a string.');
         }
+
+        return implode('/', array_filter([trim($root, '/'), 'tenants', $tenant, trim($folder, '/'), $filename], static fn (string $part): bool => $part !== ''));
+    }
+
+    private function conversionsFolder(): string
+    {
+        $folder = $this->configuration->get('media.conversions_folder', 'conversions');
+        if (! is_string($folder) || trim($folder, '/') === '') {
+            throw new TenantConfigurationInvalid('media.conversions_folder must be a non-empty string.');
+        }
+
+        return trim($folder, '/');
+    }
+
+    /** @return array{id: string, digest: string, hash: string, disk: string, folder: string, size: int, storage_path: string|null} */
+    private function sourceFacts(stdClass $row): array
+    {
+        if (! is_string($row->id) || ! is_string($row->digest) || ! is_string($row->hash) || ! is_string($row->disk)
+            || (! is_string($row->folder) && $row->folder !== null)
+            || (! is_string($row->storage_path) && $row->storage_path !== null)) {
+            throw new TenantBoundaryViolation('A reviewed Media asset has invalid storage facts.');
+        }
+
+        return [
+            'id' => $row->id,
+            'digest' => $row->digest,
+            'hash' => $row->hash,
+            'disk' => $row->disk,
+            'folder' => $row->folder ?? '',
+            'size' => $this->nonNegativeInteger($row->size, 'Media asset size'),
+            'storage_path' => $row->storage_path,
+        ];
+    }
+
+    /** @return array{id: string, label: string, format: string, width: int, height: int, size: int, storage_path: string|null} */
+    private function variationFacts(stdClass $variation): array
+    {
+        if (! is_string($variation->id) || ! is_string($variation->label) || ! is_string($variation->format)
+            || (! is_string($variation->storage_path) && $variation->storage_path !== null)) {
+            throw new TenantBoundaryViolation('A reviewed Media variation has invalid storage facts.');
+        }
+
+        return [
+            'id' => $variation->id,
+            'label' => $variation->label,
+            'format' => $variation->format,
+            'width' => $this->nonNegativeInteger($variation->width, 'Media variation width'),
+            'height' => $this->nonNegativeInteger($variation->height, 'Media variation height'),
+            'size' => $this->nonNegativeInteger($variation->size, 'Media variation size'),
+            'storage_path' => $variation->storage_path,
+        ];
+    }
+
+    private function nonNegativeInteger(mixed $value, string $field): int
+    {
+        if (is_int($value) && $value >= 0) {
+            return $value;
+        }
+        if (is_string($value) && ctype_digit($value)) {
+            return intval($value);
+        }
+
+        throw new TenantBoundaryViolation("{$field} is invalid.");
+    }
+
+    /**
+     * @param  array{id: string, digest: string, hash: string, disk: string, folder: string, size: int, storage_path: string|null}  $media
+     * @param  array{id: string, label: string, format: string, width: int, height: int, size: int, storage_path: string|null}  $variation
+     */
+    private function legacyVariationPath(array $media, array $variation, string $sourcePath): string
+    {
+        if ($variation['storage_path'] !== null && $variation['storage_path'] !== '') {
+            return $variation['storage_path'];
+        }
+        $filename = MediaVariationFileNamer::make(
+            $media['hash'],
+            $variation['label'],
+            $variation['width'],
+            $variation['height'],
+            $variation['format'],
+        );
+
+        return dirname($sourcePath).'/'.$this->conversionsFolder().'/'.$filename;
+    }
+
+    private function associationTenant(stdClass $association): string
+    {
+        if (! is_string($association->associable_type) || ! is_string($association->associable_id)) {
+            throw new TenantBoundaryViolation('A reviewed Media association owner is invalid.');
+        }
+        $class = Relation::getMorphedModel($association->associable_type) ?? $association->associable_type;
+        if (! is_a($class, Model::class, true)) {
+            throw new TenantBoundaryViolation('A reviewed Media association owner type is unknown.');
+        }
+        $owner = new $class;
+        if ($owner->getConnection() !== $this->connectionByName()) {
+            throw new TenantBoundaryViolation('A reviewed Media association owner uses another connection.');
+        }
+        $tenant = $owner->getConnection()->table($owner->getTable())
+            ->where($owner->getKeyName(), $association->associable_id)
+            ->value('tenant_id');
+        if (! is_string($tenant)) {
+            throw new TenantBoundaryViolation('A reviewed Media association owner is unmapped.');
+        }
+
+        return $tenant;
+    }
+
+    /** @param array{id: string, digest: string, hash: string, disk: string, folder: string, size: int, storage_path: string|null} $source */
+    private function recordCopy(TenantAdoptionPlan $plan, array $source, string $tenant, string $destinationId, string $path): void
+    {
+        $connection = $this->connection($plan);
+        $identity = ['adoption_run_id' => $plan->id, 'source_id' => $source['id'], 'tenant_id' => $tenant];
+        $existing = $connection->table(MediaTables::TenantAdoptionCopies)->where($identity)->first();
+        $attributes = [
+            'destination_id' => $destinationId,
+            'status' => 'copying',
+            'disk' => $source['disk'],
+            'storage_path' => $path,
+            'digest' => $source['digest'],
+            'checksum_verified_at' => null,
+            'updated_at' => now(),
+        ];
+        if ($existing === null) {
+            $connection->table(MediaTables::TenantAdoptionCopies)->insert([...$identity, ...$attributes, 'created_at' => now()]);
+
+            return;
+        }
+        if ($existing->destination_id !== $destinationId || $existing->disk !== $source['disk']
+            || $existing->storage_path !== $path || $existing->digest !== $source['digest']) {
+            throw new TenantBoundaryViolation('A durable Media adoption copy mapping changed.');
+        }
+        if ($existing->status !== 'committed') {
+            $connection->table(MediaTables::TenantAdoptionCopies)->where($identity)->update($attributes);
+        }
+    }
+
+    private function copyVerified(string $disk, string $source, string $destination, string $digest, int $size): void
+    {
+        if ($this->existence->exists($disk, $destination)) {
+            if (! $this->verifiedObject($disk, $destination, $digest, $size)) {
+                throw new TenantBoundaryViolation('A Media adoption destination collides with different bytes.');
+            }
+
+            return;
+        }
+        if (! $this->files->copy($disk, $source, $disk, $destination, MediaVisibility::Private)
+            || ! $this->verifiedObject($disk, $destination, $digest, $size)) {
+            throw new TenantBoundaryViolation('A Media adoption binary could not be copied and verified.');
+        }
+    }
+
+    private function verifiedObject(string $disk, string $path, string $digest, int $size): bool
+    {
+        return $this->existence->exists($disk, $path)
+            && $this->disks->size($disk, $path) === $size
+            && hash_equals($digest, $this->disks->checksum($disk, $path));
+    }
+
+    /**
+     * Commit the complete copied graph only after every destination object verifies.
+     *
+     * @param  array{id: string, digest: string, hash: string, disk: string, folder: string, size: int, storage_path: string|null}  $source
+     * @param  array<string, string>  $destinations
+     * @param  array<string, array{id: string, path: string, variations: array<string, string>}>  $prepared
+     * @param  array<string, string>  $associations
+     * @param  list<stdClass>  $variations
+     */
+    private function persistSplitGraph(
+        TenantAdoptionPlan $plan,
+        TenantAssignment $assignment,
+        array $source,
+        array $destinations,
+        array $prepared,
+        array $associations,
+        array $variations,
+    ): void {
+        $connection = $this->connection($plan);
+        $translations = $connection->table(MediaTables::I18n)->where('media_id', $assignment->recordId)->get()->all();
+
+        $connection->transaction(function () use ($plan, $assignment, $source, $destinations, $prepared, $associations, $variations, $translations, $connection): void {
+            $locked = $connection->table(MediaTables::Media)->where('id', $assignment->recordId)->lockForUpdate()->first();
+            if (! $locked instanceof stdClass || $locked->tenant_id !== null || ! is_string($locked->digest)
+                || ! hash_equals($source['digest'], $locked->digest)) {
+                throw new TenantBoundaryViolation('The reviewed Media source changed before graph commit.');
+            }
+
+            foreach ($destinations as $tenant => $destinationId) {
+                $ownership = $this->ownership($tenant);
+                if ($destinationId !== $assignment->recordId) {
+                    if ($connection->table(MediaTables::Media)->where('id', $destinationId)->exists()) {
+                        throw new TenantBoundaryViolation('A reviewed Media split destination already exists.');
+                    }
+                    $copy = (array) $locked;
+                    $copy['id'] = $destinationId;
+                    $copy['storage_path'] = $prepared[$tenant]['path'];
+                    $copy = [...$copy, ...$ownership];
+                    $connection->table(MediaTables::Media)->insert($copy);
+                }
+
+                foreach ($translations as $translation) {
+                    if ($destinationId === $assignment->recordId) {
+                        continue;
+                    }
+                    $copy = (array) $translation;
+                    $copy['id'] = (string) Str::uuid();
+                    $copy['media_id'] = $destinationId;
+                    $connection->table(MediaTables::I18n)->insert([...$copy, ...$ownership]);
+                }
+                foreach ($variations as $variation) {
+                    if ($destinationId === $assignment->recordId) {
+                        continue;
+                    }
+                    $copy = (array) $variation;
+                    $variationFacts = $this->variationFacts($variation);
+                    $copy['id'] = (string) Str::uuid();
+                    $copy['media_id'] = $destinationId;
+                    $copy['storage_path'] = $prepared[$tenant]['variations'][$variationFacts['id']];
+                    $connection->table(MediaTables::ImageVariations)->insert([...$copy, ...$ownership]);
+                }
+            }
+
+            $primaryTenant = $assignment->tenantId->value;
+            $primaryOwnership = $this->ownership($primaryTenant);
+            $connection->table(MediaTables::Media)->where('id', $assignment->recordId)->update([
+                ...$primaryOwnership,
+                'storage_path' => $prepared[$primaryTenant]['path'],
+            ]);
+            $connection->table(MediaTables::I18n)->where('media_id', $assignment->recordId)->update($primaryOwnership);
+            foreach ($variations as $variation) {
+                $variationFacts = $this->variationFacts($variation);
+                $connection->table(MediaTables::ImageVariations)->where('id', $variationFacts['id'])->update([
+                    ...$primaryOwnership,
+                    'storage_path' => $prepared[$primaryTenant]['variations'][$variationFacts['id']],
+                ]);
+            }
+            foreach ($associations as $associationId => $tenant) {
+                $connection->table(MediaTables::Associations)->where('id', $associationId)->update([
+                    ...$this->ownership($tenant),
+                    'media_id' => $destinations[$tenant],
+                ]);
+            }
+            $connection->table(MediaTables::TenantAdoptionCopies)
+                ->where('adoption_run_id', $plan->id)
+                ->where('source_id', $assignment->recordId)
+                ->update(['status' => 'committed', 'updated_at' => now()]);
+        });
     }
 
     /** Backfill one independently mapped root. */

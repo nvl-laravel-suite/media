@@ -13,11 +13,13 @@ use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Jobs\RegenerateMediaVariationsJob;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
+use Nvl\Tenancy\Contracts\TenantContext;
 use Nvl\Tenancy\Enums\TenantStatus;
 use Nvl\Tenancy\Services\EffectiveTenantConnection;
 use Nvl\Tenancy\Services\TenantRunner;
 use Nvl\Tenancy\ValueObjects\PlatformOperation;
 use Nvl\Tenancy\ValueObjects\TenantId;
+use Nvl\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
 
 /**
@@ -52,6 +54,7 @@ class RegenerateVariationsCommand extends Command
         private readonly MediaConfiguredVariationService $configuredVariationService,
         private readonly TenantRunner $tenantRunner,
         private readonly EffectiveTenantConnection $tenantConnections,
+        private readonly TenantContext $tenantContext,
     ) {
         parent::__construct();
     }
@@ -149,13 +152,15 @@ class RegenerateVariationsCommand extends Command
     {
         $connection = $this->tenantConnections->core();
 
-        return $connection->table('nvl_tenancy_tenants')
+        $tenantIds = $connection->table('nvl_tenancy_tenants')
             ->where('status', TenantStatus::Active->value)
             ->orderBy('id')
             ->pluck('id')
             ->filter(static fn (mixed $id): bool => is_string($id) && $id !== '')
             ->values()
             ->all();
+
+        return array_values($tenantIds);
     }
 
     /**
@@ -234,6 +239,7 @@ class RegenerateVariationsCommand extends Command
             createdAfter: $after,
             createdBefore: $before,
             presetNames: ! empty($presetNames) ? $presetNames : null,
+            envelope: TenantJobEnvelope::capture($this->tenantContext),
         );
 
         Bus::dispatch($job);

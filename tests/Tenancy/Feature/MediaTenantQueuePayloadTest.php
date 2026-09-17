@@ -9,7 +9,9 @@ use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Jobs\GenerateImageVariationJob;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Tests\Fixtures\MediaTenancyScenario;
+use Nvl\Tenancy\Contracts\TenantContext;
 use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Tenancy\ValueObjects\TenantJobEnvelope;
 
 it('persists a scalar variation job with the producing tenant envelope', function (): void {
     $scenario = MediaTenancyScenario::install();
@@ -42,6 +44,7 @@ it('persists a scalar variation job with the producing tenant envelope', functio
         'thumb',
         ['width' => 100, 'height' => 100],
         $media->revision,
+        TenantJobEnvelope::capture(app(TenantContext::class)),
     ));
 
     $payload = json_decode((string) DB::table('jobs')->value('payload'), true, flags: JSON_THROW_ON_ERROR);

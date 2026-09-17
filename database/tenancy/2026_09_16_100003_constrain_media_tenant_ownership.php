@@ -22,7 +22,7 @@ return new class extends Migration
 
         $this->required($schema, MediaTables::Media, 'tenant_id', $mixed || $platform);
         if ($mixed) {
-            $this->required($schema, MediaTables::Media, 'ownership_key', false);
+            $this->required($schema, MediaTables::Media, 'ownership_key', false, 'string');
             $this->ownershipCheck(DB::connection(), MediaTables::Media);
         }
         $this->unique($schema, MediaTables::Media, [$mixed ? 'ownership_key' : 'tenant_id', 'id'], 'media_partition_id_unique');
@@ -36,7 +36,7 @@ return new class extends Migration
         foreach ([MediaTables::Associations, MediaTables::ImageVariations, MediaTables::I18n] as $child) {
             $this->required($schema, $child, 'tenant_id', $mixed || $platform);
             if ($mixed) {
-                $this->required($schema, $child, 'ownership_key', false);
+                $this->required($schema, $child, 'ownership_key', false, 'string');
                 $this->ownershipCheck(DB::connection(), $child);
             }
             $partition = $mixed ? 'ownership_key' : 'tenant_id';
@@ -47,7 +47,7 @@ return new class extends Migration
 
         $this->required($schema, MediaTables::MultipartUploads, 'tenant_id', $platform);
         if ($platform) {
-            $this->required($schema, MediaTables::MultipartUploads, 'ownership_key', false);
+            $this->required($schema, MediaTables::MultipartUploads, 'ownership_key', false, 'string');
             $this->ownershipCheck(DB::connection(), MediaTables::MultipartUploads);
         }
         $this->index($schema, MediaTables::MultipartUploads, ['tenant_id', 'status', 'expires_at'], 'media_multipart_tenant_status_expiry_idx');
@@ -75,10 +75,15 @@ return new class extends Migration
     }
 
     /** Change one prepared ownership column to its final nullability. */
-    private function required(Builder $schema, string $table, string $column, bool $nullable): void
+    private function required(Builder $schema, string $table, string $column, bool $nullable, string $type = 'uuid'): void
     {
         if ($schema->hasTable($table) && $schema->hasColumn($table, $column)) {
-            $schema->table($table, static fn (Blueprint $blueprint) => $blueprint->uuid($column)->nullable($nullable)->change());
+            $schema->table($table, static function (Blueprint $blueprint) use ($column, $nullable, $type): void {
+                $definition = $type === 'string'
+                    ? $blueprint->string($column, 44)
+                    : $blueprint->uuid($column);
+                $definition->nullable($nullable)->change();
+            });
         }
     }
 

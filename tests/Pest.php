@@ -9,3 +9,4 @@ use Nvl\Media\Tests\MediaTestCase;
 uses(MediaTestCase::class)->in('Feature', 'Integration', 'Unit');
 uses(MediaTenancyTestCase::class)->in('Tenancy/Feature');
 uses(MediaCatalogTenancyTestCase::class)->in('Tenancy/Catalog');
+uses(MediaCatalogTenancyTestCase::class)->in('Tenancy/Integration/MediaTenantImportConcurrencyTest.php');

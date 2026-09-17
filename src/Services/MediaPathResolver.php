@@ -203,7 +203,10 @@ final readonly class MediaPathResolver
             return self::storagePath($folder);
         }
 
-        $snapshot = ($this->tenantContext ?? app(TenantContext::class))->snapshot();
+        if (! $this->tenantContext instanceof TenantContext) {
+            throw new TenantContextMissing('Tenant-aware Media paths require an injected tenant context.');
+        }
+        $snapshot = $this->tenantContext->snapshot();
         $partition = match ($snapshot->mode) {
             TenantContextMode::Tenant => 'tenants/'.$snapshot->tenantId?->value,
             TenantContextMode::Platform => 'platform',

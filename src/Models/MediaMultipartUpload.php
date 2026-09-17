@@ -11,7 +11,6 @@ use Illuminate\Support\Carbon;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\MediaMultipartStatus;
 use Nvl\Media\Enums\MediaVisibility;
-use Nvl\Media\Models\Concerns\AppliesTenantBoundary;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
 
 /**
@@ -49,16 +48,10 @@ use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
  */
 final class MediaMultipartUpload extends Model
 {
-    use AppliesTenantBoundary;
     use GuardsTenantOwnership;
     use HasUuids;
 
     public const string TABLE = MediaTables::MultipartUploads;
-
-    protected static function tenantResourceKey(): string
-    {
-        return 'media.multipart';
-    }
 
     protected $table = self::TABLE;
 
