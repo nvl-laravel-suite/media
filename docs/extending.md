@@ -53,6 +53,7 @@ Use `bind()` for stateless implementations and `scoped()` when one instance shou
 | `ReusePublicMediaContract` | `ReusePublicMediaAction` | Existing public-asset reuse |
 | `MediaAuthorization` | `DefaultMediaAuthorization` | Stable actor/ability policy |
 | `MediaContentScanner` | `NullMediaContentScanner` | Synchronous scan of exact persisted bytes |
+| `MediaCatalogImport` | `MediaCatalogImporter` | Authorized staged copy of one granted platform asset into the active tenant |
 | `MediaSearchDriver` | `PortableMediaSearchDriver` | Apply search semantics to a media query |
 | `MediaHostResolver` | `SystemMediaHostResolver` | Resolve all A/AAAA results for remote ingestion |
 | `MultipartUploadGateway` | Disabled gateway or configured implementation | Provider initiate/sign/complete/abort |

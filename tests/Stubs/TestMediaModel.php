@@ -22,10 +22,4 @@ class TestMediaModel extends Model implements HasMedia
     protected $table = 'test_media_models';
 
     protected $fillable = ['name'];
-
-    public function registerMediaSlots(): void
-    {
-        $slot = $this->addMediaSlot('default');
-        $slot->acceptedMimeTypes = ['text/plain'];
-    }
 }

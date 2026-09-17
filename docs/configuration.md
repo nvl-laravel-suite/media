@@ -10,6 +10,14 @@ Keep environment reads in `config/media.php`, then use `php artisan config:cache
 
 The values below are the shipped 2.x defaults. Application-published configuration is recursively merged with package defaults so newly added nested safety settings continue to exist after an upgrade; review `UPGRADING.md` whenever publishing or merging a new version.
 
+## Tenancy
+
+`media.tenancy.owner_types` is an empty list by default. Tenancy remains opt-in;
+when enabled, every model class that may own Media must be listed and registered
+as a canonical tenancy resource by the host. Unknown owner types fail closed.
+Media translations and variations inherit ownership from their Media parent and
+do not define independent tenant pivots.
+
 ## Routes
 
 | Key | Default | Meaning |
