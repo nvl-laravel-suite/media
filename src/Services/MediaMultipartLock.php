@@ -10,12 +10,15 @@ use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Tenancy\Services\TenantBoundary;
 
 /**
  * Serializes completion and abortion transitions for one multipart session.
  */
 final class MediaMultipartLock
 {
+    public function __construct(private readonly TenantBoundary $tenantBoundary) {}
+
     /**
      * @template TResult
      *
@@ -37,7 +40,7 @@ final class MediaMultipartLock
         }
 
         $lock = $provider->lock(
-            'media:multipart:'.hash('sha256', $sessionId),
+            'media:multipart:'.hash('sha256', $this->tenantBoundary->key('media.multipart', $sessionId)),
             MediaConfiguration::integer('media.multipart.lock.seconds', 300, 1),
         );
 

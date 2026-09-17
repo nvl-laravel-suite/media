@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -17,12 +18,15 @@ use Nvl\Media\Enums\MediaOwnerSlotOperationType;
 use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaOwnerSlotOperationClaim;
+use Nvl\Tenancy\Services\TenantBoundary;
 
 /**
  * Owns portable idempotency claims for Media owner-slot mutations.
  */
 final class MediaOwnerSlotIdempotency
 {
+    public function __construct(private readonly TenantBoundary $tenantBoundary) {}
+
     /**
      * Claim a request, return its completed result, or reject unsafe key reuse.
      *
@@ -48,6 +52,7 @@ final class MediaOwnerSlotIdempotency
             payload: $payload,
         );
         $connection = (new MediaOwnerSlotOperation)->getConnectionName();
+        $tenantId = $owner->getRawOriginal('tenant_id');
 
         try {
             return DB::connection($connection)->transaction(
@@ -58,8 +63,9 @@ final class MediaOwnerSlotIdempotency
                     $ownerIdentity,
                     $requestHash,
                     $slot,
+                    $tenantId,
                 ): MediaOwnerSlotOperationClaim {
-                    $existing = MediaOwnerSlotOperation::query()
+                    $existing = $this->operationQuery()
                         ->where('idempotency_key', $key)
                         ->lockForUpdate()
                         ->first();
@@ -68,7 +74,8 @@ final class MediaOwnerSlotIdempotency
                         return $this->resolveExisting($existing, $requestHash);
                     }
 
-                    $created = MediaOwnerSlotOperation::query()->create([
+                    $created = $this->operationQuery()->forceCreate([
+                        ...(config('tenancy.enabled') === true ? ['tenant_id' => $tenantId] : []),
                         'idempotency_key' => $key,
                         'actor_type' => $actorIdentity['type'],
                         'actor_id' => $actorIdentity['id'],
@@ -87,7 +94,7 @@ final class MediaOwnerSlotIdempotency
         } catch (UniqueConstraintViolationException) {
             return DB::connection($connection)->transaction(
                 function () use ($key, $requestHash): MediaOwnerSlotOperationClaim {
-                    $existing = MediaOwnerSlotOperation::query()
+                    $existing = $this->operationQuery()
                         ->where('idempotency_key', $key)
                         ->lockForUpdate()
                         ->first();
@@ -126,7 +133,7 @@ final class MediaOwnerSlotIdempotency
             operation: $operation,
             payload: $payload,
         );
-        $existing = MediaOwnerSlotOperation::query()
+        $existing = $this->operationQuery()
             ->where('idempotency_key', $key)
             ->where('request_hash', $requestHash)
             ->where('status', MediaOwnerSlotOperationStatus::Completed->value)
@@ -160,7 +167,7 @@ final class MediaOwnerSlotIdempotency
             operation: $operation,
             payload: $payload,
         );
-        $existing = MediaOwnerSlotOperation::query()
+        $existing = $this->operationQuery()
             ->where('idempotency_key', $key)
             ->where('request_hash', $requestHash)
             ->where('status', MediaOwnerSlotOperationStatus::Processing->value)
@@ -299,7 +306,7 @@ final class MediaOwnerSlotIdempotency
         $deleted = 0;
 
         do {
-            $ids = MediaOwnerSlotOperation::query()
+            $ids = $this->operationQuery()
                 ->where(function ($query) use ($cutoff): void {
                     $query
                         ->where(function ($completed) use ($cutoff): void {
@@ -328,7 +335,7 @@ final class MediaOwnerSlotIdempotency
                 break;
             }
 
-            $deletedChunk = MediaOwnerSlotOperation::query()
+            $deletedChunk = $this->operationQuery()
                 ->whereIn('id', $ids)
                 ->where(function ($query) use ($cutoff): void {
                     $query
@@ -472,7 +479,7 @@ final class MediaOwnerSlotIdempotency
     private function lockedProcessingClaim(
         MediaOwnerSlotOperationClaim $claim,
     ): MediaOwnerSlotOperation {
-        $operation = MediaOwnerSlotOperation::query()
+        $operation = $this->operationQuery()
             ->lockForUpdate()
             ->find($claim->operationId);
 
@@ -495,6 +502,16 @@ final class MediaOwnerSlotIdempotency
         }
 
         return $operation;
+    }
+
+    /** @return Builder<MediaOwnerSlotOperation> */
+    private function operationQuery(): Builder
+    {
+        $query = MediaOwnerSlotOperation::query();
+
+        return config('tenancy.enabled') === true
+            ? $this->tenantBoundary->query($query, 'media.slot-operations')
+            : $query;
     }
 
     /**

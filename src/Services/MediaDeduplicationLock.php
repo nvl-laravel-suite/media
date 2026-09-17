@@ -12,12 +12,15 @@ use Illuminate\Support\Facades\Cache;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Tenancy\Services\TenantBoundary;
 
 /**
  * MediaDeduplicationLock serializes shared digest uploads before file storage.
  */
 final class MediaDeduplicationLock
 {
+    public function __construct(private readonly TenantBoundary $tenantBoundary) {}
+
     /**
      * Execute a deduplicated upload workflow inside a scoped cache lock.
      *
@@ -76,7 +79,10 @@ final class MediaDeduplicationLock
             ? 'public'
             : 'private:'.($uploadedByType ?? 'untyped').':'.($uploadedBy ?? 'anonymous');
 
-        return 'media:deduplication:'.hash('sha256', implode('|', [$digest, $disk, $scope]));
+        return 'media:deduplication:'.hash('sha256', $this->tenantBoundary->key(
+            'media.assets',
+            implode('|', [$digest, $disk, $scope]),
+        ));
     }
 
     /**

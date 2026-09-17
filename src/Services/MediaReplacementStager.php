@@ -28,6 +28,7 @@ final class MediaReplacementStager
         private readonly MediaDiskGuard $diskGuard,
         private readonly MediaFileOperator $files,
         private readonly MediaIngestionPipeline $ingestion,
+        private readonly MediaPathResolver $pathResolver,
     ) {}
 
     /**
@@ -68,7 +69,7 @@ final class MediaReplacementStager
         );
 
         $hash = MediaHashGenerator::generateForExtension($validatedFile->extension);
-        $storageFolder = Media::storagePath($media->folder ?? '');
+        $storageFolder = $this->pathResolver->storageFolder($media->folder ?? '');
         $stored = $this->files->store(
             $file,
             $media->disk,

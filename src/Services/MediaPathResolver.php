@@ -12,12 +12,17 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Tenancy\Contracts\TenantContext;
+use Nvl\Tenancy\Enums\TenantContextMode;
+use Nvl\Tenancy\Exceptions\TenantContextMissing;
 use Stringable;
 use UnitEnum;
 
 /** MediaPathResolver: single authority for all media storage path construction and validation. */
-final class MediaPathResolver
+final readonly class MediaPathResolver
 {
+    public function __construct(private ?TenantContext $tenantContext = null) {}
+
     /* ---------------------------------------------------------------
      * Collection-Based Resolution (template interpolation)
      * ------------------------------------------------------------- */
@@ -101,6 +106,10 @@ final class MediaPathResolver
      */
     public function mediaPath(Media $media): string
     {
+        if (is_string($media->storage_path) && $media->storage_path !== '') {
+            return $media->storage_path;
+        }
+
         $parts = array_filter([self::rootFolder(), $media->folder, $media->hash]);
 
         return implode('/', $parts);
@@ -115,7 +124,7 @@ final class MediaPathResolver
      */
     public function mediaPathForFolder(Media $media, string $folder): string
     {
-        $parts = array_filter([self::rootFolder(), $this->normalizeFolder($folder), $media->hash]);
+        $parts = array_filter([$this->storageFolder($folder), $media->hash]);
 
         return implode('/', $parts);
     }
@@ -125,7 +134,9 @@ final class MediaPathResolver
      */
     public function variationFolder(Media $media): string
     {
-        $baseFolder = self::storagePath($media->folder ?? '');
+        $baseFolder = is_string($media->storage_path) && $media->storage_path !== ''
+            ? dirname($media->storage_path)
+            : $this->storageFolder($media->folder ?? '');
         $convFolder = self::conversionsFolder();
 
         return $baseFolder !== '' ? $baseFolder.'/'.$convFolder : $convFolder;
@@ -149,7 +160,7 @@ final class MediaPathResolver
      */
     public function variationPathForFolder(Media $media, MediaImageVariation $variation, string $folder): string
     {
-        $baseFolder = self::storagePath($this->normalizeFolder($folder));
+        $baseFolder = $this->storageFolder($folder);
 
         return implode('/', array_filter([
             $baseFolder,
@@ -182,6 +193,24 @@ final class MediaPathResolver
         }
 
         return $folder !== '' ? $root.'/'.$folder : $root;
+    }
+
+    /** Build a write-time storage folder inside the active ownership partition. */
+    public function storageFolder(string $folder): string
+    {
+        $folder = $this->normalizeFolder($folder);
+        if (config('tenancy.enabled') !== true) {
+            return self::storagePath($folder);
+        }
+
+        $snapshot = ($this->tenantContext ?? app(TenantContext::class))->snapshot();
+        $partition = match ($snapshot->mode) {
+            TenantContextMode::Tenant => 'tenants/'.$snapshot->tenantId?->value,
+            TenantContextMode::Platform => 'platform',
+            default => throw new TenantContextMissing,
+        };
+
+        return implode('/', array_filter([self::rootFolder(), $partition, $folder]));
     }
 
     /**

@@ -21,6 +21,7 @@ use Nvl\Media\Services\MediaMultipartSessionMapper;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaHashGenerator;
+use Nvl\Tenancy\Services\TenantBoundary;
 use Throwable;
 
 /**
@@ -36,6 +37,7 @@ final readonly class InitiateMultipartUploadAction
         private MultipartUploadGateway $gateway,
         private MediaFileTypePolicy $fileTypes,
         private MediaMultipartSessionMapper $sessionMapper,
+        private TenantBoundary $tenantBoundary,
     ) {}
 
     public function execute(
@@ -94,11 +96,11 @@ final readonly class InitiateMultipartUploadAction
 
         $folder = $this->paths->normalizeFolder($data->folder ?? 'pending');
         $objectKey = implode('/', array_filter([
-            trim(MediaConfiguration::string('media.root_folder', 'media'), '/'),
-            $folder,
+            $this->paths->storageFolder($folder),
             MediaHashGenerator::generateForExtension($fileType->extension),
         ]));
-        $session = MediaMultipartUpload::query()->create([
+        $session = MediaMultipartUpload::query()->forceCreate([
+            ...$this->tenantBoundary->attributes('media.multipart'),
             'disk' => $data->disk,
             'object_key' => $objectKey,
             'object_key_hash' => hash('sha256', $objectKey),

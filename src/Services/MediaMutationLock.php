@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Tenancy\Services\TenantBoundary;
 use Throwable;
 
 /**
@@ -31,6 +32,7 @@ final class MediaMutationLock
      */
     public function __construct(
         private readonly MediaTransactionRollbackRegistry $rollbackCallbacks,
+        private readonly TenantBoundary $tenantBoundary,
     ) {}
 
     /**
@@ -208,7 +210,7 @@ final class MediaMutationLock
      */
     private function lockKey(string $mediaId): string
     {
-        return 'media:mutation:'.hash('sha256', $mediaId);
+        return 'media:mutation:'.hash('sha256', $this->tenantBoundary->key('media.assets', $mediaId));
     }
 
     /**

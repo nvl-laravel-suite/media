@@ -157,24 +157,32 @@ final readonly class CompleteMultipartUploadAction
                 $folder = ltrim(substr($folder, strlen($root)), '/');
             }
 
-            $media = Media::query()->firstOrCreate([
+            $media = Media::query()->firstOrNew([
                 'upload_session_id' => $locked->id,
-            ], [
-                'filename' => $locked->display_filename,
-                'hash' => (string) $pathInfo['basename'],
-                'extension' => $locked->canonical_extension,
-                'mime_type' => $locked->declared_mime,
-                'size' => $locked->expected_size,
-                'disk' => $locked->disk,
-                'folder' => $folder !== '' && $folder !== '.' ? $folder : null,
-                'visibility' => $locked->visibility,
-                'status' => MediaLifecycleStatus::PendingScan,
-                'available_at' => null,
-                'type' => MediaType::fromExtension($locked->canonical_extension),
-                'digest' => $locked->expected_checksum,
-                'uploaded_by' => $locked->uploader_id,
-                'uploaded_by_type' => $locked->uploader_type,
             ]);
+            if (! $media->exists) {
+                $media->forceFill([
+                    ...(config('tenancy.enabled') === true ? [
+                        'tenant_id' => $locked->tenant_id,
+                        'ownership_key' => $locked->ownership_key,
+                        'storage_path' => $locked->object_key,
+                    ] : []),
+                    'filename' => $locked->display_filename,
+                    'hash' => (string) $pathInfo['basename'],
+                    'extension' => $locked->canonical_extension,
+                    'mime_type' => $locked->declared_mime,
+                    'size' => $locked->expected_size,
+                    'disk' => $locked->disk,
+                    'folder' => $folder !== '' && $folder !== '.' ? $folder : null,
+                    'visibility' => $locked->visibility,
+                    'status' => MediaLifecycleStatus::PendingScan,
+                    'available_at' => null,
+                    'type' => MediaType::fromExtension($locked->canonical_extension),
+                    'digest' => $locked->expected_checksum,
+                    'uploaded_by' => $locked->uploader_id,
+                    'uploaded_by_type' => $locked->uploader_type,
+                ])->save();
+            }
 
             $locked->forceFill([
                 'status' => MediaMultipartStatus::Completed,

@@ -549,7 +549,7 @@ class Media extends Model implements TranslatableModel
      */
     public function buildPath(): string
     {
-        return implode('/', array_filter([self::rootFolder(), $this->folder, $this->hash]));
+        return app(MediaPathResolver::class)->mediaPath($this);
     }
 
     /**
