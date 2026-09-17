@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Connection;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\MySqlConnection;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\Builder;
 use Illuminate\Support\Facades\DB;
@@ -93,6 +94,10 @@ return new class extends Migration
         if ($operationSchema->hasTable($operationTable) && ! $operationSchema->hasIndex($operationTable, 'media_owner_slot_idempotency_unique')) {
             $operationSchema->table($operationTable, static fn (Blueprint $table) => $table->unique('idempotency_key', 'media_owner_slot_idempotency_unique'));
         }
+        $this->dropOwnershipCheck(DB::connection(), MediaTables::Media);
+        foreach ([MediaTables::Associations, MediaTables::ImageVariations, MediaTables::I18n, MediaTables::MultipartUploads] as $table) {
+            $this->dropOwnershipCheck(DB::connection(), $table);
+        }
         $this->required($schema, MediaTables::Media, 'tenant_id', true);
         $this->required($schema, MediaTables::Media, 'storage_path', true, 'path');
         foreach ([MediaTables::Associations, MediaTables::ImageVariations, MediaTables::I18n, MediaTables::MultipartUploads] as $table) {
@@ -102,10 +107,6 @@ return new class extends Migration
             $this->required($schema, $table, 'ownership_key', true, 'string');
         }
         $this->required($operationSchema, $operationTable, 'tenant_id', true);
-        $this->dropOwnershipCheck(DB::connection(), MediaTables::Media);
-        foreach ([MediaTables::Associations, MediaTables::ImageVariations, MediaTables::I18n, MediaTables::MultipartUploads] as $table) {
-            $this->dropOwnershipCheck(DB::connection(), $table);
-        }
     }
 
     /** Change one prepared ownership column to its final nullability. */
@@ -199,14 +200,14 @@ return new class extends Migration
 
             return;
         }
-        $driver = $connection->getDriverName();
-        $sql = $driver === 'mysql'
+        $sql = $connection instanceof MySqlConnection && ! $connection->isMaria()
             ? "ALTER TABLE {$table} DROP CHECK {$name}"
             : "ALTER TABLE {$table} DROP CONSTRAINT IF EXISTS {$name}";
         try {
             $connection->statement($sql);
         } catch (Throwable $exception) {
             if (! str_contains(mb_strtolower($exception->getMessage()), 'does not exist')
+                && ! str_contains(mb_strtolower($exception->getMessage()), 'is not found')
                 && ! str_contains(mb_strtolower($exception->getMessage()), 'check that column/key exists')) {
                 throw $exception;
             }

@@ -191,7 +191,7 @@ it('proves PostgreSQL, Redis locking, and S3-compatible multipart recovery toget
             ->not->toContain('/tenants/'.$scenario::A.'/tenants/')
             ->and($object->size)->toBe(strlen($contents))
             ->and($object->checksum)->toBe($checksum)
-            ->and($gateway->inspect($session)?->checksum)->toBe($checksum);
+            ->and($scenario->run($scenario::A, fn (): ?string => $gateway->inspect($session)?->checksum))->toBe($checksum);
     } finally {
         if (! $completed) {
             try {

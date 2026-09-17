@@ -184,18 +184,19 @@ final class MediaAssetUrl
         $resolvedOwner = $owner ?? $media->uploaded_by ?? $defaultOwner;
         $normalized = self::normalizeAssetParameters($parameters);
         $normalized = self::withoutUnavailableVariation($media, $normalized);
-        if (config('tenancy.enabled') === true && ($tenantId === null || $canonicalOrigin === null)) {
+        $tenantAware = config('tenancy.enabled') === true;
+        if ($tenantAware && ($tenantId === null || $canonicalOrigin === null)) {
             throw new TenantContextMissing('Tenant-aware private Media URLs require a verified canonical site origin.');
         }
-        $payload = array_merge(
-            [
-                'owner' => (string) $resolvedOwner,
-                'media' => $media->id,
-                'tenant' => $tenantId ?? 'disabled',
+        $payload = [
+            'owner' => (string) $resolvedOwner,
+            'media' => $media->id,
+            ...($tenantAware ? [
+                'tenant' => $tenantId,
                 'revision' => $media->revision,
-            ],
-            $normalized,
-        );
+            ] : []),
+            ...$normalized,
+        ];
         $routeName = MediaConfiguration::string(
             'media.assets.private_route_name',
             'media.private.show',
@@ -209,8 +210,12 @@ final class MediaAssetUrl
         $expiresAt = $expiration ?? now()->addMinutes(max(1, $ttlMinutes));
 
         try {
+            if (! $tenantAware) {
+                return URL::temporarySignedRoute($routeName, $expiresAt, $payload);
+            }
+
             $relative = URL::temporarySignedRoute($routeName, $expiresAt, $payload, absolute: false);
-            $origin = rtrim($canonicalOrigin ?? URL::to('/'), '/');
+            $origin = rtrim($canonicalOrigin, '/');
 
             return $origin.'/'.ltrim($relative, '/');
         } catch (Throwable $routeException) {

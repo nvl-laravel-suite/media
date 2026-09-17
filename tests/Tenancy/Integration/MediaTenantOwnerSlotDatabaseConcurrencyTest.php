@@ -30,10 +30,15 @@ it('claims the same owner-slot key concurrently in independent tenant partitions
         tempnam(sys_get_temp_dir(), 'media-tenant-slot-a-'),
         tempnam(sys_get_temp_dir(), 'media-tenant-slot-b-'),
     ];
-    if (! is_string($gate) || in_array(false, $results, true)) {
+    $ready = [
+        tempnam(sys_get_temp_dir(), 'media-tenant-slot-ready-a-'),
+        tempnam(sys_get_temp_dir(), 'media-tenant-slot-ready-b-'),
+    ];
+    if (! is_string($gate) || in_array(false, $results, true) || in_array(false, $ready, true)) {
         throw new RuntimeException('The tenant owner-slot race could not allocate IPC files.');
     }
     /** @var list<string> $results */
+    /** @var list<string> $ready */
     $workers = [[$scenario::A, $ownerA->id], [$scenario::B, $ownerB->id]];
     $children = [];
 
@@ -52,6 +57,7 @@ it('claims the same owner-slot key concurrently in independent tenant partitions
             try {
                 DB::purge();
                 Container::getInstance()->forgetScopedInstances();
+                file_put_contents($ready[$index], 'ready');
                 while (file_get_contents($gate) !== 'go') {
                     usleep(10_000);
                 }
@@ -78,6 +84,13 @@ it('claims the same owner-slot key concurrently in independent tenant partitions
             exit(1);
         }
 
+        $deadline = microtime(true) + 10;
+        while ((file_get_contents($ready[0]) !== 'ready' || file_get_contents($ready[1]) !== 'ready') && microtime(true) < $deadline) {
+            usleep(10_000);
+        }
+        if (file_get_contents($ready[0]) !== 'ready' || file_get_contents($ready[1]) !== 'ready') {
+            throw new RuntimeException('The tenant owner-slot workers did not reach the race barrier.');
+        }
         file_put_contents($gate, 'go');
         foreach ($children as $child) {
             $status = 0;
@@ -88,8 +101,8 @@ it('claims the same owner-slot key concurrently in independent tenant partitions
             (string) file_get_contents($path), true, flags: JSON_THROW_ON_ERROR,
         ), $results);
 
-        expect($decoded[0]['ok'])->toBeTrue()
-            ->and($decoded[1]['ok'])->toBeTrue()
+        expect($decoded[0]['ok'])->toBeTrue(json_encode($decoded[0], JSON_THROW_ON_ERROR))
+            ->and($decoded[1]['ok'])->toBeTrue(json_encode($decoded[1], JSON_THROW_ON_ERROR))
             ->and($decoded[0]['operation_id'])->not->toBe($decoded[1]['operation_id'])
             ->and(MediaOwnerSlotOperation::withoutGlobalScope('tenant')->where('idempotency_key', $key)
                 ->whereIn('tenant_id', [$scenario::A, $scenario::B])->count())->toBe(2)
@@ -100,7 +113,7 @@ it('claims the same owner-slot key concurrently in independent tenant partitions
             $status = 0;
             pcntl_waitpid($child, $status, WNOHANG);
         }
-        foreach ([$gate, ...$results] as $path) {
+        foreach ([$gate, ...$results, ...$ready] as $path) {
             if (is_string($path) && is_file($path)) {
                 unlink($path);
             }

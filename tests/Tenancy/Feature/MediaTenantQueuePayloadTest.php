@@ -104,6 +104,9 @@ it('enumerates all tenants only through the host worklist contract', function ()
 
     $this->artisan('nvl:media:regenerate', [
         '--all-tenants' => true,
+        '--purpose' => 'fixture.catalog',
+        '--actor-type' => 'test',
+        '--actor-id' => 'fixture',
         '--dry-run' => true,
         '--force' => true,
         '--no-interaction' => true,

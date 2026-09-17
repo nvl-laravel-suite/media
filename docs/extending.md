@@ -54,12 +54,19 @@ Use `bind()` for stateless implementations and `scoped()` when one instance shou
 | `MediaAuthorization` | `DefaultMediaAuthorization` | Stable actor/ability policy |
 | `MediaContentScanner` | `NullMediaContentScanner` | Synchronous scan of exact persisted bytes |
 | `MediaCatalogImport` | `MediaCatalogImporter` | Authorized staged copy of one granted platform asset into the active tenant |
+| `MediaTenantWorklist` | `ConfiguredMediaTenantWorklist` | Bounded active-tenant IDs for explicitly authorized tenant-wide commands |
 | `MediaSearchDriver` | `PortableMediaSearchDriver` | Apply search semantics to a media query |
 | `MediaHostResolver` | `SystemMediaHostResolver` | Resolve all A/AAAA results for remote ingestion |
 | `MultipartUploadGateway` | Disabled gateway or configured implementation | Provider initiate/sign/complete/abort |
 | `RecoverableMultipartUploadGateway` | `S3MultipartUploadGateway` when enabled | Adds completed-object recovery inspection |
 
 The model `HasMedia` contract is not a service-container binding. Implement it and use the trait.
+
+`MediaTenantWorklist` is the host-owned directory boundary for `--all-tenants`
+operations. Its default reads the bounded `media.tenancy.active_tenant_worklist`
+configuration; applications with a canonical tenant directory should bind the
+contract to an adapter that returns active tenant UUIDs without exposing a host
+table name to Media.
 
 ## Complete library replacement
 

@@ -68,6 +68,20 @@ Role names are empty by default so an installation cannot silently elevate an ex
 
 Set this to `false` only for controlled adoption of an existing schema. Published migrations are still available through the `media-migrations` publish tag.
 
+## Catalog copies and tenant worklists
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `media.catalog.metadata_keys` | reviewed presentation/provenance key list | Scalar metadata allowed to cross from a granted platform asset into a tenant copy |
+| `media.catalog.max_tags` | `25` | Maximum projected catalog tags |
+| `media.catalog.max_tag_length` | `100` | Maximum characters in each projected tag |
+| `media.tenancy.active_tenant_worklist` | `[]` | Bounded active tenant UUIDs used by the default `MediaTenantWorklist` implementation |
+
+Catalog metadata and tags are projected through these bounds rather than copied
+verbatim. Bind `MediaTenantWorklist` to the host directory when tenant-wide
+operations must enumerate live tenants dynamically; Media never assumes a host
+directory table or column layout.
+
 ## Owner-slot operation identity
 
 The owner-slot mutation ledger is package workflow infrastructure. Consumers do
