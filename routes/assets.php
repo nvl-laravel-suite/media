@@ -21,13 +21,14 @@ $privateAssetMiddlewares = array_values(array_filter(
 
 $prefix = trim((string) config('media.routes.assets_prefix', 'media'), '/');
 $tenantMiddleware = config('tenancy.enabled') === true ? [ResolvePublicTenant::class] : [];
+$signedMiddleware = config('tenancy.enabled') === true ? 'signed:relative' : 'signed';
 
-Route::prefix($prefix)->name('media.')->group(function () use ($publicAssetMiddlewares, $privateAssetMiddlewares, $tenantMiddleware): void {
+Route::prefix($prefix)->name('media.')->group(function () use ($publicAssetMiddlewares, $privateAssetMiddlewares, $tenantMiddleware, $signedMiddleware): void {
     Route::get('/assets/{media}', [MediaAssetController::class, 'showPublic'])
         ->middleware(array_merge($tenantMiddleware, $publicAssetMiddlewares, [SubstituteBindings::class]))
         ->name('assets.show');
 
     Route::get('/private/{owner}/{media}', [MediaAssetController::class, 'showPrivate'])
-        ->middleware(array_merge($tenantMiddleware, $privateAssetMiddlewares, ['signed', SubstituteBindings::class]))
+        ->middleware(array_merge($tenantMiddleware, $privateAssetMiddlewares, [$signedMiddleware, SubstituteBindings::class]))
         ->name('private.show');
 });

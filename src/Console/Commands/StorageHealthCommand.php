@@ -19,6 +19,9 @@ use Nvl\Media\Services\MediaFileOperator;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\MediaUrlResolver;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Tenancy\Contracts\TenantContext;
+use Nvl\Tenancy\Enums\TenantContextMode;
+use Nvl\Tenancy\Exceptions\TenantContextMissing;
 use Throwable;
 
 /**
@@ -57,6 +60,7 @@ final class StorageHealthCommand extends Command
         private readonly MediaFileOperator $files,
         private readonly MediaPathResolver $pathResolver,
         private readonly MediaUrlResolver $urlResolver,
+        private readonly TenantContext $tenantContext,
     ) {
         parent::__construct();
     }
@@ -606,7 +610,7 @@ final class StorageHealthCommand extends Command
         int $olderThanMinutes,
         bool $cleanup,
     ): array {
-        $root = trim(MediaConfiguration::string('media.root_folder', 'media'), '/');
+        $root = $this->orphanInventoryRoot();
         $restrictToRoot = (bool) config('media.reconciliation.restrict_to_root', true);
         $report = [
             'candidates' => 0,
@@ -689,6 +693,24 @@ final class StorageHealthCommand extends Command
         }
 
         return $report;
+    }
+
+    /**
+     * Resolve the only storage prefix this execution may inventory destructively.
+     */
+    private function orphanInventoryRoot(): string
+    {
+        $root = trim(MediaConfiguration::string('media.root_folder', 'media'), '/');
+        if (config('tenancy.enabled') !== true) {
+            return $root;
+        }
+
+        $snapshot = $this->tenantContext->snapshot();
+        if ($snapshot->mode !== TenantContextMode::Tenant || $snapshot->tenantId === null) {
+            throw new TenantContextMissing('Tenant orphan reconciliation requires one active tenant context.');
+        }
+
+        return implode('/', array_filter([$root, 'tenants', $snapshot->tenantId->value]));
     }
 
     /**

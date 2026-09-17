@@ -6,9 +6,13 @@ namespace Nvl\Media\Services;
 
 use Closure;
 use DateTimeInterface;
+use Illuminate\Http\Request;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Support\MediaAssetUrl;
+use Nvl\Tenancy\Contracts\TenantContext;
+use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Tenancy\ValueObjects\TenantSiteContext;
 
 /** MediaUrlResolver: injected URL boundary for cache-aware media and variation URL generation. */
 final class MediaUrlResolver
@@ -16,6 +20,8 @@ final class MediaUrlResolver
     public function __construct(
         private readonly MediaDiskGateway $disks,
         private readonly MediaFileExistence $existence,
+        private readonly TenantContext $tenantContext,
+        private readonly Request $request,
     ) {}
 
     /**
@@ -31,6 +37,8 @@ final class MediaUrlResolver
             $this->existenceChecker(),
             $this->diskUrlBuilder(),
             $this->temporaryUrlBuilder(),
+            $this->tenantId(),
+            $this->canonicalOrigin(),
         );
     }
 
@@ -56,6 +64,8 @@ final class MediaUrlResolver
             $this->existenceChecker(),
             $this->diskUrlBuilder(),
             $this->temporaryUrlBuilder(),
+            $this->tenantId(),
+            $this->canonicalOrigin(),
         );
     }
 
@@ -78,6 +88,8 @@ final class MediaUrlResolver
             $this->existenceChecker(),
             $this->diskUrlBuilder(),
             $this->temporaryUrlBuilder(),
+            $this->tenantId(),
+            $this->canonicalOrigin(),
         );
     }
 
@@ -110,6 +122,8 @@ final class MediaUrlResolver
             $this->existenceChecker(),
             $this->diskUrlBuilder(),
             $this->temporaryUrlBuilder(),
+            $this->tenantId(),
+            $this->canonicalOrigin(),
         );
     }
 
@@ -124,6 +138,8 @@ final class MediaUrlResolver
             $variation,
             $this->diskUrlBuilder(),
             $this->temporaryUrlBuilder(),
+            $this->tenantId(),
+            $this->canonicalOrigin(),
         );
     }
 
@@ -169,5 +185,31 @@ final class MediaUrlResolver
     private function localPathResolver(): Closure
     {
         return fn (string $disk, string $path): string => $this->disks->localPath($disk, $path);
+    }
+
+    /** Resolve the canonical tenant identity for signed capability generation. */
+    private function tenantId(): ?string
+    {
+        if (config('tenancy.enabled') !== true) {
+            return null;
+        }
+
+        return $this->tenantContext->requireTenant()->value;
+    }
+
+    /** Resolve the host-verified canonical origin for signed capability generation. */
+    private function canonicalOrigin(): ?string
+    {
+        if (config('tenancy.enabled') !== true) {
+            return null;
+        }
+
+        $site = $this->request->attributes->get(TenantSiteContext::class);
+        if (! $site instanceof TenantSiteContext
+            || $site->tenantId->value !== $this->tenantContext->requireTenant()->value) {
+            throw new TenantBoundaryViolation('A verified tenant site is required for private Media URLs.');
+        }
+
+        return rtrim($site->canonicalOrigin, '/');
     }
 }

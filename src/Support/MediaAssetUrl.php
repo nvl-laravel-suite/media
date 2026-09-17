@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\URL;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
+use Nvl\Tenancy\Exceptions\TenantContextMissing;
 use RuntimeException;
 use Throwable;
 
@@ -33,6 +34,8 @@ final class MediaAssetUrl
         ?Closure $exists = null,
         ?Closure $diskUrl = null,
         ?Closure $temporaryUrl = null,
+        ?string $tenantId = null,
+        ?string $canonicalOrigin = null,
     ): string {
         self::assertAvailable($media);
 
@@ -47,6 +50,8 @@ final class MediaAssetUrl
                 $exists,
                 $diskUrl,
                 $temporaryUrl,
+                $tenantId,
+                $canonicalOrigin,
             );
         }
 
@@ -69,22 +74,24 @@ final class MediaAssetUrl
         ?Closure $exists = null,
         ?Closure $diskUrl = null,
         ?Closure $temporaryUrl = null,
+        ?string $tenantId = null,
+        ?string $canonicalOrigin = null,
     ): string {
         /** @var Media $media */
         $media = $variation->media;
         self::assertAvailable($media);
 
         if (! self::isCurrentAvailableVariation($media, $variation)) {
-            return self::forMedia($media, '', $exists, $diskUrl, $temporaryUrl);
+            return self::forMedia($media, '', $exists, $diskUrl, $temporaryUrl, $tenantId, $canonicalOrigin);
         }
 
         $path = $variation->getPath();
 
         if (! self::objectExists($media->disk, $path, $exists)) {
-            return self::forMedia($media, '', $exists, $diskUrl, $temporaryUrl);
+            return self::forMedia($media, '', $exists, $diskUrl, $temporaryUrl, $tenantId, $canonicalOrigin);
         }
 
-        return self::buildUrl($media, ['v' => $variation->label], null, null, $exists, $diskUrl, $temporaryUrl);
+        return self::buildUrl($media, ['v' => $variation->label], null, null, $exists, $diskUrl, $temporaryUrl, $tenantId, $canonicalOrigin);
     }
 
     /**
@@ -103,6 +110,8 @@ final class MediaAssetUrl
         ?Closure $exists = null,
         ?Closure $diskUrl = null,
         ?Closure $temporaryUrl = null,
+        ?string $tenantId = null,
+        ?string $canonicalOrigin = null,
     ): string {
         self::assertAvailable($media);
 
@@ -110,7 +119,7 @@ final class MediaAssetUrl
             return self::publicUrl($media, $parameters, $exists, $diskUrl);
         }
 
-        return self::privateUrl($media, $parameters, $expiration, $owner, $exists, $diskUrl, $temporaryUrl);
+        return self::privateUrl($media, $parameters, $expiration, $owner, $exists, $diskUrl, $temporaryUrl, $tenantId, $canonicalOrigin);
     }
 
     /**
@@ -163,6 +172,8 @@ final class MediaAssetUrl
         ?Closure $exists = null,
         ?Closure $diskUrl = null,
         ?Closure $temporaryUrl = null,
+        ?string $tenantId = null,
+        ?string $canonicalOrigin = null,
     ): string {
         self::assertAvailable($media);
 
@@ -173,8 +184,16 @@ final class MediaAssetUrl
         $resolvedOwner = $owner ?? $media->uploaded_by ?? $defaultOwner;
         $normalized = self::normalizeAssetParameters($parameters);
         $normalized = self::withoutUnavailableVariation($media, $normalized);
+        if (config('tenancy.enabled') === true && ($tenantId === null || $canonicalOrigin === null)) {
+            throw new TenantContextMissing('Tenant-aware private Media URLs require a verified canonical site origin.');
+        }
         $payload = array_merge(
-            ['owner' => (string) $resolvedOwner, 'media' => $media->id],
+            [
+                'owner' => (string) $resolvedOwner,
+                'media' => $media->id,
+                'tenant' => $tenantId ?? 'disabled',
+                'revision' => $media->revision,
+            ],
             $normalized,
         );
         $routeName = MediaConfiguration::string(
@@ -190,7 +209,10 @@ final class MediaAssetUrl
         $expiresAt = $expiration ?? now()->addMinutes(max(1, $ttlMinutes));
 
         try {
-            return URL::temporarySignedRoute($routeName, $expiresAt, $payload);
+            $relative = URL::temporarySignedRoute($routeName, $expiresAt, $payload, absolute: false);
+            $origin = rtrim($canonicalOrigin ?? URL::to('/'), '/');
+
+            return $origin.'/'.ltrim($relative, '/');
         } catch (Throwable $routeException) {
             $path = self::pathForVariationOrOriginal($media, (string) ($normalized['v'] ?? ''));
 
@@ -217,6 +239,8 @@ final class MediaAssetUrl
         string $variation = '',
         ?Closure $diskUrl = null,
         ?Closure $temporaryUrl = null,
+        ?string $tenantId = null,
+        ?string $canonicalOrigin = null,
     ): string {
         self::assertAvailable($media);
 
@@ -231,6 +255,8 @@ final class MediaAssetUrl
                 null,
                 $diskUrl,
                 $temporaryUrl,
+                $tenantId,
+                $canonicalOrigin,
             );
         }
 

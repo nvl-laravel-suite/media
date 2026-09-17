@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Tests\Fixtures\MediaTenancyScenario;
 
 it('deduplicates within A but never reuses A asset or object in B', function (): void {
@@ -18,4 +19,23 @@ it('deduplicates within A but never reuses A asset or object in B', function ():
         ->and($pathB)->not->toBe($pathA)
         ->and($pathA)->toContain('/tenants/'.$scenario::A.'/')
         ->and($pathB)->toContain('/tenants/'.$scenario::B.'/');
+});
+
+it('cleans only the active tenant orphan prefix', function (): void {
+    $scenario = MediaTenancyScenario::install();
+    $mediaB = $scenario->upload($scenario::B, 'tenant B live bytes');
+    $pathB = $scenario->run($scenario::B, fn (): string => $mediaB->buildPath());
+    $orphanA = 'media/tenants/'.$scenario::A.'/orphans/old.txt';
+    Storage::disk('tenant-disk')->put($orphanA, 'orphan A');
+
+    $exitCode = $scenario->run($scenario::A, fn (): int => $this->artisan('nvl:media:reconcile', [
+        '--disk' => 'tenant-disk',
+        '--orphans' => true,
+        '--cleanup-orphans' => true,
+        '--older-than' => 0,
+    ])->run());
+
+    expect($exitCode)->toBe(0)
+        ->and(Storage::disk('tenant-disk')->exists($orphanA))->toBeFalse()
+        ->and(Storage::disk('tenant-disk')->exists($pathB))->toBeTrue();
 });

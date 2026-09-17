@@ -18,6 +18,7 @@ use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Support\MediaAssetUrl;
 use Nvl\Media\Support\MediaAssetVersion;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Tenancy\ValueObjects\TenantSiteContext;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -70,6 +71,8 @@ final class MediaAssetController extends Controller
     {
         abort_if($media->is_public || ! $media->isAvailable(), 404);
 
+        $this->assertSignedTenantRevision($request, $media);
+
         if (! $this->ownerMatches($owner, $media)) {
             abort(404);
         }
@@ -115,6 +118,7 @@ final class MediaAssetController extends Controller
             ...$allowedParameters,
             'version',
             ...($signed ? ['expires', 'signature'] : []),
+            ...($signed ? ['tenant', 'revision'] : []),
         ];
         $unknownQueryKeys = array_values(array_diff(
             array_keys($request->query()),
@@ -149,6 +153,27 @@ final class MediaAssetController extends Controller
             'v' => is_string($variation) ? $variation : null,
             'version' => is_string($version) ? $version : null,
         ];
+    }
+
+    /** Reject signed capabilities issued for another tenant, revision, or canonical origin. */
+    private function assertSignedTenantRevision(Request $request, Media $media): void
+    {
+        if (config('tenancy.enabled') !== true) {
+            return;
+        }
+
+        $site = $request->attributes->get(TenantSiteContext::class);
+        $tenant = $request->query('tenant');
+        $revision = $request->query('revision');
+        abort_unless(
+            $site instanceof TenantSiteContext
+                && is_string($tenant)
+                && hash_equals($site->tenantId->value, $tenant)
+                && is_numeric($revision)
+                && (int) $revision === $media->revision
+                && hash_equals(rtrim($site->canonicalOrigin, '/'), $request->getSchemeAndHttpHost()),
+            404,
+        );
     }
 
     /**
