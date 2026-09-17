@@ -11,6 +11,7 @@ use Nvl\Data\Providers\DataServiceProvider;
 use Nvl\Filterable\Providers\FilterableServiceProvider;
 use Nvl\Media\Providers\MediaServiceProvider;
 use Nvl\Support\Providers\SupportServiceProvider;
+use Nvl\Tenancy\Providers\TenancyServiceProvider;
 use Nvl\Translatable\Providers\TranslatableServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 
@@ -33,6 +34,7 @@ abstract class MediaTestCase extends Orchestra
             DataServiceProvider::class,
             FilterableServiceProvider::class,
             SupportServiceProvider::class,
+            TenancyServiceProvider::class,
             TranslatableServiceProvider::class,
             MediaServiceProvider::class,
         ];

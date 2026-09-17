@@ -27,6 +27,8 @@ use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaImageConfiguration;
 use Nvl\Media\Support\MediaQueueConfiguration;
+use Nvl\Tenancy\Services\EffectiveTenantConnection;
+use Nvl\Tenancy\Services\TenantInstallationState;
 use Throwable;
 
 /**
@@ -37,6 +39,8 @@ final readonly class MediaDoctor
     public function __construct(
         private Container $container,
         private MediaFileExistence $existence,
+        private TenantInstallationState $tenantInstallation,
+        private EffectiveTenantConnection $tenantConnections,
     ) {}
 
     /**
@@ -46,6 +50,7 @@ final readonly class MediaDoctor
     {
         return [
             ...$this->schemaChecks(),
+            ...$this->tenancyChecks(),
             $this->migrationOwnershipCheck(),
             ...$this->diskChecks($production),
             $this->representativeStoragePathCheck($production),
@@ -59,6 +64,68 @@ final readonly class MediaDoctor
             ...$this->bindingChecks($production),
             ...$this->multipartChecks($production),
         ];
+    }
+
+    /**
+     * Verify the opt-in ownership installation without requiring it in disabled deployments.
+     *
+     * @return list<MediaDoctorCheckData>
+     */
+    private function tenancyChecks(): array
+    {
+        if (config('tenancy.enabled') !== true) {
+            return [];
+        }
+
+        $checks = [];
+        foreach (['media.assets', 'media.associations', 'media.variations', 'media.translations', 'media.multipart', 'media.slot-operations', 'media.catalog-grants'] as $resource) {
+            try {
+                $this->tenantInstallation->assertUsable($resource);
+                $checks[] = new MediaDoctorCheckData(
+                    'tenancy.marker.'.$resource,
+                    'error',
+                    true,
+                    "Tenant ownership marker [{$resource}] is active and compatible.",
+                );
+            } catch (Throwable $exception) {
+                $checks[] = new MediaDoctorCheckData(
+                    'tenancy.marker.'.$resource,
+                    'error',
+                    false,
+                    'Tenant ownership marker is unavailable or incompatible: '.mb_substr($exception->getMessage(), 0, 500),
+                );
+            }
+        }
+
+        $operationConnection = (new MediaOwnerSlotOperation)->getConnection();
+        $connectionMatches = $operationConnection === $this->tenantConnections->core();
+        $checks[] = new MediaDoctorCheckData(
+            'tenancy.owner_slots.connection',
+            'error',
+            $connectionMatches,
+            $connectionMatches
+                ? 'Owner-slot operations use the canonical tenant connection.'
+                : 'Owner-slot operations must use the canonical tenant connection.',
+        );
+
+        $mixed = config('tenancy.sharing.media') === 'copy'
+            || config('tenancy.resources.media') === 'platform';
+        $mixedReady = ! $mixed || collect([
+            MediaTables::Media,
+            MediaTables::Associations,
+            MediaTables::ImageVariations,
+            MediaTables::I18n,
+        ])->every(static fn (string $table): bool => Schema::hasColumn($table, 'ownership_key'));
+        $checks[] = new MediaDoctorCheckData(
+            'tenancy.schema.partition',
+            'error',
+            $mixedReady,
+            $mixedReady
+                ? 'Media ownership columns match the configured partition mode.'
+                : 'Media sharing or platform mode requires the adopted mixed ownership schema.',
+        );
+
+        return $checks;
     }
 
     /**

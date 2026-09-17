@@ -6,15 +6,18 @@ namespace Nvl\Media\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Nvl\Media\Enums\MediaOwnerSlotOperationStatus;
 use Nvl\Media\Enums\MediaOwnerSlotOperationType;
+use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
 use Nvl\Media\Support\MediaConfiguration;
 
 /**
  * Durable idempotency state for one Media owner-slot mutation.
  *
  * @property string $id
+ * @property string|null $tenant_id Canonical tenant UUID inherited from owner.
  * @property string $idempotency_key
  * @property string|null $actor_type
  * @property string|null $actor_id
@@ -34,6 +37,7 @@ use Nvl\Media\Support\MediaConfiguration;
  */
 final class MediaOwnerSlotOperation extends Model
 {
+    use GuardsTenantOwnership;
     use HasUuids;
 
     /** @var list<string> */
@@ -63,6 +67,16 @@ final class MediaOwnerSlotOperation extends Model
     {
         return MediaConfiguration::ownerSlotOperationConnection()
             ?? parent::getConnectionName();
+    }
+
+    /**
+     * Return the canonical polymorphic owner for this operation.
+     *
+     * @return MorphTo<Model, $this>
+     */
+    public function owner(): MorphTo
+    {
+        return $this->morphTo(__FUNCTION__, 'owner_type', 'owner_id');
     }
 
     /**

@@ -11,11 +11,14 @@ use Illuminate\Support\Carbon;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\MediaMultipartStatus;
 use Nvl\Media\Enums\MediaVisibility;
+use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
 
 /**
  * Server-authoritative multipart upload state.
  *
  * @property string $id
+ * @property string|null $tenant_id Canonical tenant UUID.
+ * @property string|null $ownership_key Operational ownership partition when platform-owned.
  * @property array<string, mixed>|null $provider_state
  * @property string $disk
  * @property string $object_key
@@ -45,6 +48,7 @@ use Nvl\Media\Enums\MediaVisibility;
  */
 final class MediaMultipartUpload extends Model
 {
+    use GuardsTenantOwnership;
     use HasUuids;
 
     public const string TABLE = MediaTables::MultipartUploads;

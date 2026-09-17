@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 use Nvl\Media\Definitions\Tables\MediaTables;
+use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Support\MediaAssetUrl;
 use Nvl\Media\Support\MediaMimeResolver;
@@ -18,6 +19,8 @@ use Nvl\Media\Support\MediaVariationFileNamer;
  * MediaImageVariation: a generated image conversion (thumbnail, optimized, etc.) for a media record.
  *
  * @property string $id
+ * @property string|null $tenant_id Canonical tenant UUID inherited from media.
+ * @property string|null $ownership_key Mixed catalog partition inherited from media.
  * @property string $media_id
  * @property string $label
  * @property string|null $storage_path
@@ -35,6 +38,7 @@ use Nvl\Media\Support\MediaVariationFileNamer;
  */
 class MediaImageVariation extends Model
 {
+    use GuardsTenantOwnership;
     use HasUuids;
 
     public const string TABLE = MediaTables::ImageVariations;

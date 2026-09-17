@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Nvl\Media\Tests\MediaTenancyTestCase;
 use Nvl\Media\Tests\MediaTestCase;
 
-uses(MediaTestCase::class)->in(__DIR__);
+uses(MediaTestCase::class)->in('Feature', 'Integration', 'Unit');
+uses(MediaTenancyTestCase::class)->in('Tenancy/Feature');

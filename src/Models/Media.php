@@ -22,6 +22,7 @@ use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Enums\MediaVisibility;
+use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Support\MediaAssetUrl;
 use Nvl\Media\Traits\MediaFilters;
@@ -34,6 +35,8 @@ use Nvl\Translatable\Translatable;
  * Media: represents a stored file with variations, translations, and polymorphic associations.
  *
  * @property string $id
+ * @property string|null $tenant_id Canonical tenant UUID when tenant-owned.
+ * @property string|null $ownership_key Mixed catalog partition identity.
  * @property string $filename
  * @property string $hash
  * @property string $extension
@@ -57,6 +60,11 @@ use Nvl\Translatable\Translatable;
  * @property string|null $uploaded_by_type
  * @property string|null $upload_session_id
  * @property string|null $failure_code
+ * @property string|null $storage_path Immutable persisted original object path.
+ * @property string|null $catalog_import_key Tenant-local catalog import idempotency UUID.
+ * @property string|null $catalog_source_id Immutable platform source UUID provenance.
+ * @property int|null $catalog_source_revision Immutable source revision provenance.
+ * @property string|null $catalog_source_digest Immutable source digest provenance.
  * @property array<string, mixed>|null $failure_context
  * @property Carbon|null $available_at
  * @property Carbon|null $quarantined_at
@@ -69,6 +77,8 @@ use Nvl\Translatable\Translatable;
  */
 class Media extends Model implements TranslatableModel
 {
+    use GuardsTenantOwnership;
+
     /** @use HasFactory<MediaFactory> */
     use HasFactory;
 
@@ -129,6 +139,7 @@ class Media extends Model implements TranslatableModel
             foreignKey: 'media_id',
             fields: ['title', 'alt', 'caption', 'description'],
             mutationPolicy: TranslationMutationPolicy::DomainActionOnly,
+            ownershipResource: 'media.assets',
         );
     }
 
@@ -153,6 +164,7 @@ class Media extends Model implements TranslatableModel
             'metadata' => 'array',
             'variation_definitions' => 'array',
             'failure_context' => 'array',
+            'catalog_source_revision' => 'integer',
             'available_at' => 'datetime',
             'quarantined_at' => 'datetime',
             'created_at' => 'datetime',

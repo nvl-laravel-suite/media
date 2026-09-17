@@ -77,7 +77,11 @@ use Nvl\Media\Services\SvgScanner;
 use Nvl\Media\Services\SystemMediaHostResolver;
 use Nvl\Media\Services\UnsupportedMultipartUploadGateway;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Media\Tenancy\MediaAdoptionAdapter;
+use Nvl\Media\Tenancy\MediaTenancyResources;
 use Nvl\Support\Traits\MergesPackageConfiguration;
+use Nvl\Tenancy\Services\TenantAdoptionRegistry;
+use Nvl\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Translatable\Services\TranslationResourceRegistry;
 
 /** Registers Media configuration, migrations, contracts, and optional routes. */
@@ -95,12 +99,17 @@ final class MediaServiceProvider extends ServiceProvider
         TypeScriptSourceRegistry $typeScriptSources,
         Dispatcher $events,
         MediaTransactionRollbackRegistry $rollbackCallbacks,
+        MediaTenancyResources $tenancyResources,
+        TenantResourceRegistry $tenantResourceRegistry,
+        TenantAdoptionRegistry $tenantAdoptions,
     ): void {
         $events->listen(
             TransactionRolledBack::class,
             $rollbackCallbacks->handle(...),
         );
         $typeScriptSources->register(__DIR__.'/..', 'nvl/media');
+        $tenancyResources->register($tenantResourceRegistry);
+        $tenantAdoptions->register('media', MediaAdoptionAdapter::class);
 
         $this->registerPolicies();
         $this->registerTranslations();

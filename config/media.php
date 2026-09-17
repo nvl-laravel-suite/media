@@ -13,6 +13,11 @@ use Nvl\Media\Services\PortableMediaSearchDriver;
 use Nvl\Media\Services\S3MultipartUploadGateway;
 
 return [
+    'tenancy' => [
+        // Ownership classification is separate from HTTP association allowlists.
+        'owner_types' => [],
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Optional HTTP Routes

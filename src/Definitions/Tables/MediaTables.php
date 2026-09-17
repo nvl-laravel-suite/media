@@ -21,6 +21,10 @@ final class MediaTables
 
     public const string OwnerSlotOperations = 'px_media_owner_slot_operations';
 
+    public const string TenantGrants = 'px_media_tenant_grants';
+
+    public const string TenantAdoptionCopies = 'px_media_tenant_adoption_copies';
+
     public const string MEDIA = self::Media;
 
     public const string MEDIA_ASSOCIATIONS = self::Associations;
@@ -32,6 +36,10 @@ final class MediaTables
     public const string MEDIA_MULTIPART_UPLOADS = self::MultipartUploads;
 
     public const string MEDIA_OWNER_SLOT_OPERATIONS = self::OwnerSlotOperations;
+
+    public const string MEDIA_TENANT_GRANTS = self::TenantGrants;
+
+    public const string MEDIA_TENANT_ADOPTION_COPIES = self::TenantAdoptionCopies;
 
     private function __construct() {}
 }
