@@ -419,6 +419,22 @@ The first-party `S3MultipartUploadGateway` supports AWS S3 and Laravel S3-compat
 
 All package lifecycle events implement `ShouldDispatchAfterCommit`. They dispatch after the real outer transaction commits; rollback discards them.
 
+### `MediaCatalogGrantAudited`
+
+```php
+public function __construct(
+    public string $operation,
+    public string $grantId,
+    public string $tenantId,
+    public string $mediaId,
+    public int $revision,
+);
+```
+
+Emitted after a platform catalog grant is created, refreshed, or revoked. Its
+payload is scalar so after-commit listeners never serialize a privileged model
+or retain a platform context.
+
 ### `MediaUploadedEvent`
 
 ```php

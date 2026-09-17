@@ -146,56 +146,58 @@ it('proves PostgreSQL, Redis locking, and S3-compatible multipart recovery toget
     $completed = false;
 
     try {
-        $gateway->initiate($session);
-        $signed = $gateway->signPart(
-            $session,
-            new SignMultipartPartData(
-                uploadId: $session->uploadId,
-                partNumber: 1,
-                checksum: $checksum,
-                byteLength: strlen($contents),
-            ),
-        );
-        $response = (new Client)->request('PUT', $signed->url, [
-            'body' => $contents,
-            'headers' => $signed->headers,
-            'http_errors' => false,
-        ]);
+        $scenario->run($scenario::A, function () use ($gateway, $session, $contents, $persisted, &$completed, $objectKey, $checksum, $scenario): void {
+            $gateway->initiate($session);
+            $signed = $gateway->signPart(
+                $session,
+                new SignMultipartPartData(
+                    uploadId: $session->uploadId,
+                    partNumber: 1,
+                    checksum: $checksum,
+                    byteLength: strlen($contents),
+                ),
+            );
+            $response = (new Client)->request('PUT', $signed->url, [
+                'body' => $contents,
+                'headers' => $signed->headers,
+                'http_errors' => false,
+            ]);
 
-        expect($response->getStatusCode())->toBeGreaterThanOrEqual(200)
-            ->toBeLessThan(300);
+            expect($response->getStatusCode())->toBeGreaterThanOrEqual(200)
+                ->toBeLessThan(300);
 
-        $etag = $response->getHeaderLine('ETag');
-        expect($etag)->not->toBe('');
+            $etag = $response->getHeaderLine('ETag');
+            expect($etag)->not->toBe('');
 
-        $persisted->forceFill([
-            'signed_parts' => [
-                1 => [
-                    'length' => strlen($contents),
-                    'checksum' => $checksum,
+            $persisted->forceFill([
+                'signed_parts' => [
+                    1 => [
+                        'length' => strlen($contents),
+                        'checksum' => $checksum,
+                    ],
                 ],
-            ],
-        ])->save();
+            ])->save();
 
-        $object = $gateway->complete(
-            $session,
-            new CompleteMultipartUploadData(
-                uploadId: $session->uploadId,
-                parts: [new CompletedMultipartPartData(1, $etag)],
-            ),
-        );
-        $completed = true;
+            $object = $gateway->complete(
+                $session,
+                new CompleteMultipartUploadData(
+                    uploadId: $session->uploadId,
+                    parts: [new CompletedMultipartPartData(1, $etag)],
+                ),
+            );
+            $completed = true;
 
-        expect($object->path)->toBe($objectKey)
-            ->and($objectKey)->toStartWith('media/tenants/'.$scenario::A.'/')
-            ->not->toContain('/tenants/'.$scenario::A.'/tenants/')
-            ->and($object->size)->toBe(strlen($contents))
-            ->and($object->checksum)->toBe($checksum)
-            ->and($scenario->run($scenario::A, fn (): ?string => $gateway->inspect($session)?->checksum))->toBe($checksum);
+            expect($object->path)->toBe($objectKey)
+                ->and($objectKey)->toStartWith('media/tenants/'.$scenario::A.'/')
+                ->not->toContain('/tenants/'.$scenario::A.'/tenants/')
+                ->and($object->size)->toBe(strlen($contents))
+                ->and($object->checksum)->toBe($checksum)
+                ->and($gateway->inspect($session)?->checksum)->toBe($checksum);
+        });
     } finally {
         if (! $completed) {
             try {
-                $gateway->abort($session);
+                $scenario->run($scenario::A, fn (): mixed => $gateway->abort($session));
             } catch (Throwable) {
                 // The provider may have already completed or rejected initiation.
             }

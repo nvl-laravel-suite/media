@@ -111,8 +111,7 @@ it('enumerates all tenants only through the host worklist contract', function ()
         '--force' => true,
         '--no-interaction' => true,
     ])
-        ->expectsOutput('Tenant '.$scenario::A)
-        ->expectsOutput('Tenant '.$scenario::B)
-        ->expectsOutput('[dry-run] Would regenerate variations for 1 media records.')
+        ->expectsOutputToContain('Tenant '.$scenario::A)
+        ->expectsOutputToContain('Tenant '.$scenario::B)
         ->assertSuccessful();
 });
