@@ -15,10 +15,14 @@ use Nvl\Media\Actions\GenerateImageVariationAction;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Support\MediaQueueConfiguration;
+use Nvl\Tenancy\Contracts\TenantContext;
+use Nvl\Tenancy\Contracts\TenantQueuedJob;
+use Nvl\Tenancy\Enums\TenantContextMode;
+use Nvl\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
 
 /** GenerateImageVariationJob: queued generation of a single image variation for a media record. */
-final class GenerateImageVariationJob implements ShouldBeUnique, ShouldQueue
+final class GenerateImageVariationJob implements ShouldBeUnique, ShouldQueue, TenantQueuedJob
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -33,6 +37,8 @@ final class GenerateImageVariationJob implements ShouldBeUnique, ShouldQueue
 
     private readonly ConversionDefinition $definition;
 
+    private readonly TenantJobEnvelope $envelope;
+
     /**
      * @param  array<string, mixed>|ConversionDefinition  $presetConfig
      */
@@ -41,7 +47,9 @@ final class GenerateImageVariationJob implements ShouldBeUnique, ShouldQueue
         private readonly string $presetName,
         array|ConversionDefinition $presetConfig,
         private readonly int $sourceRevision = 1,
+        ?TenantJobEnvelope $envelope = null,
     ) {
+        $this->envelope = $envelope ?? TenantJobEnvelope::capture(app(TenantContext::class));
         $this->definition = $presetConfig instanceof ConversionDefinition
             ? $presetConfig
             : ConversionDefinition::fromPreset($presetName, $presetConfig);
@@ -57,7 +65,16 @@ final class GenerateImageVariationJob implements ShouldBeUnique, ShouldQueue
      */
     public function uniqueId(): string
     {
-        return $this->mediaId.':'.$this->sourceRevision.':'.$this->presetName;
+        $identity = $this->mediaId.':'.$this->sourceRevision.':'.$this->presetName;
+
+        return $this->envelope->context->mode === TenantContextMode::Disabled
+            ? $identity
+            : hash('sha256', serialize($this->envelope->context)).':'.$identity;
+    }
+
+    public function tenantJobEnvelope(): TenantJobEnvelope
+    {
+        return $this->envelope;
     }
 
     /**

@@ -17,6 +17,9 @@ use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
 use Nvl\Media\Support\MediaQueueConfiguration;
+use Nvl\Tenancy\Contracts\TenantContext;
+use Nvl\Tenancy\Contracts\TenantQueuedJob;
+use Nvl\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
 
 /**
@@ -26,7 +29,7 @@ use Throwable;
  * instances for each requested preset. Supports filtering by type, disk, date range,
  * and specific preset names.
  */
-final class RegenerateMediaVariationsJob implements ShouldQueue
+final class RegenerateMediaVariationsJob implements ShouldQueue, TenantQueuedJob
 {
     use Batchable;
     use Dispatchable;
@@ -37,6 +40,8 @@ final class RegenerateMediaVariationsJob implements ShouldQueue
     public int $tries;
 
     public int $timeout;
+
+    private readonly TenantJobEnvelope $envelope;
 
     /**
      * Create a new batch regeneration job.
@@ -55,7 +60,9 @@ final class RegenerateMediaVariationsJob implements ShouldQueue
         private readonly ?string $createdBefore = null,
         private readonly ?array $presetNames = null,
         private readonly int $chunkSize = 500,
+        ?TenantJobEnvelope $envelope = null,
     ) {
+        $this->envelope = $envelope ?? TenantJobEnvelope::capture(app(TenantContext::class));
         $this->tries = MediaQueueConfiguration::jobInteger('regenerate', 'tries', 1);
         $this->timeout = MediaQueueConfiguration::jobInteger('regenerate', 'timeout', 60);
         $this->onQueue(MediaQueueConfiguration::name());
@@ -107,6 +114,7 @@ final class RegenerateMediaVariationsJob implements ShouldQueue
                         (string) $name,
                         $preset,
                         $media->revision,
+                        $this->envelope,
                     )->afterCommit();
                 }
 
@@ -163,6 +171,11 @@ final class RegenerateMediaVariationsJob implements ShouldQueue
     public function tags(): array
     {
         return ['media-regenerate-batch'];
+    }
+
+    public function tenantJobEnvelope(): TenantJobEnvelope
+    {
+        return $this->envelope;
     }
 
     /**

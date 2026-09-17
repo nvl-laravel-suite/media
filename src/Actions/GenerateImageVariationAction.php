@@ -183,26 +183,36 @@ final class GenerateImageVariationAction
                                 return null;
                             }
 
-                            $variation = MediaImageVariation::query()->updateOrCreate(
-                                [
-                                    'media_id' => $lockedMedia->id,
-                                    'label' => $definition->name,
-                                ],
-                                [
-                                    'storage_path' => $newVariationPath,
-                                    'width' => $result['width'],
-                                    'height' => $result['height'],
-                                    'size' => $result['size'],
-                                    'format' => $resultExtension,
-                                    'quality' => $quality,
-                                    'status' => MediaLifecycleStatus::Available->value,
-                                    'source_revision' => $sourceRevision,
-                                    'attempts' => $existing instanceof MediaImageVariation
-                                        ? $existing->attempts + 1
-                                        : 1,
-                                    'failure_context' => null,
-                                ],
-                            );
+                            $variation = MediaImageVariation::query()->firstOrNew([
+                                'media_id' => $lockedMedia->id,
+                                'label' => $definition->name,
+                            ]);
+                            if (! $variation->exists) {
+                                $ownership = [];
+                                if (array_key_exists('tenant_id', $lockedMedia->getAttributes())) {
+                                    $ownership['tenant_id'] = $lockedMedia->tenant_id;
+                                }
+                                if (array_key_exists('ownership_key', $lockedMedia->getAttributes())) {
+                                    $ownership['ownership_key'] = $lockedMedia->ownership_key;
+                                }
+                                if ($ownership !== []) {
+                                    $variation->forceFill($ownership);
+                                }
+                            }
+                            $variation->forceFill([
+                                'storage_path' => $newVariationPath,
+                                'width' => $result['width'],
+                                'height' => $result['height'],
+                                'size' => $result['size'],
+                                'format' => $resultExtension,
+                                'quality' => $quality,
+                                'status' => MediaLifecycleStatus::Available->value,
+                                'source_revision' => $sourceRevision,
+                                'attempts' => $existing instanceof MediaImageVariation
+                                    ? $existing->attempts + 1
+                                    : 1,
+                                'failure_context' => null,
+                            ])->save();
 
                             $lockedMedia->forceFill([
                                 'status' => MediaLifecycleStatus::Available,

@@ -13,6 +13,11 @@ use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Jobs\RegenerateMediaVariationsJob;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
+use Nvl\Tenancy\Enums\TenantStatus;
+use Nvl\Tenancy\Services\EffectiveTenantConnection;
+use Nvl\Tenancy\Services\TenantRunner;
+use Nvl\Tenancy\ValueObjects\PlatformOperation;
+use Nvl\Tenancy\ValueObjects\TenantId;
 use Throwable;
 
 /**
@@ -32,7 +37,12 @@ class RegenerateVariationsCommand extends Command
         {--before= : Only process media created before this date (Y-m-d)}
         {--dry-run : Show what would be processed without acting}
         {--sync : Process inline instead of dispatching to queue}
-        {--force : Skip confirmation prompt}';
+        {--force : Skip confirmation prompt}
+        {--tenant= : Regenerate media for one explicit tenant UUID}
+        {--all-tenants : Regenerate media independently for every active tenant}
+        {--actor-type=system : Platform operation actor type for --all-tenants}
+        {--actor-id=media-regenerator : Platform operation actor identifier for --all-tenants}
+        {--purpose=media.variations.regenerate : Platform operation purpose for --all-tenants}';
 
     /** @var string */
     protected $description = 'Regenerate image variations for media records matching the given filters.';
@@ -40,6 +50,8 @@ class RegenerateVariationsCommand extends Command
     public function __construct(
         private readonly GenerateImageVariationAction $generateVariationAction,
         private readonly MediaConfiguredVariationService $configuredVariationService,
+        private readonly TenantRunner $tenantRunner,
+        private readonly EffectiveTenantConnection $tenantConnections,
     ) {
         parent::__construct();
     }
@@ -50,6 +62,46 @@ class RegenerateVariationsCommand extends Command
      * @return int Exit code
      */
     public function handle(): int
+    {
+        if (config('tenancy.enabled') !== true) {
+            return $this->handleBounded();
+        }
+
+        $tenant = $this->option('tenant');
+        $tenantProvided = is_string($tenant) && $tenant !== '';
+        $allTenants = (bool) $this->option('all-tenants');
+        if ($tenantProvided === $allTenants) {
+            $this->components->error('Tenant-aware regeneration requires exactly one of --tenant or --all-tenants.');
+
+            return self::INVALID;
+        }
+
+        if ($tenantProvided) {
+            return $this->tenantRunner->run(new TenantId($tenant), fn (): int => $this->handleBounded());
+        }
+
+        $tenantIds = $this->tenantRunner->platform(
+            new PlatformOperation(
+                (string) $this->option('purpose'),
+                (string) $this->option('actor-type'),
+                (string) $this->option('actor-id'),
+            ),
+            fn (): array => $this->activeTenantIds(),
+        );
+        $exitCode = self::SUCCESS;
+        foreach ($tenantIds as $tenantId) {
+            $this->components->info("Tenant {$tenantId}");
+            $result = $this->tenantRunner->run(new TenantId($tenantId), fn (): int => $this->handleBounded());
+            if ($result !== self::SUCCESS) {
+                $exitCode = $result;
+            }
+        }
+
+        return $exitCode;
+    }
+
+    /** Execute regeneration inside an already-established ownership boundary. */
+    private function handleBounded(): int
     {
         $type = $this->resolveType();
         $disk = $this->option('disk');
@@ -86,6 +138,24 @@ class RegenerateVariationsCommand extends Command
         }
 
         return $this->processQueued($type, is_string($disk) ? $disk : null, $presetNames, is_string($after) ? $after : null, is_string($before) ? $before : null);
+    }
+
+    /**
+     * Read the package tenant directory as a bounded worklist for this command.
+     *
+     * @return list<string>
+     */
+    private function activeTenantIds(): array
+    {
+        $connection = $this->tenantConnections->core();
+
+        return $connection->table('nvl_tenancy_tenants')
+            ->where('status', TenantStatus::Active->value)
+            ->orderBy('id')
+            ->pluck('id')
+            ->filter(static fn (mixed $id): bool => is_string($id) && $id !== '')
+            ->values()
+            ->all();
     }
 
     /**

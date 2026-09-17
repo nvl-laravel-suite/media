@@ -13,6 +13,8 @@ use Nvl\Media\Jobs\GenerateImageVariationJob;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaQueueConfiguration;
+use Nvl\Tenancy\Contracts\TenantContext;
+use Nvl\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
 
 /** MediaVariationDispatcher resolves and dispatches variation definitions for existing media records. */
@@ -23,6 +25,7 @@ final class MediaVariationDispatcher
         private readonly MediaConfiguredVariationService $configuredVariationService,
         private readonly MediaFileEffectScheduler $fileEffects,
         private readonly MediaVariationDefinitionNormalizer $definitionNormalizer,
+        private readonly TenantContext $tenantContext,
     ) {}
 
     /**
@@ -162,8 +165,9 @@ final class MediaVariationDispatcher
      */
     private function dispatchDefinitions(Media $media, array $definitions, bool $missingOnly = false): void
     {
-        $this->fileEffects->afterCommit(function () use ($media, $definitions, $missingOnly): void {
-            $this->dispatchDefinitionsNow($media, $definitions, $missingOnly);
+        $envelope = TenantJobEnvelope::capture($this->tenantContext);
+        $this->fileEffects->afterCommit(function () use ($media, $definitions, $missingOnly, $envelope): void {
+            $this->dispatchDefinitionsNow($media, $definitions, $missingOnly, $envelope);
         });
     }
 
@@ -176,6 +180,7 @@ final class MediaVariationDispatcher
         Media $media,
         array $definitions,
         bool $missingOnly = false,
+        ?TenantJobEnvelope $envelope = null,
     ): void {
         if (! $media->isAvailable()
             || ! $media->type->supportsConversions()
@@ -212,6 +217,7 @@ final class MediaVariationDispatcher
                         $definition->name,
                         $definition,
                         $media->revision,
+                        $envelope,
                     )->afterCommit();
 
                     continue;

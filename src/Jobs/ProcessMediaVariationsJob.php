@@ -14,10 +14,14 @@ use Illuminate\Support\Facades\Log;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
 use Nvl\Media\Support\MediaQueueConfiguration;
+use Nvl\Tenancy\Contracts\TenantContext;
+use Nvl\Tenancy\Contracts\TenantQueuedJob;
+use Nvl\Tenancy\Enums\TenantContextMode;
+use Nvl\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
 
 /** ProcessMediaVariationsJob: dispatches all configured variation jobs for a freshly uploaded media record. */
-final class ProcessMediaVariationsJob implements ShouldBeUnique, ShouldQueue
+final class ProcessMediaVariationsJob implements ShouldBeUnique, ShouldQueue, TenantQueuedJob
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -30,10 +34,14 @@ final class ProcessMediaVariationsJob implements ShouldBeUnique, ShouldQueue
 
     public int $uniqueFor;
 
+    private readonly TenantJobEnvelope $envelope;
+
     public function __construct(
         private readonly string $mediaId,
         private readonly bool $includeOutputConversion = true,
+        ?TenantJobEnvelope $envelope = null,
     ) {
+        $this->envelope = $envelope ?? TenantJobEnvelope::capture(app(TenantContext::class));
         $this->tries = MediaQueueConfiguration::jobInteger('dispatch', 'tries', 3);
         $this->timeout = MediaQueueConfiguration::jobInteger('dispatch', 'timeout', 60);
         $this->uniqueFor = MediaQueueConfiguration::jobInteger('dispatch', 'unique_for', 1800);
@@ -70,6 +78,7 @@ final class ProcessMediaVariationsJob implements ShouldBeUnique, ShouldQueue
                 $name,
                 $preset,
                 $media->revision,
+                $this->envelope,
             )->afterCommit();
         }
     }
@@ -84,7 +93,14 @@ final class ProcessMediaVariationsJob implements ShouldBeUnique, ShouldQueue
 
     public function uniqueId(): string
     {
-        return $this->mediaId;
+        return $this->envelope->context->mode === TenantContextMode::Disabled
+            ? $this->mediaId
+            : hash('sha256', serialize($this->envelope->context)).':'.$this->mediaId;
+    }
+
+    public function tenantJobEnvelope(): TenantJobEnvelope
+    {
+        return $this->envelope;
     }
 
     /**
