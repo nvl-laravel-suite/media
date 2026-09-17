@@ -1,5 +1,20 @@
 # Upgrading NVL Media
 
+## Tenant ownership cutover
+
+Tenancy is opt-in and disabled by default. Before enabling it, register every
+Media owner as a Foundation tenant resource, take a pre-cutover database and
+object-store backup, review every legacy root assignment/split, and run the
+coordinator's expand, bounded backfill, verify, and activate phases in
+maintenance. Keep the original persisted storage path authoritative.
+
+Source or schema repairs that preserve the prepared mapping may resume the same
+run. A changed mapping must not overwrite an interrupted run: restore the
+backup or finish recovery, then create a new reviewed preparation. Tenant
+columns are not a reversible rollback after duplicate business keys or copied
+objects exist. Grants affect future catalog availability only; imported assets
+are independent and cleanup must never remove another tenant's copy.
+
 ## Upgrading to 1.0
 
 Version 1.0 uses UUID media records, string-compatible morph identifiers, explicit lifecycle and visibility, localized metadata rows, and separate management and delivery routes.

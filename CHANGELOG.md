@@ -4,6 +4,9 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+- Documented opt-in tenant ownership, independent catalog copies, immutable
+  adoption mappings, backup-based recovery, and bounded tenant cleanup.
+
 ### Fixed
 
 - Recheck attachment availability and public-reuse visibility on the current

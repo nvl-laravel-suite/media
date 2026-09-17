@@ -519,6 +519,24 @@ Every option, safety rule, exit status, and production sequence is documented in
 
 ## Database schema and adoption
 
+### Optional tenant ownership
+
+Installing Media also installs the inert `nvl/tenancy` library; tenancy remains
+disabled until the host explicitly selects and adopts the Media family. Tenant
+assets, associations, variations, translations, multipart sessions, and
+owner-slot operations use the canonical owner tenant. Platform catalog grants
+authorize copy only: an import creates independent bytes, UUIDs, rows, and
+immutable provenance, and later revocation or source deletion does not change a
+committed tenant copy.
+
+Run adoption only in maintenance from a reviewed mapping through
+prepare → bounded backfill → verify → activate. An interrupted run may resume
+after source or schema repair consistent with its immutable mapping. If the
+mapping changes, restore the pre-cutover backup and prepare a new reviewed run.
+Do not treat dropping ownership columns as rollback once duplicate names or
+copied assets exist. Cleanup is package-owned and bounded; verify physical paths
+before deleting any source or imported object.
+
 Package-owned media, association, variation, multipart-session, owner-slot-operation, and translation rows use UUID primary keys. Uploader and owner morph identifiers are strings so integer, UUID, ULID, and string application keys remain compatible. The clean create migrations include composite indexes for visibility, uploader, disk, type and status listings by creation time; multipart indexes cover actor history, status/expiry, and completed media. The owner-slot ledger uniquely indexes UUID idempotency keys and indexes owner/slot and creation-time lookups. Its connection, table, processing lease, retention, and pruning chunk are configured under `media.owner_slots.idempotency`; Doctor checks its schema, lifecycle bounds, atomic lock store, and observed model/slot registrations. Expired processing attempts recover under a new operation UUID so stale workers cannot complete the replacement claim. A custom ledger connection is a recoverable saga boundary rather than a cross-database atomic transaction. Schedule `nvl:media:owner-slots:prune` to remove only expired terminal claims in bounded chunks.
 
 Set `media.migrations.enabled=false` only while staging a legacy table whose canonical name would collide with the package migration. Rename that source, create the package schema, then run `nvl:media:adopt-spatie` without `--apply`. The command maps standard Spatie ownership columns into associations, preserves UUIDs or derives stable UUIDs from integer identifiers, accepts optional translation and variation tables, verifies every backing path, and reports source/matched counts. `--apply` is refused until the dry run has no mapping or path errors; it never drops the staged source tables and is idempotent by deterministic identifiers.
