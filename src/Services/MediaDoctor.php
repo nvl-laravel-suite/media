@@ -29,6 +29,7 @@ use Nvl\Media\Support\MediaImageConfiguration;
 use Nvl\Media\Support\MediaQueueConfiguration;
 use Nvl\Tenancy\Services\EffectiveTenantConnection;
 use Nvl\Tenancy\Services\TenantInstallationState;
+use Nvl\Tenancy\Services\TenantResourceRegistry;
 use Throwable;
 
 /**
@@ -41,6 +42,7 @@ final readonly class MediaDoctor
         private MediaFileExistence $existence,
         private TenantInstallationState $tenantInstallation,
         private EffectiveTenantConnection $tenantConnections,
+        private TenantResourceRegistry $tenantResources,
     ) {}
 
     /**
@@ -78,7 +80,11 @@ final readonly class MediaDoctor
         }
 
         $checks = [];
+        $registered = $this->tenantResources->all();
         foreach (['media.assets', 'media.associations', 'media.variations', 'media.translations', 'media.multipart', 'media.slot-operations', 'media.catalog-grants'] as $resource) {
+            if (! isset($registered[$resource])) {
+                continue;
+            }
             try {
                 $this->tenantInstallation->assertUsable($resource);
                 $checks[] = new MediaDoctorCheckData(
@@ -115,6 +121,7 @@ final readonly class MediaDoctor
             MediaTables::Associations,
             MediaTables::ImageVariations,
             MediaTables::I18n,
+            MediaTables::MultipartUploads,
         ])->every(static fn (string $table): bool => Schema::hasColumn($table, 'ownership_key'));
         $checks[] = new MediaDoctorCheckData(
             'tenancy.schema.partition',
@@ -123,6 +130,15 @@ final readonly class MediaDoctor
             $mixedReady
                 ? 'Media ownership columns match the configured partition mode.'
                 : 'Media sharing or platform mode requires the adopted mixed ownership schema.',
+        );
+        $grantLocksReady = Schema::hasTable(MediaTables::TenantGrantLocks);
+        $checks[] = new MediaDoctorCheckData(
+            'tenancy.schema.catalog_grant_locks',
+            'error',
+            $grantLocksReady,
+            $grantLocksReady
+                ? 'Media catalog grant identity locks are installed.'
+                : 'Media catalog grant identity locks are missing.',
         );
 
         return $checks;

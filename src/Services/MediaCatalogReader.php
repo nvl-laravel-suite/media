@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Illuminate\Contracts\Config\Repository;
 use Nvl\Media\Data\MediaCatalogSnapshot;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Models\Media;
@@ -15,7 +16,7 @@ use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
 /** Narrow authorized scalar reader for one granted platform asset. */
 final readonly class MediaCatalogReader
 {
-    public function __construct(private TenantContext $context) {}
+    public function __construct(private TenantContext $context, private Repository $configuration) {}
 
     public function find(string $grantId): MediaCatalogSnapshot
     {
@@ -63,9 +64,44 @@ final readonly class MediaCatalogReader
             extension: $source->extension,
             mimeType: $source->mime_type,
             size: $source->size,
-            metadata: is_array($source->metadata) ? $source->metadata : [],
-            tags: is_array($source->tags) ? $source->tags : [],
+            metadata: $this->metadataProjection($source->metadata),
+            tags: $this->tagProjection($source->tags),
             translations: $translations,
         );
+    }
+
+    /** @return array<string, bool|float|int|string|null> */
+    private function metadataProjection(mixed $metadata): array
+    {
+        if (! is_array($metadata)) {
+            return [];
+        }
+
+        $approved = array_fill_keys((array) $this->configuration->get('media.catalog.metadata_keys', []), true);
+
+        return array_filter(
+            $metadata,
+            static fn (mixed $value, mixed $key): bool => is_string($key)
+                && isset($approved[$key])
+                && (is_scalar($value) || $value === null)
+                && (! is_string($value) || mb_strlen($value) <= 1_000),
+            ARRAY_FILTER_USE_BOTH,
+        );
+    }
+
+    /** @return list<string> */
+    private function tagProjection(mixed $tags): array
+    {
+        if (! is_array($tags)) {
+            return [];
+        }
+
+        $maximum = max(0, (int) $this->configuration->get('media.catalog.max_tags', 25));
+        $length = max(1, (int) $this->configuration->get('media.catalog.max_tag_length', 100));
+
+        return array_slice(array_values(array_filter(
+            $tags,
+            static fn (mixed $tag): bool => is_string($tag) && $tag !== '' && mb_strlen($tag) <= $length,
+        )), 0, $maximum);
     }
 }

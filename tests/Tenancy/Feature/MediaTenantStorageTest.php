@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Storage;
+use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Tests\Fixtures\MediaTenancyScenario;
 
 it('deduplicates within A but never reuses A asset or object in B', function (): void {
@@ -38,4 +39,20 @@ it('cleans only the active tenant orphan prefix', function (): void {
     expect($exitCode)->toBe(0)
         ->and(Storage::disk('tenant-disk')->exists($orphanA))->toBeFalse()
         ->and(Storage::disk('tenant-disk')->exists($pathB))->toBeTrue();
+});
+
+it('round trips a multipart physical path through one logical tenant folder', function (): void {
+    $scenario = MediaTenancyScenario::install();
+
+    $folder = $scenario->run($scenario::A, static function () use ($scenario): string {
+        $paths = app(MediaPathResolver::class);
+        $logical = $paths->logicalFolderFromStoragePath(
+            'media/tenants/'.$scenario::A.'/multipart/session/object.txt',
+        );
+
+        return $paths->storageFolder($logical);
+    });
+
+    expect($folder)->toBe('media/tenants/'.$scenario::A.'/multipart/session')
+        ->not->toContain('/tenants/'.$scenario::A.'/tenants/');
 });

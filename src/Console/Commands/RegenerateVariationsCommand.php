@@ -8,14 +8,13 @@ use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Bus;
 use Nvl\Media\Actions\GenerateImageVariationAction;
+use Nvl\Media\Contracts\MediaTenantWorklist;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Jobs\RegenerateMediaVariationsJob;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
 use Nvl\Tenancy\Contracts\TenantContext;
-use Nvl\Tenancy\Enums\TenantStatus;
-use Nvl\Tenancy\Services\EffectiveTenantConnection;
 use Nvl\Tenancy\Services\TenantRunner;
 use Nvl\Tenancy\ValueObjects\PlatformOperation;
 use Nvl\Tenancy\ValueObjects\TenantId;
@@ -53,7 +52,7 @@ class RegenerateVariationsCommand extends Command
         private readonly GenerateImageVariationAction $generateVariationAction,
         private readonly MediaConfiguredVariationService $configuredVariationService,
         private readonly TenantRunner $tenantRunner,
-        private readonly EffectiveTenantConnection $tenantConnections,
+        private readonly MediaTenantWorklist $tenantWorklist,
         private readonly TenantContext $tenantContext,
     ) {
         parent::__construct();
@@ -89,7 +88,7 @@ class RegenerateVariationsCommand extends Command
                 (string) $this->option('actor-type'),
                 (string) $this->option('actor-id'),
             ),
-            fn (): array => $this->activeTenantIds(),
+            fn (): array => $this->tenantWorklist->activeTenantIds(),
         );
         $exitCode = self::SUCCESS;
         foreach ($tenantIds as $tenantId) {
@@ -141,26 +140,6 @@ class RegenerateVariationsCommand extends Command
         }
 
         return $this->processQueued($type, is_string($disk) ? $disk : null, $presetNames, is_string($after) ? $after : null, is_string($before) ? $before : null);
-    }
-
-    /**
-     * Read the package tenant directory as a bounded worklist for this command.
-     *
-     * @return list<string>
-     */
-    private function activeTenantIds(): array
-    {
-        $connection = $this->tenantConnections->core();
-
-        $tenantIds = $connection->table('nvl_tenancy_tenants')
-            ->where('status', TenantStatus::Active->value)
-            ->orderBy('id')
-            ->pluck('id')
-            ->filter(static fn (mixed $id): bool => is_string($id) && $id !== '')
-            ->values()
-            ->all();
-
-        return array_values($tenantIds);
     }
 
     /**

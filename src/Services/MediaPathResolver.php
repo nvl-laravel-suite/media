@@ -216,6 +216,29 @@ final readonly class MediaPathResolver
         return implode('/', array_filter([self::rootFolder(), $partition, $folder]));
     }
 
+    /** Strip the exact active physical partition and return a reusable logical folder. */
+    public function logicalFolderFromStoragePath(string $storagePath): string
+    {
+        self::assertSafe($storagePath);
+        $folder = dirname(trim($storagePath, '/'));
+        $root = self::rootFolder();
+        $prefix = $root;
+        if (config('tenancy.enabled') === true) {
+            $snapshot = $this->tenantContext?->snapshot() ?? throw new TenantContextMissing;
+            $partition = match ($snapshot->mode) {
+                TenantContextMode::Tenant => 'tenants/'.$snapshot->tenantId?->value,
+                TenantContextMode::Platform => 'platform',
+                default => throw new TenantContextMissing,
+            };
+            $prefix = implode('/', array_filter([$root, $partition]));
+        }
+        if ($prefix !== '' && ($folder === $prefix || str_starts_with($folder, $prefix.'/'))) {
+            $folder = ltrim(substr($folder, strlen($prefix)), '/');
+        }
+
+        return $folder === '.' ? '' : $this->normalizeFolder($folder);
+    }
+
     /**
      * Get the configured conversions subfolder name.
      */

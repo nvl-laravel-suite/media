@@ -90,3 +90,26 @@ it('regenerates only inside the requested tenant boundary', function (): void {
         ->expectsOutput('[dry-run] Would regenerate variations for 1 media records.')
         ->assertSuccessful();
 });
+
+it('enumerates all tenants only through the host worklist contract', function (): void {
+    $scenario = MediaTenancyScenario::install();
+    config()->set('media.tenancy.active_tenant_worklist', [$scenario::B, $scenario::A]);
+    foreach ([$scenario::A, $scenario::B] as $tenant) {
+        $scenario->run($tenant, fn (): Media => Media::factory()->create([
+            ...app(TenantBoundary::class)->attributes('media.assets'),
+            'type' => MediaType::IMAGE,
+            'storage_path' => 'media/tenants/'.$tenant.'/fixture/worklist.jpg',
+        ]));
+    }
+
+    $this->artisan('nvl:media:regenerate', [
+        '--all-tenants' => true,
+        '--dry-run' => true,
+        '--force' => true,
+        '--no-interaction' => true,
+    ])
+        ->expectsOutput('Tenant '.$scenario::A)
+        ->expectsOutput('Tenant '.$scenario::B)
+        ->expectsOutput('[dry-run] Would regenerate variations for 1 media records.')
+        ->assertSuccessful();
+});

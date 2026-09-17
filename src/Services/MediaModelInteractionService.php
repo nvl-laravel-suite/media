@@ -16,6 +16,7 @@ use Nvl\Media\Contracts\UploadMediaContract;
 use Nvl\Media\MediaAdder;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
+use Nvl\Tenancy\Services\TenantBoundary;
 
 /**
  * Builds model-facing media adders from supported source inputs.
@@ -34,7 +35,18 @@ final readonly class MediaModelInteractionService
         private MediaMutationLock $mutationLock,
         private MediaOwnedSourceLifecycle $ownedSourceLifecycle,
         private MediaTemporaryFileRegistry $temporaryFiles,
+        private MediaTenantOwnerResolver $tenantOwners,
+        private TenantBoundary $tenantBoundary,
     ) {}
+
+    /** Assert that the model and loaded asset belong to the active boundary. */
+    public function assertTenantAccess(Model $owner, ?Media $media = null): void
+    {
+        $this->tenantOwners->resolve($owner);
+        if ($media instanceof Media) {
+            $this->tenantBoundary->assertRecord($media, 'media.assets');
+        }
+    }
 
     /**
      * Build a MediaAdder for the given model and source.

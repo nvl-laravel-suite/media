@@ -85,6 +85,25 @@ it('splits one legacy asset shared across tenants into verified independent grap
     expect($coordinator->backfill($plan, 100, $operation))->toBeFalse()
         ->and($coordinator->backfill($plan, 100, $operation))->toBeTrue()
         ->and($coordinator->verify($plan)->passed())->toBeTrue();
+    $reviewedPath = (string) DB::table(MediaTables::TenantAdoptionCopies)
+        ->where('adoption_run_id', $plan->id)
+        ->where('tenant_id', MediaTenancyScenario::B)
+        ->value('storage_path');
+    Storage::disk('tenant-disk')->delete($reviewedPath);
+    $corruptVerification = $coordinator->verify($plan);
+    expect($corruptVerification->passed())->toBeFalse();
+    Storage::disk('tenant-disk')->put($reviewedPath, $bytes);
+    expect($coordinator->verify($plan)->passed())->toBeTrue();
+    $reviewedVariationPath = (string) DB::table(MediaTables::ImageVariations)
+        ->where('media_id', $destinationId)
+        ->value('storage_path');
+    Storage::disk('tenant-disk')->delete($reviewedVariationPath);
+    expect($coordinator->verify($plan)->passed())->toBeFalse();
+    Storage::disk('tenant-disk')->put($reviewedVariationPath, 'legacy-variation');
+    DB::table(MediaTables::Associations)->where('media_id', $destinationId)->update(['tenant_id' => MediaTenancyScenario::A]);
+    expect($coordinator->verify($plan)->passed())->toBeFalse();
+    DB::table(MediaTables::Associations)->where('media_id', $destinationId)->update(['tenant_id' => MediaTenancyScenario::B]);
+    expect($coordinator->verify($plan)->passed())->toBeTrue();
     $coordinator->activate($plan, $operation);
     app(MaintenanceMode::class)->deactivate();
 

@@ -23,6 +23,8 @@ final class MediaTables
 
     public const string TenantGrants = 'px_media_tenant_grants';
 
+    public const string TenantGrantLocks = 'px_media_tenant_grant_locks';
+
     public const string TenantAdoptionCopies = 'px_media_tenant_adoption_copies';
 
     public const string MEDIA = self::Media;
@@ -38,6 +40,8 @@ final class MediaTables
     public const string MEDIA_OWNER_SLOT_OPERATIONS = self::OwnerSlotOperations;
 
     public const string MEDIA_TENANT_GRANTS = self::TenantGrants;
+
+    public const string MEDIA_TENANT_GRANT_LOCKS = self::TenantGrantLocks;
 
     public const string MEDIA_TENANT_ADOPTION_COPIES = self::TenantAdoptionCopies;
 

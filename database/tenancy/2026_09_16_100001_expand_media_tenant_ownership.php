@@ -15,9 +15,10 @@ return new class extends Migration
     {
         $mixed = config('tenancy.sharing.media') === 'copy';
         $platform = config('tenancy.resources.media') === 'platform';
-        $this->expand(MediaTables::Media, function (Blueprint $table) use ($mixed): void {
+        $partitioned = $mixed || $platform;
+        $this->expand(MediaTables::Media, function (Blueprint $table) use ($partitioned): void {
             $table->uuid('tenant_id')->nullable()->index('media_tenant_idx');
-            if ($mixed) {
+            if ($partitioned) {
                 $table->string('ownership_key', 44)->nullable()->index('media_ownership_idx');
             }
             $table->string('storage_path', 1024)->nullable();
@@ -27,16 +28,16 @@ return new class extends Migration
             $table->char('catalog_source_digest', 64)->nullable();
         });
         foreach ([MediaTables::Associations, MediaTables::ImageVariations, MediaTables::I18n] as $child) {
-            $this->expand($child, function (Blueprint $table) use ($mixed, $child): void {
+            $this->expand($child, function (Blueprint $table) use ($partitioned, $child): void {
                 $table->uuid('tenant_id')->nullable()->index($child.'_tenant_idx');
-                if ($mixed) {
+                if ($partitioned) {
                     $table->string('ownership_key', 44)->nullable()->index($child.'_ownership_idx');
                 }
             });
         }
-        $this->expand(MediaTables::MultipartUploads, function (Blueprint $table) use ($platform): void {
+        $this->expand(MediaTables::MultipartUploads, function (Blueprint $table) use ($partitioned): void {
             $table->uuid('tenant_id')->nullable()->index('media_multipart_tenant_idx');
-            if ($platform) {
+            if ($partitioned) {
                 $table->string('ownership_key', 44)->nullable()->index('media_multipart_ownership_idx');
             }
         });

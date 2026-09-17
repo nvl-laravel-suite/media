@@ -22,7 +22,7 @@ use Nvl\Media\Models\MediaMultipartUpload;
 use Nvl\Media\Services\MediaFileEffectScheduler;
 use Nvl\Media\Services\MediaMultipartLock;
 use Nvl\Media\Services\MediaMultipartSessionMapper;
-use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Media\Services\MediaPathResolver;
 use Throwable;
 
 /**
@@ -35,6 +35,7 @@ final readonly class CompleteMultipartUploadAction
         private MediaFileEffectScheduler $fileEffects,
         private MediaMultipartLock $lock,
         private MediaMultipartSessionMapper $sessionMapper,
+        private MediaPathResolver $paths,
     ) {}
 
     public function execute(
@@ -150,12 +151,7 @@ final readonly class CompleteMultipartUploadAction
             }
 
             $pathInfo = pathinfo($locked->object_key);
-            $folder = (string) ($pathInfo['dirname'] ?? '');
-            $root = trim(MediaConfiguration::string('media.root_folder', 'media'), '/');
-
-            if ($root !== '' && ($folder === $root || str_starts_with($folder, $root.'/'))) {
-                $folder = ltrim(substr($folder, strlen($root)), '/');
-            }
+            $folder = $this->paths->logicalFolderFromStoragePath($locked->object_key);
 
             $media = Media::query()->firstOrNew([
                 'upload_session_id' => $locked->id,

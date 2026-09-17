@@ -11,8 +11,10 @@ use Nvl\Tenancy\ValueObjects\TenantDescriptor;
 use Nvl\Tenancy\ValueObjects\TenantId;
 
 /** Resolves the two active Media fixture tenants. */
-final readonly class MediaTenancyDirectory implements TenantDirectory
+final class MediaTenancyDirectory implements TenantDirectory
 {
+    public TenantStatus $status = TenantStatus::Active;
+
     /** Resolve one fixture tenant. */
     public function find(TenantId $tenant): TenantDescriptor
     {
@@ -20,6 +22,6 @@ final readonly class MediaTenancyDirectory implements TenantDirectory
             throw new TenantNotFound;
         }
 
-        return new TenantDescriptor($tenant, TenantStatus::Active);
+        return new TenantDescriptor($tenant, $this->status);
     }
 }

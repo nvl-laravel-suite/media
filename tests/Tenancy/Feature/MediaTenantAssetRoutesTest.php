@@ -7,9 +7,12 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaUrlResolver;
+use Nvl\Media\Tests\Fixtures\MediaTenancyDirectory;
 use Nvl\Media\Tests\Fixtures\MediaTenancyScenario;
 use Nvl\Tenancy\Contracts\TenantContext;
+use Nvl\Tenancy\Contracts\TenantDirectory;
 use Nvl\Tenancy\Contracts\TenantSiteResolver;
+use Nvl\Tenancy\Enums\TenantStatus;
 use Nvl\Tenancy\ValueObjects\TenantId;
 use Nvl\Tenancy\ValueObjects\TenantSiteContext;
 
@@ -49,12 +52,38 @@ it('binds private capabilities to tenant revision and canonical origin', functio
     $path = (string) parse_url($url, PHP_URL_PATH).'?'.(string) parse_url($url, PHP_URL_QUERY);
     $this->call('GET', 'https://a.media.test'.$path, server: ['HTTP_HOST' => 'a.media.test', 'SERVER_NAME' => 'a.media.test', 'HTTPS' => 'on', 'SERVER_PORT' => 443])
         ->assertOk()->assertHeader('Cache-Control', 'max-age=0, no-store, public');
+    $this->call('HEAD', 'https://a.media.test'.$path, server: ['HTTP_HOST' => 'a.media.test', 'SERVER_NAME' => 'a.media.test', 'HTTPS' => 'on', 'SERVER_PORT' => 443])
+        ->assertOk();
+    $this->call('GET', 'https://a.media.test'.$path, server: [
+        'HTTP_HOST' => 'a.media.test', 'SERVER_NAME' => 'a.media.test', 'HTTPS' => 'on', 'SERVER_PORT' => 443,
+        'HTTP_RANGE' => 'bytes=0-6',
+    ])->assertStatus(206);
     $this->call('GET', 'https://b.media.test'.$path, server: ['HTTP_HOST' => 'b.media.test', 'SERVER_NAME' => 'b.media.test', 'HTTPS' => 'on', 'SERVER_PORT' => 443])
         ->assertNotFound();
 
     $scenario->run($scenario::A, static function () use ($media): void {
         Media::query()->whereKey($media->id)->increment('revision');
     });
+    $this->call('GET', 'https://a.media.test'.$path, server: ['HTTP_HOST' => 'a.media.test', 'SERVER_NAME' => 'a.media.test', 'HTTPS' => 'on', 'SERVER_PORT' => 443])
+        ->assertNotFound();
+});
+
+it('returns enumeration-neutral not found when the signed tenant becomes suspended', function (): void {
+    $scenario = MediaTenancyScenario::install();
+    $media = $scenario->upload($scenario::A, 'suspended route bytes', false);
+    $signingRequest = Request::create('https://a.media.test');
+    $signingRequest->attributes->set(TenantSiteContext::class, new TenantSiteContext(new TenantId($scenario::A), 'media', 'https://a.media.test'));
+    $url = $scenario->run($scenario::A, static fn (): string => (new MediaUrlResolver(
+        app(MediaDiskGateway::class),
+        app(MediaFileExistence::class),
+        app(TenantContext::class),
+        $signingRequest,
+    ))->privateUrl($media));
+    $directory = app(TenantDirectory::class);
+    expect($directory)->toBeInstanceOf(MediaTenancyDirectory::class);
+    $directory->status = TenantStatus::Suspended;
+
+    $path = (string) parse_url($url, PHP_URL_PATH).'?'.(string) parse_url($url, PHP_URL_QUERY);
     $this->call('GET', 'https://a.media.test'.$path, server: ['HTTP_HOST' => 'a.media.test', 'SERVER_NAME' => 'a.media.test', 'HTTPS' => 'on', 'SERVER_PORT' => 443])
         ->assertNotFound();
 });

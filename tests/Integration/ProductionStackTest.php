@@ -18,7 +18,10 @@ use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\MediaMultipartUpload;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaMutationLock;
+use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\S3MultipartUploadGateway;
+use Nvl\Media\Tests\Fixtures\MediaTenancyScenario;
+use Nvl\Tenancy\Services\TenantBoundary;
 
 it('proves PostgreSQL, Redis locking, and S3-compatible multipart recovery together', function (): void {
     if (! filter_var(env('NVL_MEDIA_PRODUCTION_INTEGRATION', false), FILTER_VALIDATE_BOOL)) {
@@ -26,6 +29,7 @@ it('proves PostgreSQL, Redis locking, and S3-compatible multipart recovery toget
     }
 
     expect(DB::connection()->getDriverName())->toBe('pgsql');
+    $scenario = MediaTenancyScenario::install();
 
     $redisStore = 'media-production-integration';
     config([
@@ -49,24 +53,27 @@ it('proves PostgreSQL, Redis locking, and S3-compatible multipart recovery toget
     Cache::forgetDriver($redisStore);
 
     $mediaId = (string) Str::uuid();
-    $lockKey = 'media:mutation:'.hash('sha256', $mediaId);
+    $lockKey = $scenario->run($scenario::A, fn (): string => 'media:mutation:'.hash(
+        'sha256',
+        app(TenantBoundary::class)->key('media.assets', $mediaId),
+    ));
     $competingLock = Cache::store($redisStore)->lock($lockKey, 10);
 
     expect($competingLock->get())->toBeTrue();
 
     try {
-        expect(fn (): mixed => app(MediaMutationLock::class)->execute(
+        expect(fn (): mixed => $scenario->run($scenario::A, fn (): mixed => app(MediaMutationLock::class)->execute(
             $mediaId,
             static fn (): bool => true,
-        ))->toThrow(MediaUploadException::class, 'Timed out');
+        )))->toThrow(MediaUploadException::class, 'Timed out');
     } finally {
         $competingLock->release();
     }
 
-    expect(app(MediaMutationLock::class)->execute(
+    expect($scenario->run($scenario::A, fn (): mixed => app(MediaMutationLock::class)->execute(
         $mediaId,
         static fn (): string => 'acquired',
-    ))->toBe('acquired');
+    )))->toBe('acquired');
 
     $disk = 'media-production-s3';
     $bucket = (string) env('MINIO_BUCKET', 'nvl-media');
@@ -95,7 +102,8 @@ it('proves PostgreSQL, Redis locking, and S3-compatible multipart recovery toget
 
     $contents = 'nvl-media-production-stack';
     $checksum = hash('sha256', $contents);
-    $objectKey = 'media/integration/'.Str::uuid().'.txt';
+    $objectKey = $scenario->run($scenario::A, fn (): string => app(MediaPathResolver::class)
+        ->storageFolder('integration').'/'.Str::uuid().'.txt');
     $uploadId = (string) Str::uuid();
     $expiresAt = new DateTimeImmutable('+10 minutes');
     $session = new MultipartUploadSessionData(
@@ -113,8 +121,8 @@ it('proves PostgreSQL, Redis locking, and S3-compatible multipart recovery toget
         minimumPartSize: 1,
         maximumParts: 1,
     );
-    $persisted = MediaMultipartUpload::forceCreate([
-        'id' => $uploadId,
+    $persisted = $scenario->run($scenario::A, fn (): MediaMultipartUpload => MediaMultipartUpload::forceCreate([
+        ...app(TenantBoundary::class)->attributes('media.multipart'), 'id' => $uploadId,
         'disk' => $disk,
         'object_key' => $objectKey,
         'object_key_hash' => hash('sha256', $objectKey),
@@ -133,7 +141,7 @@ it('proves PostgreSQL, Redis locking, and S3-compatible multipart recovery toget
         'maximum_part_size' => strlen($contents),
         'maximum_parts' => 1,
         'status' => MediaMultipartStatus::Initiated,
-    ]);
+    ]));
     $gateway = new S3MultipartUploadGateway(app(MediaDiskGateway::class));
     $completed = false;
 
@@ -179,6 +187,8 @@ it('proves PostgreSQL, Redis locking, and S3-compatible multipart recovery toget
         $completed = true;
 
         expect($object->path)->toBe($objectKey)
+            ->and($objectKey)->toStartWith('media/tenants/'.$scenario::A.'/')
+            ->not->toContain('/tenants/'.$scenario::A.'/tenants/')
             ->and($object->size)->toBe(strlen($contents))
             ->and($object->checksum)->toBe($checksum)
             ->and($gateway->inspect($session)?->checksum)->toBe($checksum);

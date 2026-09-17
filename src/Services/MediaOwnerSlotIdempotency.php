@@ -18,6 +18,7 @@ use Nvl\Media\Enums\MediaOwnerSlotOperationType;
 use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaOwnerSlotOperationClaim;
+use Nvl\Tenancy\Contracts\TenantContext;
 use Nvl\Tenancy\Services\TenantBoundary;
 
 /**
@@ -25,7 +26,10 @@ use Nvl\Tenancy\Services\TenantBoundary;
  */
 final class MediaOwnerSlotIdempotency
 {
-    public function __construct(private readonly TenantBoundary $tenantBoundary) {}
+    public function __construct(
+        private readonly TenantBoundary $tenantBoundary,
+        private readonly TenantContext $tenantContext,
+    ) {}
 
     /**
      * Claim a request, return its completed result, or reject unsafe key reuse.
@@ -45,6 +49,7 @@ final class MediaOwnerSlotIdempotency
         $actorIdentity = $this->actorIdentity($actor);
         $slot = $this->slot($slot);
         $requestHash = $this->requestHash(
+            tenant: $this->tenantContext->snapshot()->tenant?->value ?? 'disabled',
             actor: $actorIdentity,
             owner: $ownerIdentity,
             slot: $slot,
@@ -127,6 +132,7 @@ final class MediaOwnerSlotIdempotency
     ): ?MediaOwnerSlotOperationClaim {
         $key = $this->idempotencyKey($key);
         $requestHash = $this->requestHash(
+            tenant: $this->tenantContext->snapshot()->tenant?->value ?? 'disabled',
             actor: $this->actorIdentity($actor),
             owner: $this->ownerIdentity($owner),
             slot: $this->slot($slot),
@@ -161,6 +167,7 @@ final class MediaOwnerSlotIdempotency
     ): ?MediaOwnerSlotOperationClaim {
         $key = $this->idempotencyKey($key);
         $requestHash = $this->requestHash(
+            tenant: $this->tenantContext->snapshot()->tenant?->value ?? 'disabled',
             actor: $this->actorIdentity($actor),
             owner: $this->ownerIdentity($owner),
             slot: $this->slot($slot),
@@ -686,6 +693,7 @@ final class MediaOwnerSlotIdempotency
      * @param  array<array-key, mixed>  $payload
      */
     private function requestHash(
+        string $tenant,
         array $actor,
         array $owner,
         string $slot,
@@ -695,7 +703,8 @@ final class MediaOwnerSlotIdempotency
         try {
             $encoded = json_encode(
                 $this->canonicalValue([
-                    'version' => 1,
+                    'version' => 2,
+                    'tenant' => $tenant,
                     'actor' => $actor,
                     'owner' => $owner,
                     'slot' => $slot,

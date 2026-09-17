@@ -25,11 +25,13 @@ use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
 use Nvl\Tenancy\Exceptions\TenantConfigurationInvalid;
 use Nvl\Tenancy\Services\EffectiveTenantConnection;
 use Nvl\Tenancy\Services\TenantAdoptionMappings;
+use Nvl\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Tenancy\ValueObjects\TenantAdoptionPlan;
 use Nvl\Tenancy\ValueObjects\TenantAssignment;
 use Nvl\Tenancy\ValueObjects\TenantBackfillResult;
 use Nvl\Tenancy\ValueObjects\TenantVerification;
 use stdClass;
+use Throwable;
 
 /** Owns Media's reviewed nullable expansion, bounded backfill, and final constraints. */
 final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, TenantAdoptionMetadataValidator
@@ -53,6 +55,8 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
         private MediaDiskGateway $disks,
         private MediaFileExistence $existence,
         private MediaFileOperator $files,
+        private MediaTenantParentResolver $parentResolver,
+        private TenantResourceRegistry $resourcesRegistry,
     ) {}
 
     /** Validate the exact optional Media mapping metadata. */
@@ -77,7 +81,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
             throw new TenantConfigurationInvalid('Media assignment metadata contains unknown fields.');
         }
         $digest = $assignment->metadata['expected_digest'] ?? null;
-        if ($digest !== null && (! is_string($digest) || preg_match('/^[a-f0-9]{64}$/D', $digest) !== 1)) {
+        if (! is_string($digest) || preg_match('/^[a-f0-9]{64}$/D', $digest) !== 1) {
             throw new TenantConfigurationInvalid('Media expected_digest must be lowercase SHA-256.');
         }
         $splits = $assignment->metadata['splits'] ?? [];
@@ -101,6 +105,10 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
     /** @return list<string> */
     public function resources(): array
     {
+        if ($this->platformOwned() && $this->parentResolver->types() === []) {
+            return array_values(array_diff(self::RESOURCES, ['media.slot-operations']));
+        }
+
         return self::RESOURCES;
     }
 
@@ -138,7 +146,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
             if ($batch !== []) {
                 $this->connection($plan)->transaction(function () use ($batch): void {
                     foreach ($batch as $assignment) {
-                        $this->backfillRoot(MediaTables::MultipartUploads, $assignment);
+                        $this->backfillMultipart($assignment);
                     }
                 });
                 $last = $batch[array_key_last($batch)];
@@ -167,17 +175,33 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
                 $errors[] = $table.'.tenant_id';
             }
         }
+        $platform = $this->configuration->get('tenancy.resources.media') === 'platform';
         if ($schema->hasTable(MediaTables::Media)
-            && $connection->table(MediaTables::Media)->where(fn (Builder $query) => $query->whereNull('tenant_id')->orWhereNull('storage_path'))->exists()) {
+            && $connection->table(MediaTables::Media)->where(function (Builder $query) use ($platform): void {
+                $query->whereNull('storage_path');
+                if ($platform) {
+                    $query->orWhere('ownership_key', '!=', 'platform')->orWhereNotNull('tenant_id');
+                } else {
+                    $query->orWhereNull('tenant_id');
+                }
+            })->exists()) {
             $errors[] = 'media.assets.unmapped';
         }
         foreach ([MediaTables::Associations, MediaTables::ImageVariations, MediaTables::I18n] as $child) {
-            if ($schema->hasTable($child) && ($connection->table($child)->whereNull($child.'.tenant_id')->exists()
-                || $connection->table($child.' as child')->join(MediaTables::Media.' as parent', 'parent.id', '=', 'child.media_id')->whereColumn('child.tenant_id', '!=', 'parent.tenant_id')->exists())) {
+            $invalidChild = $platform
+                ? $connection->table($child)->where(fn (Builder $query) => $query->whereNotNull('tenant_id')->orWhere('ownership_key', '!=', 'platform'))->exists()
+                : $connection->table($child)->whereNull($child.'.tenant_id')->exists();
+            $mismatchedParent = $platform
+                ? $connection->table($child.' as child')->join(MediaTables::Media.' as parent', 'parent.id', '=', 'child.media_id')->whereColumn('child.ownership_key', '!=', 'parent.ownership_key')->exists()
+                : $connection->table($child.' as child')->join(MediaTables::Media.' as parent', 'parent.id', '=', 'child.media_id')->whereColumn('child.tenant_id', '!=', 'parent.tenant_id')->exists();
+            if ($schema->hasTable($child) && ($invalidChild || $mismatchedParent)) {
                 $errors[] = $child.'.ownership';
             }
         }
-        if ($schema->hasTable(MediaTables::MultipartUploads) && $connection->table(MediaTables::MultipartUploads)->whereNull('tenant_id')->exists()) {
+        $invalidMultipart = $platform
+            ? $connection->table(MediaTables::MultipartUploads)->where(fn (Builder $query) => $query->whereNotNull('tenant_id')->orWhere('ownership_key', '!=', 'platform'))->exists()
+            : $connection->table(MediaTables::MultipartUploads)->whereNull('tenant_id')->exists();
+        if ($schema->hasTable(MediaTables::MultipartUploads) && $invalidMultipart) {
             $errors[] = 'media.multipart.unmapped';
         }
         if ($schema->hasTable((new MediaOwnerSlotOperation)->getTable()) && $connection->table((new MediaOwnerSlotOperation)->getTable())->whereNull('tenant_id')->exists()) {
@@ -187,6 +211,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
             && $connection->table(MediaTables::TenantAdoptionCopies)->where('adoption_run_id', $plan->id)->where('status', '!=', 'committed')->exists()) {
             $errors[] = 'media.assets.copy_incomplete';
         }
+        $errors = [...$errors, ...$this->verifyReviewedCopies($plan), ...$this->verifyReviewedMultipart($plan)];
 
         return new TenantVerification(array_slice(array_values(array_unique($errors)), 0, 100));
     }
@@ -223,9 +248,27 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
             throw new TenantBoundaryViolation('A reviewed Media asset is unavailable.');
         }
         $source = $this->sourceFacts($row);
-        $expected = $assignment->metadata['expected_digest'] ?? null;
-        if (is_string($expected) && ! hash_equals($expected, $source['digest'])) {
+        $expected = $assignment->metadata['expected_digest'];
+        if (! is_string($expected) || ! hash_equals($expected, $source['digest'])) {
             throw new TenantBoundaryViolation('A reviewed Media digest changed.');
+        }
+        if ($this->platformOwned()) {
+            $sourcePath = $this->legacyPath($source);
+            if (! $this->verifiedObject($source['disk'], $sourcePath, $source['digest'], $source['size'])) {
+                throw new TenantBoundaryViolation('A reviewed Media source binary is unavailable or changed.');
+            }
+            $connection->transaction(function () use ($assignment, $connection, $sourcePath): void {
+                $ownership = ['tenant_id' => null, 'ownership_key' => 'platform'];
+                $connection->table(MediaTables::Media)->where('id', $assignment->recordId)->update([
+                    ...$ownership,
+                    'storage_path' => $sourcePath,
+                ]);
+                foreach ([MediaTables::Associations, MediaTables::ImageVariations, MediaTables::I18n] as $child) {
+                    $connection->table($child)->where('media_id', $assignment->recordId)->update($ownership);
+                }
+            });
+
+            return;
         }
         $committed = $connection->table(MediaTables::TenantAdoptionCopies)
             ->where('adoption_run_id', $plan->id)
@@ -233,8 +276,11 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
             ->where('status', 'committed')
             ->count();
         $destinations = $this->destinations($assignment);
-        if ($committed === count($destinations)) {
+        if ($committed === count($destinations) && $this->reviewedCopyGraphIsValid($plan, $assignment, $source, $destinations)) {
             return;
+        }
+        if ($committed > 0) {
+            throw new TenantBoundaryViolation('A committed Media adoption graph is incomplete or corrupt.');
         }
 
         $sourcePath = $this->legacyPath($source);
@@ -254,8 +300,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
             $associationDestinations[$association->id] = $tenant;
         }
         ksort($associationTenants);
-        if ($associations->isNotEmpty()
-            && array_keys($associationTenants) !== array_keys($destinations)) {
+        if (array_keys($associationTenants) !== array_keys($destinations)) {
             throw new TenantBoundaryViolation('Media split metadata does not match the complete reviewed owner graph.');
         }
 
@@ -426,10 +471,12 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
             throw new TenantBoundaryViolation('A reviewed Media association owner is invalid.');
         }
         $class = Relation::getMorphedModel($association->associable_type) ?? $association->associable_type;
-        if (! is_a($class, Model::class, true)) {
+        $allowed = $this->parentResolver->types();
+        if (! is_a($class, Model::class, true) || ! in_array($class, $allowed, true)) {
             throw new TenantBoundaryViolation('A reviewed Media association owner type is unknown.');
         }
         $owner = new $class;
+        $this->resourcesRegistry->forModel($owner);
         if ($owner->getConnection() !== $this->connectionByName()) {
             throw new TenantBoundaryViolation('A reviewed Media association owner uses another connection.');
         }
@@ -489,9 +536,13 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
 
     private function verifiedObject(string $disk, string $path, string $digest, int $size): bool
     {
-        return $this->existence->exists($disk, $path)
-            && $this->disks->size($disk, $path) === $size
-            && hash_equals($digest, $this->disks->checksum($disk, $path));
+        try {
+            return $this->existence->exists($disk, $path)
+                && $this->disks->size($disk, $path) === $size
+                && hash_equals($digest, $this->disks->checksum($disk, $path));
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**
@@ -584,12 +635,155 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
         });
     }
 
-    /** Backfill one independently mapped root. */
-    private function backfillRoot(string $table, TenantAssignment $assignment): void
+    /** Backfill one independently mapped multipart root and its physical object. */
+    private function backfillMultipart(TenantAssignment $assignment): void
     {
-        if ($this->connectionByName()->table($table)->where('id', $assignment->recordId)->lockForUpdate()->update($this->ownership($assignment->tenantId->value)) !== 1) {
+        $connection = $this->connectionByName();
+        $row = $connection->table(MediaTables::MultipartUploads)->where('id', $assignment->recordId)->lockForUpdate()->first();
+        if (! $row instanceof stdClass || ! is_string($row->disk) || ! is_string($row->object_key)
+            || ! is_string($row->expected_checksum)) {
             throw new TenantBoundaryViolation('A reviewed Media root is unavailable.');
         }
+        $size = $this->nonNegativeInteger($row->expected_size, 'Multipart expected size');
+        if (! $this->verifiedObject($row->disk, $row->object_key, $row->expected_checksum, $size)) {
+            throw new TenantBoundaryViolation('A reviewed multipart binary is unavailable or changed.');
+        }
+        if ($this->platformOwned()) {
+            $connection->table(MediaTables::MultipartUploads)->where('id', $assignment->recordId)->update([
+                'tenant_id' => null,
+                'ownership_key' => 'platform',
+            ]);
+
+            return;
+        }
+        $path = $this->tenantPath($assignment->tenantId->value, 'multipart', basename($row->object_key));
+        $this->copyVerified($row->disk, $row->object_key, $path, $row->expected_checksum, $size);
+        $connection->table(MediaTables::MultipartUploads)->where('id', $assignment->recordId)->update([
+            ...$this->ownership($assignment->tenantId->value),
+            'object_key' => $path,
+            'object_key_hash' => hash('sha256', $path),
+        ]);
+    }
+
+    /** @return list<string> */
+    private function verifyReviewedCopies(TenantAdoptionPlan $plan): array
+    {
+        if ($this->platformOwned()) {
+            return [];
+        }
+        $errors = [];
+        $after = null;
+        do {
+            $assignments = $this->mappings->assignments($plan, 'media.assets', $after, 100);
+            foreach ($assignments as $assignment) {
+                $row = $this->connection($plan)->table(MediaTables::Media)->where('id', $assignment->recordId)->first();
+                if (! $row instanceof stdClass || ! $this->reviewedCopyGraphIsValid($plan, $assignment, $this->sourceFacts($row), $this->destinations($assignment))) {
+                    $errors[] = 'media.assets.copy_graph:'.$assignment->recordId;
+                }
+                $after = $assignment->recordId;
+            }
+        } while ($assignments !== [] && count($errors) < 100);
+
+        return $errors;
+    }
+
+    /** @return list<string> */
+    private function verifyReviewedMultipart(TenantAdoptionPlan $plan): array
+    {
+        $errors = [];
+        $after = null;
+        do {
+            $assignments = $this->mappings->assignments($plan, 'media.multipart', $after, 100);
+            foreach ($assignments as $assignment) {
+                $row = $this->connection($plan)->table(MediaTables::MultipartUploads)->where('id', $assignment->recordId)->first();
+                $validOwnership = $this->platformOwned()
+                    ? $row instanceof stdClass && ($row->tenant_id ?? null) === null && ($row->ownership_key ?? null) === 'platform'
+                    : $row instanceof stdClass && $this->rowMatchesOwnership($row, $assignment->tenantId->value);
+                if (! $validOwnership || ! is_string($row->disk ?? null) || ! is_string($row->object_key ?? null)
+                    || ! is_string($row->expected_checksum ?? null)
+                    || ! $this->verifiedObject($row->disk, $row->object_key, $row->expected_checksum, $this->nonNegativeInteger($row->expected_size, 'Multipart expected size'))) {
+                    $errors[] = 'media.multipart.binary:'.$assignment->recordId;
+                }
+                $after = $assignment->recordId;
+            }
+        } while ($assignments !== [] && count($errors) < 100);
+
+        return $errors;
+    }
+
+    /**
+     * @param  array{id: string, digest: string, hash: string, disk: string, folder: string, size: int, storage_path: string|null}  $source
+     * @param  array<string, string>  $destinations
+     */
+    private function reviewedCopyGraphIsValid(TenantAdoptionPlan $plan, TenantAssignment $assignment, array $source, array $destinations): bool
+    {
+        $connection = $this->connection($plan);
+        $expectedTranslations = $connection->table(MediaTables::I18n)->where('media_id', $assignment->recordId)->count();
+        $sourceVariations = $connection->table(MediaTables::ImageVariations)->where('media_id', $assignment->recordId)->get();
+        $variationDigests = [];
+        foreach ($sourceVariations as $variation) {
+            if (! $variation instanceof stdClass || ! is_string($variation->storage_path)) {
+                return false;
+            }
+            $facts = $this->variationFacts($variation);
+            if (! $this->existence->exists($source['disk'], $variation->storage_path)) {
+                return false;
+            }
+            $variationDigests[$this->variationSignature($facts)] = $this->disks->checksum($source['disk'], $variation->storage_path);
+        }
+        foreach ($destinations as $tenant => $destinationId) {
+            $ledger = $connection->table(MediaTables::TenantAdoptionCopies)
+                ->where('adoption_run_id', $plan->id)->where('source_id', $assignment->recordId)->where('tenant_id', $tenant)->first();
+            $root = $connection->table(MediaTables::Media)->where('id', $destinationId)->first();
+            if (! $ledger instanceof stdClass || $ledger->status !== 'committed' || $ledger->destination_id !== $destinationId
+                || ! $root instanceof stdClass || ! $this->rowMatchesOwnership($root, $tenant) || $root->storage_path !== $ledger->storage_path
+                || ! is_string($ledger->disk) || ! is_string($ledger->storage_path) || ! is_string($ledger->digest)
+                || ! is_string($root->digest) || ! hash_equals($source['digest'], $ledger->digest) || ! hash_equals($source['digest'], $root->digest)
+                || ! $this->verifiedObject($ledger->disk, $ledger->storage_path, $ledger->digest, $source['size'])
+                || $connection->table(MediaTables::I18n)->where('media_id', $destinationId)->count() !== $expectedTranslations
+                || $connection->table(MediaTables::ImageVariations)->where('media_id', $destinationId)->count() !== $sourceVariations->count()) {
+                return false;
+            }
+            foreach ([MediaTables::I18n, MediaTables::Associations, MediaTables::ImageVariations] as $child) {
+                foreach ($connection->table($child)->where('media_id', $destinationId)->get() as $row) {
+                    if (! $row instanceof stdClass || ! $this->rowMatchesOwnership($row, $tenant)) {
+                        return false;
+                    }
+                    if ($child === MediaTables::Associations && $this->associationTenant($row) !== $tenant) {
+                        return false;
+                    }
+                    if ($child === MediaTables::ImageVariations) {
+                        $facts = $this->variationFacts($row);
+                        $digest = $variationDigests[$this->variationSignature($facts)] ?? null;
+                        if (! is_string($row->storage_path) || ! is_string($digest)
+                            || ! $this->verifiedObject($source['disk'], $row->storage_path, $digest, $facts['size'])) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            if (! $connection->table(MediaTables::Associations)->where('media_id', $destinationId)->exists()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** @param array{id: string, label: string, format: string, width: int, height: int, size: int, storage_path: string|null} $variation */
+    private function variationSignature(array $variation): string
+    {
+        return implode(':', [$variation['label'], $variation['format'], $variation['width'], $variation['height'], $variation['size']]);
+    }
+
+    private function rowMatchesOwnership(stdClass $row, string $tenant): bool
+    {
+        if (($row->tenant_id ?? null) !== $tenant) {
+            return false;
+        }
+
+        return $this->configuration->get('tenancy.sharing.media') !== 'copy'
+            || ($row->ownership_key ?? null) === 'tenant:'.$tenant;
     }
 
     /** Derive operation tenant identity from persisted canonical owners. */
@@ -613,7 +807,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
         }
     }
 
-    /** @return array{tenant_id: string, ownership_key?: string} */
+    /** @return array{tenant_id: string|null, ownership_key?: string} */
     private function ownership(string $tenant): array
     {
         $attributes = ['tenant_id' => $tenant];
@@ -622,6 +816,11 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
         }
 
         return $attributes;
+    }
+
+    private function platformOwned(): bool
+    {
+        return $this->configuration->get('tenancy.resources.media') === 'platform';
     }
 
     /** @return array{string, ?string} */

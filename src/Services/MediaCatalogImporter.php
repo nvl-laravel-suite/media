@@ -9,6 +9,7 @@ use Illuminate\Support\Str;
 use Nvl\Media\Contracts\MediaCatalogImport;
 use Nvl\Media\Data\MediaCatalogSnapshot;
 use Nvl\Media\Data\StagedCatalogMedia;
+use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Enums\MediaVisibility;
@@ -17,15 +18,21 @@ use Nvl\Media\Models\MediaTenantGrant;
 use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Support\MediaHashGenerator;
 use Nvl\Tenancy\Contracts\TenantContext;
+use Nvl\Tenancy\Contracts\TenantDirectory;
+use Nvl\Tenancy\Enums\TenantStatus;
 use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
 use Nvl\Tenancy\Services\EffectiveTenantConnection;
 use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Tenancy\ValueObjects\TenantId;
 
 /** Stages and persists independent tenant copies of authorized platform Media. */
 final class MediaCatalogImporter implements MediaCatalogImport
 {
     /** @var array<string, StagedCatalogMedia> */
     private array $staged = [];
+
+    /** @var array<string, array{grant_id: string, grant_revision: int, source_id: string, source_revision: int, source_digest: string, size: int}> */
+    private array $stagedSnapshots = [];
 
     /** @var array<string, true> */
     private array $persisted = [];
@@ -37,8 +44,10 @@ final class MediaCatalogImporter implements MediaCatalogImport
         private readonly MediaPathResolver $paths,
         private readonly MediaFileEffectScheduler $fileEffects,
         private readonly TenantContext $context,
+        private readonly TenantDirectory $directory,
         private readonly TenantBoundary $boundary,
         private readonly EffectiveTenantConnection $connections,
+        private readonly MediaVariationDispatcher $variations,
     ) {}
 
     public function inspect(string $grantId): MediaCatalogSnapshot
@@ -61,6 +70,14 @@ final class MediaCatalogImporter implements MediaCatalogImport
 
         $file = new StagedCatalogMedia($operationId, $tenant->value, $source->disk, $path, $source->sourceDigest, $source->size);
         $this->staged[$operationId] = $file;
+        $this->stagedSnapshots[$operationId] = [
+            'grant_id' => $source->grantId,
+            'grant_revision' => $source->grantRevision,
+            'source_id' => $source->sourceId,
+            'source_revision' => $source->sourceRevision,
+            'source_digest' => $source->sourceDigest,
+            'size' => $source->size,
+        ];
 
         return $file;
     }
@@ -69,13 +86,37 @@ final class MediaCatalogImporter implements MediaCatalogImport
     {
         $connection = $this->connection();
         $tenant = $this->context->requireTenant();
+        $expectedSnapshot = [
+            'grant_id' => $source->grantId,
+            'grant_revision' => $source->grantRevision,
+            'source_id' => $source->sourceId,
+            'source_revision' => $source->sourceRevision,
+            'source_digest' => $source->sourceDigest,
+            'size' => $source->size,
+        ];
         if ($connection->transactionLevel() < 1 || ! Str::isUuid($idempotencyKey)
             || $file->tenantId !== $tenant->value || ($this->staged[$file->operationId] ?? null) !== $file
+            || ($this->stagedSnapshots[$file->operationId] ?? null) !== $expectedSnapshot
             || $this->disks->size($file->disk, $file->storagePath) !== $file->size
             || ! hash_equals($file->digest, $this->disks->checksum($file->disk, $file->storagePath))) {
             throw new TenantBoundaryViolation('The staged Media tuple is invalid or no transaction is active.');
         }
 
+        if ($this->directory->find(new TenantId($tenant->value))->status !== TenantStatus::Active) {
+            throw new TenantBoundaryViolation('The Media catalog recipient is no longer active.');
+        }
+
+        $connection->table(MediaTables::TenantGrantLocks)->insertOrIgnore([
+            'tenant_id' => $tenant->value,
+            'media_id' => $source->sourceId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $connection->table(MediaTables::TenantGrantLocks)
+            ->where('tenant_id', $tenant->value)
+            ->where('media_id', $source->sourceId)
+            ->lockForUpdate()
+            ->first();
         $grant = MediaTenantGrant::withoutGlobalScope('tenant')
             ->whereKey($source->grantId)
             ->where('tenant_id', $tenant->value)
@@ -104,6 +145,7 @@ final class MediaCatalogImporter implements MediaCatalogImport
             }
             $this->files->delete($file->disk, $file->storagePath);
             unset($this->staged[$file->operationId]);
+            unset($this->stagedSnapshots[$file->operationId]);
 
             return $existing;
         }
@@ -145,6 +187,7 @@ final class MediaCatalogImporter implements MediaCatalogImport
             ]);
         }
         $this->persisted[$file->operationId] = true;
+        $this->variations->dispatchConfiguredForUpload($media);
 
         return $media;
     }
@@ -156,6 +199,7 @@ final class MediaCatalogImporter implements MediaCatalogImport
         }
         $this->files->delete($file->disk, $file->storagePath);
         unset($this->staged[$file->operationId]);
+        unset($this->stagedSnapshots[$file->operationId]);
     }
 
     private function connection(): Connection

@@ -16,6 +16,15 @@ return [
     'tenancy' => [
         // Ownership classification is separate from HTTP association allowlists.
         'owner_types' => [],
+        // Hosts may replace MediaTenantWorklist; the package never guesses a directory table.
+        'active_tenant_worklist' => [],
+    ],
+
+    'catalog' => [
+        // Only reviewed user-facing scalars cross from the platform catalog.
+        'metadata_keys' => ['alt', 'attribution', 'caption', 'copyright', 'description', 'title'],
+        'max_tags' => 25,
+        'max_tag_length' => 100,
     ],
 
     /*

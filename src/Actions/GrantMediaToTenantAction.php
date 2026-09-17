@@ -6,7 +6,9 @@ namespace Nvl\Media\Actions;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\MediaLifecycleStatus;
+use Nvl\Media\Events\MediaCatalogGrantAudited;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaTenantGrant;
 use Nvl\Tenancy\Contracts\TenantContext;
@@ -29,6 +31,18 @@ final readonly class GrantMediaToTenantAction
         }
 
         return DB::transaction(function () use ($mediaId, $recipient, $sourceRevision): MediaTenantGrant {
+            DB::table(MediaTables::TenantGrantLocks)->insertOrIgnore([
+                'tenant_id' => $recipient->value,
+                'media_id' => $mediaId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            DB::table(MediaTables::TenantGrantLocks)
+                ->where('tenant_id', $recipient->value)
+                ->where('media_id', $mediaId)
+                ->lockForUpdate()
+                ->first();
+
             $source = Media::withoutGlobalScope('tenant')
                 ->whereKey($mediaId)
                 ->whereNull('tenant_id')
@@ -53,10 +67,14 @@ final readonly class GrantMediaToTenantAction
                     'revoked_at' => null,
                 ])->save();
 
+                MediaCatalogGrantAudited::dispatch(
+                    'refreshed', $existing->id, $recipient->value, $source->id, $sourceRevision, $existing->revision,
+                );
+
                 return $existing->refresh();
             }
 
-            return MediaTenantGrant::withoutGlobalScope('tenant')->forceCreate([
+            $grant = MediaTenantGrant::withoutGlobalScope('tenant')->forceCreate([
                 'id' => (string) Str::uuid(),
                 'tenant_id' => $recipient->value,
                 'media_id' => $source->id,
@@ -64,6 +82,11 @@ final readonly class GrantMediaToTenantAction
                 'revision' => 1,
                 'enabled' => true,
             ]);
+            MediaCatalogGrantAudited::dispatch(
+                'created', $grant->id, $recipient->value, $source->id, $sourceRevision, $grant->revision,
+            );
+
+            return $grant;
         });
     }
 }

@@ -12,6 +12,14 @@ return new class extends Migration
     /** Create the concrete recipient grant ledger. */
     public function up(): void
     {
+        if (! Schema::hasTable(MediaTables::TenantGrantLocks)) {
+            Schema::create(MediaTables::TenantGrantLocks, static function (Blueprint $table): void {
+                $table->uuid('tenant_id');
+                $table->uuid('media_id');
+                $table->timestamps();
+                $table->primary(['tenant_id', 'media_id'], 'media_tenant_grant_locks_primary');
+            });
+        }
         if (Schema::hasTable(MediaTables::TenantGrants)) {
             return;
         }
@@ -35,5 +43,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists(MediaTables::TenantGrants);
+        Schema::dropIfExists(MediaTables::TenantGrantLocks);
     }
 };

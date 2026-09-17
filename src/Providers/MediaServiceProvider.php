@@ -32,6 +32,7 @@ use Nvl\Media\Contracts\MediaContentScanner;
 use Nvl\Media\Contracts\MediaHostResolver;
 use Nvl\Media\Contracts\MediaLibraryContract;
 use Nvl\Media\Contracts\MediaSearchDriver;
+use Nvl\Media\Contracts\MediaTenantWorklist;
 use Nvl\Media\Contracts\MultipartUploadGateway;
 use Nvl\Media\Contracts\ReusePublicMediaContract;
 use Nvl\Media\Contracts\UploadMediaContract;
@@ -43,6 +44,7 @@ use Nvl\Media\Models\MediaMultipartUpload;
 use Nvl\Media\Models\MediaTenantGrant;
 use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Policies\MediaPolicy;
+use Nvl\Media\Services\ConfiguredMediaTenantWorklist;
 use Nvl\Media\Services\DefaultMediaAuthorization;
 use Nvl\Media\Services\ImageOptimizationService;
 use Nvl\Media\Services\MediaAccessService;
@@ -269,6 +271,7 @@ final class MediaServiceProvider extends ServiceProvider
         );
         $this->app->bind(MediaAuthorization::class, DefaultMediaAuthorization::class);
         $this->app->scoped(MediaCatalogImport::class, MediaCatalogImporter::class);
+        $this->app->bindIf(MediaTenantWorklist::class, ConfiguredMediaTenantWorklist::class);
         $this->app->bind(MediaHostResolver::class, SystemMediaHostResolver::class);
         $this->app->bind(
             MediaSearchDriver::class,

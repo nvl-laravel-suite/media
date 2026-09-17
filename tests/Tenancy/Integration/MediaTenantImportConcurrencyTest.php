@@ -69,7 +69,7 @@ function mediaCatalogConcurrencyFixture(MediaTenancyScenario $scenario, string $
  *
  * @return array{import: array<string, mixed>, revoke: array<string, mixed>}
  */
-function mediaCatalogConcurrencyRace(MediaTenantGrant $grant, Media $source, string $winner): array
+function mediaCatalogConcurrencyRace(MediaTenantGrant $grant, Media $source, string $winner, string $grantMutation = 'revoke'): array
 {
     $paths = [];
     foreach (['import-ready', 'import-gate', 'revoke-ready', 'revoke-gate', 'import-result', 'revoke-result'] as $name) {
@@ -124,11 +124,13 @@ function mediaCatalogConcurrencyRace(MediaTenantGrant $grant, Media $source, str
                     }
                     usleep(10_000);
                 }
-                $revoked = app(TenantRunner::class)->platform(
+                $mutated = app(TenantRunner::class)->platform(
                     new PlatformOperation('fixture.catalog', 'test', 'fixture'),
-                    fn (): MediaTenantGrant => app(RevokeMediaTenantGrantAction::class)->execute($grant->id, $grant->revision),
+                    fn (): MediaTenantGrant => $grantMutation === 'refresh'
+                        ? app(GrantMediaToTenantAction::class)->execute($source->id, new TenantId(MediaTenancyScenario::A), $source->revision)
+                        : app(RevokeMediaTenantGrantAction::class)->execute($grant->id, $grant->revision),
                 );
-                $result = ['ok' => true, 'revision' => $revoked->revision];
+                $result = ['ok' => true, 'revision' => $mutated->revision];
             } catch (Throwable $exception) {
                 $result = ['ok' => false, 'error' => $exception::class, 'message' => $exception->getMessage()];
             }
@@ -198,4 +200,26 @@ it('linearizes catalog import against revocation with each process winning once'
 })->skip(
     fn (): bool => mediaCatalogConcurrencySkipReason() !== null,
     'The Media catalog race requires PostgreSQL/MySQL and pcntl.',
+);
+
+it('linearizes catalog import against a separate-process grant refresh', function (): void {
+    $scenario = MediaTenancyScenario::install(catalogCopies: true);
+    $importFirst = mediaCatalogConcurrencyFixture($scenario, 'refresh-import-first');
+    $importResult = mediaCatalogConcurrencyRace($importFirst['grant'], $importFirst['source'], 'import', 'refresh');
+
+    expect($importResult['import']['ok'])->toBeTrue()
+        ->and($importResult['revoke']['ok'])->toBeTrue()
+        ->and($importResult['revoke']['revision'])->toBe(2);
+
+    $refreshFirst = mediaCatalogConcurrencyFixture($scenario, 'refresh-first');
+    $refreshResult = mediaCatalogConcurrencyRace($refreshFirst['grant'], $refreshFirst['source'], 'revoke', 'refresh');
+
+    expect($refreshResult['revoke']['ok'])->toBeTrue()
+        ->and($refreshResult['import']['ok'])->toBeFalse()
+        ->and($refreshResult['import']['message'])->toContain('changed during staging')
+        ->and(DB::table(MediaTables::Media)->where('tenant_id', MediaTenancyScenario::A)
+            ->where('catalog_source_id', $refreshFirst['source']->id)->exists())->toBeFalse();
+})->skip(
+    fn (): bool => mediaCatalogConcurrencySkipReason() !== null,
+    'The Media catalog refresh race requires PostgreSQL/MySQL and pcntl.',
 );
