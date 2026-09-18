@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Schema;
@@ -586,73 +587,79 @@ it('projects the collection from the selected association without changing libra
 });
 
 it('reads and replaces a registered single-file owner slot with an exact replay', function (): void {
-    $owner = ownerSlotWorkflowOwner();
-    $actor = ownerSlotWorkflowActor();
-    $actorData = ownerSlotWorkflowActorData($actor);
-    $media = ownerSlotMedia([
-        'uploaded_by' => (string) $actor->getKey(),
-        'uploaded_by_type' => $actor->getMorphClass(),
-    ]);
-    $key = Str::uuid()->toString();
+    Carbon::setTestNow('2026-08-07 12:00:00');
 
-    useOwnerSlotAuthorization(
-        static fn (
-            MediaActorData $candidateActor,
-            MediaAbility $ability,
-            ?Media $candidateMedia,
-            ?Model $candidateOwner,
-        ): bool => $candidateActor->id === (string) $actor->getKey()
-            && $candidateOwner?->is($owner) === true
-            && in_array($ability, [MediaAbility::Associate, MediaAbility::View], true),
-    );
+    try {
+        $owner = ownerSlotWorkflowOwner();
+        $actor = ownerSlotWorkflowActor();
+        $actorData = ownerSlotWorkflowActorData($actor);
+        $media = ownerSlotMedia([
+            'uploaded_by' => (string) $actor->getKey(),
+            'uploaded_by_type' => $actor->getMorphClass(),
+        ]);
+        $key = Str::uuid()->toString();
 
-    expect(app(GetOwnerMediaSlotAction::class)->execute(
-        actor: $actorData,
-        owner: $owner,
-        slot: 'document',
-    ))->toBeNull();
+        useOwnerSlotAuthorization(
+            static fn (
+                MediaActorData $candidateActor,
+                MediaAbility $ability,
+                ?Media $candidateMedia,
+                ?Model $candidateOwner,
+            ): bool => $candidateActor->id === (string) $actor->getKey()
+                && $candidateOwner?->is($owner) === true
+                && in_array($ability, [MediaAbility::Associate, MediaAbility::View], true),
+        );
 
-    Event::fake([MediaAttached::class, MediaDetached::class, MediaMutated::class]);
+        expect(app(GetOwnerMediaSlotAction::class)->execute(
+            actor: $actorData,
+            owner: $owner,
+            slot: 'document',
+        ))->toBeNull();
 
-    $result = app(ReplaceOwnerMediaSlotAction::class)->execute(
-        actor: $actorData,
-        owner: $owner,
-        slot: 'document',
-        mediaId: mb_strtoupper($media->id),
-        idempotencyKey: $key,
-    );
-    $replay = app(ReplaceOwnerMediaSlotAction::class)->execute(
-        actor: $actorData,
-        owner: $owner,
-        slot: 'document',
-        mediaId: $media->id,
-        idempotencyKey: $key,
-    );
-    $read = app(GetOwnerMediaSlotAction::class)->execute(
-        actor: $actorData,
-        owner: $owner,
-        slot: 'document',
-    );
+        Event::fake([MediaAttached::class, MediaDetached::class, MediaMutated::class]);
 
-    expect($result)->toBeInstanceOf(MediaLibraryItem::class)
-        ->and($result->id)->toBe($media->id)
-        ->and($result->collection)->toBe('document')
-        ->and($replay->toArray())->toBe($result->toArray())
-        ->and($read?->toArray())->toBe($result->toArray())
-        ->and($owner->fresh()->getFirstMedia('document')?->id)->toBe($media->id);
+        $result = app(ReplaceOwnerMediaSlotAction::class)->execute(
+            actor: $actorData,
+            owner: $owner,
+            slot: 'document',
+            mediaId: mb_strtoupper($media->id),
+            idempotencyKey: $key,
+        );
+        $replay = app(ReplaceOwnerMediaSlotAction::class)->execute(
+            actor: $actorData,
+            owner: $owner,
+            slot: 'document',
+            mediaId: $media->id,
+            idempotencyKey: $key,
+        );
+        $read = app(GetOwnerMediaSlotAction::class)->execute(
+            actor: $actorData,
+            owner: $owner,
+            slot: 'document',
+        );
 
-    $association = MediaAssociation::query()
-        ->where('media_id', $media->id)
-        ->where('associable_type', $owner->getMorphClass())
-        ->where('associable_id', $owner->getKey())
-        ->where('collection', 'document')
-        ->sole();
+        expect($result)->toBeInstanceOf(MediaLibraryItem::class)
+            ->and($result->id)->toBe($media->id)
+            ->and($result->collection)->toBe('document')
+            ->and($replay->toArray())->toBe($result->toArray())
+            ->and($read?->toArray())->toBe($result->toArray())
+            ->and($owner->fresh()->getFirstMedia('document')?->id)->toBe($media->id);
 
-    expect($association->metadata)->toBe(['slot' => 'document']);
+        $association = MediaAssociation::query()
+            ->where('media_id', $media->id)
+            ->where('associable_type', $owner->getMorphClass())
+            ->where('associable_id', $owner->getKey())
+            ->where('collection', 'document')
+            ->sole();
 
-    Event::assertDispatchedTimes(MediaAttached::class, 1);
-    Event::assertNotDispatched(MediaDetached::class);
-    Event::assertNotDispatched(MediaMutated::class);
+        expect($association->metadata)->toBe(['slot' => 'document']);
+
+        Event::assertDispatchedTimes(MediaAttached::class, 1);
+        Event::assertNotDispatched(MediaDetached::class);
+        Event::assertNotDispatched(MediaMutated::class);
+    } finally {
+        Carbon::setTestNow();
+    }
 });
 
 it('works without custom authorization for the exact private uploader identity', function (): void {
@@ -724,43 +731,49 @@ it('exactly replays a completed replacement after a later exclusive replacement'
 });
 
 it('persists and replays a valid owner-slot result larger than 65535 bytes', function (): void {
-    $owner = ownerSlotWorkflowOwner();
-    $actor = ownerSlotWorkflowActor();
-    $actorData = ownerSlotWorkflowActorData($actor);
-    $tags = array_map(
-        static fn (int $index): string => sprintf(
-            'tag-%04d-%s',
-            $index,
-            str_repeat('x', 72),
-        ),
-        range(1, 1_000),
-    );
-    $media = ownerSlotMedia([
-        'tags' => $tags,
-        'uploaded_by' => (string) $actor->getKey(),
-        'uploaded_by_type' => $actor->getMorphClass(),
-    ]);
-    $key = Str::uuid()->toString();
+    Carbon::setTestNow('2026-08-07 12:00:00');
 
-    $result = app(ReplaceOwnerMediaSlotAction::class)->execute(
-        $actorData,
-        $owner,
-        'document',
-        $media->id,
-        $key,
-    );
-    $replay = app(ReplaceOwnerMediaSlotAction::class)->execute(
-        $actorData,
-        $owner,
-        'document',
-        $media->id,
-        $key,
-    );
+    try {
+        $owner = ownerSlotWorkflowOwner();
+        $actor = ownerSlotWorkflowActor();
+        $actorData = ownerSlotWorkflowActorData($actor);
+        $tags = array_map(
+            static fn (int $index): string => sprintf(
+                'tag-%04d-%s',
+                $index,
+                str_repeat('x', 72),
+            ),
+            range(1, 1_000),
+        );
+        $media = ownerSlotMedia([
+            'tags' => $tags,
+            'uploaded_by' => (string) $actor->getKey(),
+            'uploaded_by_type' => $actor->getMorphClass(),
+        ]);
+        $key = Str::uuid()->toString();
 
-    expect(strlen(json_encode($result->toArray(), JSON_THROW_ON_ERROR)))
-        ->toBeGreaterThan(65_535)
-        ->and($replay->toArray())->toBe($result->toArray())
-        ->and($owner->fresh()->getFirstMedia('document')?->id)->toBe($media->id);
+        $result = app(ReplaceOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $owner,
+            'document',
+            $media->id,
+            $key,
+        );
+        $replay = app(ReplaceOwnerMediaSlotAction::class)->execute(
+            $actorData,
+            $owner,
+            'document',
+            $media->id,
+            $key,
+        );
+
+        expect(strlen(json_encode($result->toArray(), JSON_THROW_ON_ERROR)))
+            ->toBeGreaterThan(65_535)
+            ->and($replay->toArray())->toBe($result->toArray())
+            ->and($owner->fresh()->getFirstMedia('document')?->id)->toBe($media->id);
+    } finally {
+        Carbon::setTestNow();
+    }
 });
 
 it('rejects unknown, unsaved, non-single, and corrupt owner slots', function (): void {
