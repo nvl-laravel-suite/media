@@ -86,10 +86,11 @@ final class AttachMediaAction implements AttachMediaContract
                     'metadata' => ! empty($metadata) ? $metadata : null,
                 ]);
                 if (config('tenancy.enabled') === true) {
-                    $association->forceFill([
-                        'tenant_id' => $media->tenant_id,
-                        'ownership_key' => $media->ownership_key,
-                    ]);
+                    $ownership = ['tenant_id' => $media->tenant_id];
+                    if (array_key_exists('ownership_key', $media->getAttributes())) {
+                        $ownership['ownership_key'] = $media->ownership_key;
+                    }
+                    $association->forceFill($ownership);
                 }
                 $association->save();
 

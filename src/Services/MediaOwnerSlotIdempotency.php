@@ -49,7 +49,7 @@ final class MediaOwnerSlotIdempotency
         $actorIdentity = $this->actorIdentity($actor);
         $slot = $this->slot($slot);
         $requestHash = $this->requestHash(
-            tenant: $this->tenantContext->snapshot()->tenant?->value ?? 'disabled',
+            tenant: $this->tenantPartition(),
             actor: $actorIdentity,
             owner: $ownerIdentity,
             slot: $slot,
@@ -132,7 +132,7 @@ final class MediaOwnerSlotIdempotency
     ): ?MediaOwnerSlotOperationClaim {
         $key = $this->idempotencyKey($key);
         $requestHash = $this->requestHash(
-            tenant: $this->tenantContext->snapshot()->tenant?->value ?? 'disabled',
+            tenant: $this->tenantPartition(),
             actor: $this->actorIdentity($actor),
             owner: $this->ownerIdentity($owner),
             slot: $this->slot($slot),
@@ -167,7 +167,7 @@ final class MediaOwnerSlotIdempotency
     ): ?MediaOwnerSlotOperationClaim {
         $key = $this->idempotencyKey($key);
         $requestHash = $this->requestHash(
-            tenant: $this->tenantContext->snapshot()->tenant?->value ?? 'disabled',
+            tenant: $this->tenantPartition(),
             actor: $this->actorIdentity($actor),
             owner: $this->ownerIdentity($owner),
             slot: $this->slot($slot),
@@ -683,6 +683,16 @@ final class MediaOwnerSlotIdempotency
         }
 
         return $slot;
+    }
+
+    /** Resolve the stable tenant component of one idempotency identity. */
+    private function tenantPartition(): string
+    {
+        $snapshot = $this->tenantContext->snapshot();
+
+        return $snapshot->tenantId !== null
+            ? $snapshot->tenantId->value
+            : $snapshot->mode->value;
     }
 
     /**

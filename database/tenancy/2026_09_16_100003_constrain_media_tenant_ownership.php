@@ -178,7 +178,7 @@ return new class extends Migration
 
             return;
         }
-        $expression = $driver === 'mysql'
+        $expression = in_array($driver, ['mysql', 'mariadb'], true)
             ? "((ownership_key = 'platform' AND tenant_id IS NULL) OR (tenant_id IS NOT NULL AND ownership_key = CONCAT('tenant:', tenant_id)))"
             : "((ownership_key = 'platform' AND tenant_id IS NULL) OR (tenant_id IS NOT NULL AND ownership_key = 'tenant:' || tenant_id))";
         try {

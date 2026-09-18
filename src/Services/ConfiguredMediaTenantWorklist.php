@@ -16,12 +16,18 @@ final readonly class ConfiguredMediaTenantWorklist implements MediaTenantWorklis
 
     public function activeTenantIds(): array
     {
-        $configured = (array) $this->configuration->get('media.tenancy.active_tenant_worklist', []);
-        if (array_any($configured, static fn (mixed $id): bool => ! is_string($id) || ! Str::isUuid($id))) {
+        $configured = $this->configuration->get('media.tenancy.active_tenant_worklist', []);
+        if (! is_array($configured) || ! array_is_list($configured)
+            || array_any($configured, static fn (mixed $id): bool => ! is_string($id) || ! Str::isUuid($id))) {
             throw new TenantConfigurationInvalid('The Media active tenant worklist must contain canonical UUIDs.');
         }
-        /** @var list<string> $ids */
-        $ids = array_values(array_unique($configured));
+        $ids = [];
+        foreach ($configured as $id) {
+            if (is_string($id)) {
+                $ids[$id] = $id;
+            }
+        }
+        $ids = array_values($ids);
 
         sort($ids);
 

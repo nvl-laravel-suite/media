@@ -45,9 +45,10 @@ final readonly class MediaTenancyResources
             new TenantResourceDefinition('media.catalog-grants', 'media.catalog-grants', MediaTenantGrant::class),
         ];
         $ownerTypes = $this->configuration->get('media.tenancy.owner_types', []);
-        if ((! $platform && $this->configuration->get('tenancy.enabled') === true) || (is_array($ownerTypes) && $ownerTypes !== [])) {
-            $definitions[] = new TenantResourceDefinition('media.slot-operations', 'media', MediaOwnerSlotOperation::class, TenantResourceKind::Inherited, null, 'owner');
+        if (! is_array($ownerTypes)) {
+            throw new TenantConfigurationInvalid('Media tenant owner types must be an array.');
         }
+        $definitions[] = new TenantResourceDefinition('media.slot-operations', 'media', MediaOwnerSlotOperation::class, TenantResourceKind::Inherited, null, 'owner');
 
         foreach ($definitions as $definition) {
             $resources->register($definition);

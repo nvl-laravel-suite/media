@@ -722,7 +722,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
         $sourceVariations = $connection->table(MediaTables::ImageVariations)->where('media_id', $assignment->recordId)->get();
         $variationDigests = [];
         foreach ($sourceVariations as $variation) {
-            if (! $variation instanceof stdClass || ! is_string($variation->storage_path)) {
+            if (! is_string($variation->storage_path)) {
                 return false;
             }
             $facts = $this->variationFacts($variation);
@@ -746,7 +746,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
             }
             foreach ([MediaTables::I18n, MediaTables::Associations, MediaTables::ImageVariations] as $child) {
                 foreach ($connection->table($child)->where('media_id', $destinationId)->get() as $row) {
-                    if (! $row instanceof stdClass || ! $this->rowMatchesOwnership($row, $tenant)) {
+                    if (! $this->rowMatchesOwnership($row, $tenant)) {
                         return false;
                     }
                     if ($child === MediaTables::Associations && $this->associationTenant($row) !== $tenant) {

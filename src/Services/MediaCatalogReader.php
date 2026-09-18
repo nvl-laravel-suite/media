@@ -77,7 +77,15 @@ final readonly class MediaCatalogReader
             return [];
         }
 
-        $approved = array_fill_keys((array) $this->configuration->get('media.catalog.metadata_keys', []), true);
+        $configuredKeys = $this->configuration->get('media.catalog.metadata_keys', []);
+        $approved = [];
+        if (is_array($configuredKeys)) {
+            foreach ($configuredKeys as $key) {
+                if (is_string($key)) {
+                    $approved[$key] = true;
+                }
+            }
+        }
 
         return array_filter(
             $metadata,
@@ -96,8 +104,10 @@ final readonly class MediaCatalogReader
             return [];
         }
 
-        $maximum = max(0, (int) $this->configuration->get('media.catalog.max_tags', 25));
-        $length = max(1, (int) $this->configuration->get('media.catalog.max_tag_length', 100));
+        $configuredMaximum = $this->configuration->get('media.catalog.max_tags', 25);
+        $configuredLength = $this->configuration->get('media.catalog.max_tag_length', 100);
+        $maximum = max(0, is_int($configuredMaximum) ? $configuredMaximum : 25);
+        $length = max(1, is_int($configuredLength) ? $configuredLength : 100);
 
         return array_slice(array_values(array_filter(
             $tags,
