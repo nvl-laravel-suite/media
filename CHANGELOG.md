@@ -4,6 +4,8 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-09-21
+
 - Documented opt-in tenant ownership, independent catalog copies, immutable
   adoption mappings, backup-based recovery, and bounded tenant cleanup.
 
