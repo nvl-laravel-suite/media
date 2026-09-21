@@ -3,14 +3,18 @@
 declare(strict_types=1);
 
 use Illuminate\Cache\Repository;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Nvl\Media\Actions\DeleteMediaAction;
 use Nvl\Media\Contracts\MediaContentScanner;
 use Nvl\Media\Contracts\MultipartUploadGateway;
+use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\MediaOwnerSlotOperationStatus;
 use Nvl\Media\Enums\MediaOwnerSlotOperationType;
 use Nvl\Media\Enums\MediaType;
@@ -49,10 +53,26 @@ function mediaDoctorPersistedPathCheck(): object
 }
 
 it('reports a healthy standalone installation as machine-readable output', function () {
+    $queries = [];
+    DB::listen(static function (QueryExecuted $query) use (&$queries): void {
+        $queries[] = $query->sql;
+    });
+
+    expect(Schema::hasColumn(MediaTables::Media, 'storage_path'))->toBeFalse();
+
     $this->artisan('nvl:media:doctor', [
         '--strict' => true,
         '--format' => 'json',
     ])->assertSuccessful();
+
+    $sampleQuery = collect($queries)->first(
+        static fn (string $query): bool => str_contains($query, MediaTables::Media)
+            && str_contains($query, 'deleted_at')
+            && str_contains($query, 'order by'),
+    );
+
+    expect($sampleQuery)->not->toBeNull()
+        ->and($sampleQuery)->not->toContain('storage_path');
 });
 
 describe('persisted storage path diagnostics', function (): void {

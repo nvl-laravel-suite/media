@@ -15,8 +15,9 @@ All notable changes to `nvl/media` are documented here.
 
 - Limited Doctor's persisted-path sampling to live Media records, so
   intentionally removed objects for soft-deleted diagnostic tombstones no
-  longer fail readiness checks. Tenant-owned immutable storage paths are now
-  included in the sample projection.
+  longer fail readiness checks. Tenant-owned immutable storage paths are
+  included only when the opt-in tenancy schema provides that column, preserving
+  standalone compatibility across supported database engines.
 
 ## [2.1.0] - 2026-09-21
 

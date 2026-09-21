@@ -557,12 +557,17 @@ final readonly class MediaDoctor
         }
 
         $limit = MediaConfiguration::integer('media.adoption.path_sample_size', 25, 1);
+        $columns = ['id', 'disk', 'folder', 'hash'];
+
+        if (Schema::hasColumn(MediaTables::Media, 'storage_path')) {
+            $columns[] = 'storage_path';
+        }
 
         try {
             $samples = Media::query()
                 ->orderBy('id')
                 ->limit($limit)
-                ->get(['id', 'disk', 'folder', 'hash', 'storage_path']);
+                ->get($columns);
         } catch (Throwable $exception) {
             return new MediaDoctorCheckData(
                 'storage.persisted_paths',
