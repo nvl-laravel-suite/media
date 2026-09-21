@@ -541,9 +541,9 @@ Package-owned media, association, variation, multipart-session, owner-slot-opera
 
 Set `media.migrations.enabled=false` only while staging a legacy table whose canonical name would collide with the package migration. Rename that source, create the package schema, then run `nvl:media:adopt-spatie` without `--apply`. The command maps standard Spatie ownership columns into associations, preserves UUIDs or derives stable UUIDs from integer identifiers, accepts optional translation and variation tables, verifies every backing path, and reports source/matched counts. `--apply` is refused until the dry run has no mapping or path errors; it never drops the staged source tables and is idempotent by deterministic identifiers.
 
-For in-place adoption, `media.root_folder` must describe the physical object layout, not the desired future layout. When persisted `folder` values already contain the complete path below the disk root, set `MEDIA_ROOT_FOLDER=` (empty) before dry-run and cutover. Otherwise physically move objects through `nvl:media:migrate-disk` and reconcile them. Doctor samples persisted rows against storage and reports root-folder drift before URLs are enabled.
+For in-place adoption, `media.root_folder` must describe the physical object layout, not the desired future layout. When persisted `folder` values already contain the complete path below the disk root, set `MEDIA_ROOT_FOLDER=` (empty) before dry-run and cutover. Otherwise physically move objects through `nvl:media:migrate-disk` and reconcile them. Doctor samples live Media rows against storage and reports root-folder drift before URLs are enabled. Soft-deleted diagnostic tombstones are excluded because canonical deletion may intentionally remove their objects.
 
-A strict `storage.persisted_paths` failure is a data incident. Run read-only
+A strict `storage.persisted_paths` failure for a live Media row is a data incident. Run read-only
 Doctor and `nvl:media:reconcile --production --orphans`, verify disk/root/path,
 hash, backups, and associations, and restore the original object when possible.
 Use the relocation/migration API for intentional moves; never edit paths

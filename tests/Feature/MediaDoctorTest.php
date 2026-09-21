@@ -5,13 +5,17 @@ declare(strict_types=1);
 use Illuminate\Cache\Repository;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Nvl\Media\Actions\DeleteMediaAction;
 use Nvl\Media\Contracts\MediaContentScanner;
 use Nvl\Media\Contracts\MultipartUploadGateway;
 use Nvl\Media\Enums\MediaOwnerSlotOperationStatus;
 use Nvl\Media\Enums\MediaOwnerSlotOperationType;
+use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Exceptions\MediaUploadException;
+use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Providers\MediaServiceProvider;
 use Nvl\Media\Services\MediaDiskGateway;
@@ -22,11 +26,172 @@ use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Tests\Stubs\NonLockingMediaDoctorStore;
 use Nvl\Media\Tests\Stubs\OwnerSlotWorkflowModel;
 
+function createMediaDoctorPathSample(array $overrides = []): Media
+{
+    return Media::query()->forceCreate(array_merge([
+        'filename' => 'doctor-sample.txt',
+        'hash' => Str::uuid()->toString().'.txt',
+        'extension' => 'txt',
+        'mime_type' => 'text/plain',
+        'size' => 6,
+        'disk' => 'public',
+        'folder' => 'doctor',
+        'is_public' => false,
+        'type' => MediaType::DOCUMENT,
+        'digest' => hash('sha256', 'sample'),
+    ], $overrides));
+}
+
+function mediaDoctorPersistedPathCheck(): object
+{
+    return collect(app(MediaDoctor::class)->inspect())
+        ->firstWhere('key', 'storage.persisted_paths');
+}
+
 it('reports a healthy standalone installation as machine-readable output', function () {
     $this->artisan('nvl:media:doctor', [
         '--strict' => true,
         '--format' => 'json',
     ])->assertSuccessful();
+});
+
+describe('persisted storage path diagnostics', function (): void {
+    beforeEach(function (): void {
+        Storage::fake('public');
+        config([
+            'media.disk' => 'public',
+            'media.allowed_disks' => ['public'],
+            'media.root_folder' => 'media',
+            'media.adoption.path_sample_size' => 25,
+            'media.delete_files_on_media_delete' => true,
+        ]);
+    });
+
+    it('passes for a live media record whose canonical object exists', function (): void {
+        $media = createMediaDoctorPathSample();
+        Storage::disk($media->disk)->put($media->buildPath(), 'sample');
+
+        $check = mediaDoctorPersistedPathCheck();
+
+        expect($check)->not->toBeNull()
+            ->and($check->passed)->toBeTrue();
+
+        $this->artisan('nvl:media:doctor', [
+            '--strict' => true,
+            '--format' => 'json',
+        ])->assertSuccessful();
+    });
+
+    it('fails strictly for a live media record whose canonical object is missing', function (): void {
+        $media = createMediaDoctorPathSample([
+            'hash' => 'missing-live.txt',
+        ]);
+
+        $check = mediaDoctorPersistedPathCheck();
+
+        expect($check)->not->toBeNull()
+            ->and($check->passed)->toBeFalse()
+            ->and($check->message)->toContain(
+                $media->disk.':'.$media->buildPath(),
+            );
+
+        $this->artisan('nvl:media:doctor', [
+            '--strict' => true,
+            '--format' => 'json',
+        ])->assertFailed();
+    });
+
+    it('ignores a tombstone whose object was removed by the canonical deletion action', function (): void {
+        $media = createMediaDoctorPathSample([
+            'hash' => 'deleted-by-action.txt',
+        ]);
+        Storage::disk($media->disk)->put($media->buildPath(), 'sample');
+
+        app(DeleteMediaAction::class)->execute($media);
+
+        expect(Media::query()->find($media->id))->toBeNull()
+            ->and(Media::withTrashed()->find($media->id)?->trashed())->toBeTrue();
+        Storage::disk($media->disk)->assertMissing($media->buildPath());
+
+        $check = mediaDoctorPersistedPathCheck();
+
+        expect($check)->not->toBeNull()
+            ->and($check->passed)->toBeTrue()
+            ->and($check->message)->toContain('No live persisted media rows');
+
+        $this->artisan('nvl:media:doctor', [
+            '--strict' => true,
+            '--format' => 'json',
+        ])->assertSuccessful();
+    });
+
+    it('checks live objects in a mixture without requiring tombstone objects', function (): void {
+        $tombstone = createMediaDoctorPathSample([
+            'hash' => 'mixture-tombstone.txt',
+        ]);
+        Storage::disk($tombstone->disk)->put($tombstone->buildPath(), 'deleted');
+        app(DeleteMediaAction::class)->execute($tombstone);
+
+        $live = createMediaDoctorPathSample([
+            'hash' => 'mixture-live.txt',
+        ]);
+        Storage::disk($live->disk)->put($live->buildPath(), 'live');
+
+        expect(mediaDoctorPersistedPathCheck()->passed)->toBeTrue();
+
+        Storage::disk($live->disk)->delete($live->buildPath());
+
+        $missingLive = mediaDoctorPersistedPathCheck();
+
+        expect($missingLive->passed)->toBeFalse()
+            ->and($missingLive->message)->toContain(
+                $live->disk.':'.$live->buildPath(),
+            )
+            ->and($missingLive->message)->not->toContain(
+                $tombstone->disk.':'.$tombstone->buildPath(),
+            );
+    });
+
+    it('does not let earlier tombstones consume the live-record sample limit', function (): void {
+        config(['media.adoption.path_sample_size' => 1]);
+
+        $tombstone = createMediaDoctorPathSample([
+            'id' => '00000000-0000-4000-8000-000000000001',
+            'hash' => 'first-tombstone.txt',
+        ]);
+        Storage::disk($tombstone->disk)->put($tombstone->buildPath(), 'deleted');
+        app(DeleteMediaAction::class)->execute($tombstone);
+
+        $live = createMediaDoctorPathSample([
+            'id' => 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+            'hash' => 'sampled-live.txt',
+        ]);
+
+        $check = mediaDoctorPersistedPathCheck();
+
+        expect($check->passed)->toBeFalse()
+            ->and($check->message)->toContain(
+                $live->disk.':'.$live->buildPath(),
+            )
+            ->and($check->message)->not->toContain(
+                $tombstone->disk.':'.$tombstone->buildPath(),
+            );
+    });
+
+    it('retains storage exception details with the affected disk and path', function (): void {
+        $media = createMediaDoctorPathSample([
+            'disk' => 'missing-doctor-disk',
+            'hash' => 'storage-error.txt',
+        ]);
+
+        $check = mediaDoctorPersistedPathCheck();
+
+        expect($check->passed)->toBeFalse()
+            ->and($check->message)->toContain(
+                $media->disk.':'.$media->buildPath(),
+            )
+            ->and($check->message)->toContain('Disk [missing-doctor-disk]');
+    });
 });
 
 it('registers timestamp-aware migration publishing and warns about duplicate ownership', function () {

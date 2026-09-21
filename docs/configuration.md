@@ -123,7 +123,7 @@ redaction/workflow state, storage paths/hashes, or association metadata.
 | `media.disk` | `MEDIA_FILESYSTEM_DISK`, then `FILESYSTEM_DISK`, then `local` | Default media disk |
 | `media.s3.use_acl_visibility` | `false` | Apply per-object ACL visibility on intentionally ACL-enabled S3 buckets |
 | `media.root_folder` | `media` | Storage prefix and reconciliation boundary; may be empty only for a dedicated adoption disk whose persisted folders are already complete |
-| `media.adoption.path_sample_size` | `25` | Maximum persisted rows Doctor samples against physical storage |
+| `media.adoption.path_sample_size` | `25` | Maximum live Media rows Doctor samples against physical storage; soft-deleted tombstones are excluded |
 | `media.default_path` | `misc` | Fallback folder template |
 | `media.conversions_folder` | `conversions` | Variation subdirectory |
 | `media.allowed_disks` | `['local', 'public']` | Security allowlist for HTTP and direct uploads |
@@ -138,7 +138,7 @@ MEDIA_ROOT_FOLDER=media
 
 Production S3-compatible disks should use `throw=true` and private objects at rest. Public media is delivered publicly by package policy; it does not require a `public-read` object ACL.
 
-Every resolved path is restricted beneath `media.root_folder`. The normal production value is a non-empty prefix on a shared disk. During controlled in-place adoption, an empty root is required when each persisted `folder` already contains the complete disk-relative path; use it only on a dedicated disk, and never use `/` or an untrusted value. Doctor compares representative persisted paths using `media.adoption.path_sample_size` so prefix drift fails before cutover.
+Every resolved path is restricted beneath `media.root_folder`. The normal production value is a non-empty prefix on a shared disk. During controlled in-place adoption, an empty root is required when each persisted `folder` already contains the complete disk-relative path; use it only on a dedicated disk, and never use `/` or an untrusted value. Doctor compares representative live Media paths using `media.adoption.path_sample_size` so prefix drift fails before cutover. Soft-deleted tombstones are excluded because their canonical objects may have been intentionally removed after deletion commits.
 
 See [S3 and object storage](s3.md).
 

@@ -80,7 +80,9 @@ The supported 2.x production profile is PHP 8.3/8.4, Laravel 13, PostgreSQL, S3-
 - Keep cleanup package-owned and bounded, and verify physical object identity
   before deleting source or imported bytes.
 
-- Run `nvl:media:doctor --production --strict --format=json`.
+- Run `nvl:media:doctor --production --strict --format=json`. Its persisted-path
+  check verifies live Media objects and intentionally excludes soft-deleted
+  tombstones whose objects canonical deletion may already have removed.
 - Use read-only production inventory with `nvl:media:reconcile --production --orphans`.
 - Never clean orphans implicitly. Require `--cleanup-orphans`, an age threshold, and `--force` in production; retain age-unknown objects.
 - Schedule `nvl:media:multipart:prune` wherever multipart is enabled with persisted sessions and the recoverable gateway.

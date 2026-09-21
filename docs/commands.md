@@ -16,7 +16,7 @@ php artisan nvl:media:doctor --strict --format=json
 - `--strict`: treats failed warnings as failures.
 - `--format=text|json`: human table or machine-readable output.
 
-Checks package tables/columns/indexes, allowlisted disks and exception-enabled writes, representative persisted object paths under the configured root folder, local/public delivery, integrity policy, image drivers/encoders, durable queue timing, management-route authentication, remote cURL/bounds, multi-node locks, authorization/scanner bindings, and multipart recovery/attestation. Disabled multipart is valid; enabled multipart must use a recoverable gateway, central locks, and scanner attestation. Run it after configuration cache is built and before accepting traffic.
+Checks package tables/columns/indexes, allowlisted disks and exception-enabled writes, representative live Media object paths under the configured root folder, local/public delivery, integrity policy, image drivers/encoders, durable queue timing, management-route authentication, remote cURL/bounds, multi-node locks, authorization/scanner bindings, and multipart recovery/attestation. Soft-deleted Media rows are diagnostic tombstones and do not participate in `storage.persisted_paths`, because canonical deletion may intentionally remove their objects. Disabled multipart is valid; enabled multipart must use a recoverable gateway, central locks, and scanner attestation. Run it after configuration cache is built and before accepting traffic.
 
 ## `nvl:media:adopt-spatie`
 
@@ -73,7 +73,7 @@ Use live writes only in a controlled non-production probe. Reconciliation remain
 
 ### Missing-binary incident recovery
 
-A strict Doctor failure for `storage.persisted_paths` is a data incident, not
+A strict Doctor failure for a live row in `storage.persisted_paths` is a data incident, not
 permission to delete database records. Start with read-only diagnostics:
 
 ```bash

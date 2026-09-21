@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Actions\ReusePublicMediaAction;
 use Nvl\Media\Data\MediaFilter;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Services\MediaDoctor;
 use Nvl\Media\Services\MediaQueryService;
 use Nvl\Media\Tests\Fixtures\MediaTenancyScenario;
 use Nvl\Media\Tests\Stubs\TestPrivilegedMediaUser;
@@ -44,4 +46,27 @@ it('does not allow an unscoped actor to list another tenant library', function (
     ));
 
     expect($ids)->toBe([$assetA->id]);
+});
+
+it('keeps Doctor persisted-path sampling inside the active tenant scope', function (): void {
+    $scenario = MediaTenancyScenario::install();
+    $assetA = $scenario->upload($scenario::A, 'tenant A doctor bytes');
+    $assetB = $scenario->upload($scenario::B, 'tenant B doctor bytes');
+
+    Storage::disk($assetA->disk)->assertExists($assetA->buildPath());
+    Storage::disk($assetB->disk)->assertExists($assetB->buildPath());
+    Storage::disk($assetB->disk)->delete($assetB->buildPath());
+
+    $result = $scenario->run($scenario::A, fn (): array => [
+        'visible_ids' => Media::query()->pluck('id')->all(),
+        'check' => collect(app(MediaDoctor::class)->inspect())
+            ->firstWhere('key', 'storage.persisted_paths'),
+    ]);
+    $check = $result['check'];
+
+    expect($result['visible_ids'])->toBe([$assetA->id])
+        ->and($check)->not->toBeNull()
+        ->and($check->passed)->toBeTrue()
+        ->and(Storage::disk($assetA->disk)->exists($assetA->buildPath()))->toBeTrue()
+        ->and(Storage::disk($assetB->disk)->exists($assetB->buildPath()))->toBeFalse();
 });

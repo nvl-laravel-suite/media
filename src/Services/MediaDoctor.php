@@ -543,7 +543,7 @@ final readonly class MediaDoctor
     }
 
     /**
-     * Verify representative persisted media paths against the configured root folder.
+     * Verify representative live media paths against the configured root folder.
      */
     private function representativeStoragePathCheck(bool $production): MediaDoctorCheckData
     {
@@ -559,10 +559,10 @@ final readonly class MediaDoctor
         $limit = MediaConfiguration::integer('media.adoption.path_sample_size', 25, 1);
 
         try {
-            $samples = Media::withTrashed()
+            $samples = Media::query()
                 ->orderBy('id')
                 ->limit($limit)
-                ->get(['id', 'disk', 'folder', 'hash']);
+                ->get(['id', 'disk', 'folder', 'hash', 'storage_path']);
         } catch (Throwable $exception) {
             return new MediaDoctorCheckData(
                 'storage.persisted_paths',
@@ -577,7 +577,7 @@ final readonly class MediaDoctor
                 'storage.persisted_paths',
                 $production ? 'error' : 'warning',
                 true,
-                'No persisted media rows require representative path verification.',
+                'No live persisted media rows require representative path verification.',
             );
         }
 
@@ -602,9 +602,9 @@ final readonly class MediaDoctor
             $production ? 'error' : 'warning',
             $passed,
             $passed
-                ? "Representative persisted media paths exist with root_folder [{$rootLabel}]."
+                ? "Representative live media paths exist with root_folder [{$rootLabel}]."
                 : sprintf(
-                    'Representative persisted paths are missing with root_folder [%s]: %s. Existing complete folders require an empty media.root_folder, or move the objects through nvl:media:migrate-disk before cutover.',
+                    'Representative live persisted paths are missing with root_folder [%s]: %s. Existing complete folders require an empty media.root_folder, or move the objects through nvl:media:migrate-disk before cutover.',
                     $rootLabel,
                     implode(', ', array_slice($missing, 0, 5)),
                 ),

@@ -4,6 +4,20 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-09-21
+
+### Added
+
+- Published the existing `ImportPlatformMediaData` contract in the generated
+  TypeScript declarations.
+
+### Fixed
+
+- Limited Doctor's persisted-path sampling to live Media records, so
+  intentionally removed objects for soft-deleted diagnostic tombstones no
+  longer fail readiness checks. Tenant-owned immutable storage paths are now
+  included in the sample projection.
+
 ## [2.1.0] - 2026-09-21
 
 - Documented opt-in tenant ownership, independent catalog copies, immutable
