@@ -4,7 +4,10 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
-## [2.1.1] - 2026-09-21
+## [2.0.1] - 2026-09-22
+
+- Documented opt-in tenant ownership, independent catalog copies, immutable
+  adoption mappings, backup-based recovery, and bounded tenant cleanup.
 
 ### Added
 
@@ -18,14 +21,6 @@ All notable changes to `nvl/media` are documented here.
   longer fail readiness checks. Tenant-owned immutable storage paths are
   included only when the opt-in tenancy schema provides that column, preserving
   standalone compatibility across supported database engines.
-
-## [2.1.0] - 2026-09-21
-
-- Documented opt-in tenant ownership, independent catalog copies, immutable
-  adoption mappings, backup-based recovery, and bounded tenant cleanup.
-
-### Fixed
-
 - Recheck attachment availability and public-reuse visibility on the current
   database row inside the media mutation lock and association transaction.
   Stale model instances can no longer bypass these guards or reject an asset
