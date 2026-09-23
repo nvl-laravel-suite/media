@@ -22,9 +22,9 @@ use Nvl\Media\Data\Mutations\UpdateMediaPayload;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaAssociableResolver;
+use Nvl\Media\Services\MediaManagementDataFactory;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\MediaQueryService;
-use Nvl\Media\Services\MediaResourceDataFactory;
 
 /**
  * Handles metadata, ordering, and lifecycle mutations.
@@ -42,7 +42,7 @@ final class MediaMutationController extends Controller
         private readonly BulkTagMediaAction $bulkTag,
         private readonly BulkMoveMediaAction $bulkMove,
         private readonly MediaAssociableResolver $associables,
-        private readonly MediaResourceDataFactory $resources,
+        private readonly MediaManagementDataFactory $resources,
     ) {}
 
     public function update(
@@ -55,7 +55,7 @@ final class MediaMutationController extends Controller
         $updated = $this->updateMetadata->execute($media, $data);
 
         return response()->json([
-            'data' => $this->resources->fromModel($request, $updated),
+            'data' => $this->resources->fromModel($updated),
         ]);
     }
 
@@ -79,7 +79,7 @@ final class MediaMutationController extends Controller
         );
 
         return response()->json([
-            'data' => $this->resources->fromModel($request, $renamed),
+            'data' => $this->resources->fromModel($renamed),
             'message' => (string) trans('media::media/messages.success.renamed'),
         ]);
     }

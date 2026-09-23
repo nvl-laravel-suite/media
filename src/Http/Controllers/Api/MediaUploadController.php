@@ -17,7 +17,7 @@ use Nvl\Media\Data\Mutations\ReplaceMediaData;
 use Nvl\Media\Data\Mutations\StoreMediaPayload;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaDiskGuard;
-use Nvl\Media\Services\MediaResourceDataFactory;
+use Nvl\Media\Services\MediaManagementDataFactory;
 use Nvl\Media\Slots\MediaSlot;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
@@ -32,7 +32,7 @@ final class MediaUploadController extends Controller
         private readonly UploadMediaContract $uploadMedia,
         private readonly ReplaceMediaFileAction $replaceMediaFile,
         private readonly MediaDiskGuard $diskGuard,
-        private readonly MediaResourceDataFactory $resources,
+        private readonly MediaManagementDataFactory $resources,
     ) {}
 
     public function store(Request $request, StoreMediaPayload $data): JsonResponse
@@ -68,7 +68,7 @@ final class MediaUploadController extends Controller
                 tags: array_values($data->tags ?? []),
             );
 
-            $uploaded[] = $this->resources->fromModel($request, $media);
+            $uploaded[] = $this->resources->fromModel($media);
         }
 
         return response()->json([
@@ -92,7 +92,7 @@ final class MediaUploadController extends Controller
         $updated = $this->replaceMediaFile->execute($media, $replacement);
 
         return response()->json([
-            'data' => $this->resources->fromModel($request, $updated),
+            'data' => $this->resources->fromModel($updated),
             'message' => (string) trans('media::media/messages.success.replaced'),
         ]);
     }

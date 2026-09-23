@@ -21,8 +21,8 @@ use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaLibraryItemDataFactory;
+use Nvl\Media\Services\MediaManagementDataFactory;
 use Nvl\Media\Services\MediaQueryService;
-use Nvl\Media\Services\MediaResourceDataFactory;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -36,7 +36,7 @@ final class MediaLibraryController extends Controller
     public function __construct(
         private readonly MediaQueryService $queryService,
         private readonly MediaLibraryItemDataFactory $libraryItems,
-        private readonly MediaResourceDataFactory $resources,
+        private readonly MediaManagementDataFactory $resources,
         private readonly MediaDiskGateway $disks,
         private readonly MediaFileExistence $existence,
     ) {}
@@ -116,7 +116,7 @@ final class MediaLibraryController extends Controller
         $media->loadMissing($relations);
 
         return response()->json([
-            'data' => $this->resources->fromModel($request, $media),
+            'data' => $this->resources->fromModel($media),
         ]);
     }
 

@@ -555,7 +555,7 @@ associations are removed. See [the recovery runbook](docs/commands.md#missing-bi
 
 Use `PublicMedia` for public rendering. It exposes safe identity, type, localized copy, MIME/extension, URLs, responsive image sizes, and basic file size. It never exposes storage identity or security-boundary fields.
 
-Authorized management APIs use privileged projections such as `MediaLibraryItem` and `MediaResource`. Keep management routes disabled unless the application intends to expose disk, folder, digest, uploader, association, and internal metadata to that authorized role.
+Authorized management APIs use privileged Data projections such as `MediaLibraryItem` and `MediaManagementData`. Keep management routes disabled unless the application intends to expose disk, folder, digest, uploader, association, and internal metadata to that authorized role.
 
 ## Configuration checklist
 
