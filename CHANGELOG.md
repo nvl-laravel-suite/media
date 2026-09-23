@@ -4,6 +4,14 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-09-23
+
+### Changed
+
+- Replace the management JSON Resource and resource-named factory with
+  `MediaManagementData` and `MediaManagementDataFactory`, preserving privileged
+  fields, conditional relationships, and nullable URL behavior.
+
 ## [2.0.1] - 2026-09-22
 
 - Documented opt-in tenant ownership, independent catalog copies, immutable
