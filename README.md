@@ -47,6 +47,14 @@ Media owns the complete lifecycle of binary assets: ingestion, validation, conte
 ```bash
 composer require nvl/media:^2.0
 php artisan migrate
+```
+
+Review the migration ownership choice below before migrating existing tables.
+If the application needs a different connection, table layout, or storage
+configuration, publish and edit config before migration. Agent skills are
+optional:
+
+```bash
 php artisan vendor:publish --tag=media-config
 php artisan vendor:publish --tag=media-skills
 ```
