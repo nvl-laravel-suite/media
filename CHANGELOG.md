@@ -9,6 +9,7 @@ All notable changes to `nvl/media` are documented here.
 ### Changed
 
 - Prepare `nvl/media` for independent Composer and Git publication; require `nvl/core` for shared Support and Data services.
+- Correct the published agent skill's documentation path for standalone `nvl/media` installations.
 
 ## [2.1.1] - 2026-09-23
 
