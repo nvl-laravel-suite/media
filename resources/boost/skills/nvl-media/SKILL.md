@@ -12,7 +12,7 @@ The supported 2.x production profile is PHP 8.3/8.4, Laravel 13, PostgreSQL, S3-
 ## Read the canonical references
 
 - Resolve canonical references from `vendor/nvl/media/docs/` in a consumer
-  application or `packages/nvl/media/docs/` in the suite workbench.
+  application or `docs/` at the root of the public Media repository.
 - Use `php-api.md` for exact facade, contract, trait, adder, slot, conversion,
   model-helper, DTO, Action, exception, and transaction contracts.
 - Use `http-api.md` for every management/asset route, payload, response, status,

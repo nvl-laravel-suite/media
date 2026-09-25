@@ -168,5 +168,5 @@ Never change a naming pattern and delete old objects in the same irreversible de
 
 - [Spatie Image supported formats](https://spatie.be/docs/image/v3/formats)
 - [Spatie Image resizing](https://spatie.be/docs/image/v3/image-manipulations/resizing-images)
-- [Laravel queues](https://laravel.com/docs/12.x/queues)
+- [Laravel queues](https://laravel.com/docs/13.x/queues)
 - [Google WebP compression study](https://developers.google.com/speed/webp)
