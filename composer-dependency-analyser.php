@@ -8,7 +8,6 @@ use ShipMonk\ComposerDependencyAnalyser\Config\ErrorType;
 
 return (new Configuration)
     ->ignoreErrorsOnPackage('nvl/media', [ErrorType::SHADOW_DEPENDENCY])
-    ->ignoreErrorsOnPackage('nvl/data', [ErrorType::UNUSED_DEPENDENCY])
     ->ignoreErrorsOnPackage(
         'orchestra/testbench-core',
         [ErrorType::SHADOW_DEPENDENCY],

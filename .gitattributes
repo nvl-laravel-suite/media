@@ -10,3 +10,4 @@
 /phpunit.xml.dist export-ignore
 /tests export-ignore
 /vendor export-ignore
+/composer-dependency-analyser.php export-ignore

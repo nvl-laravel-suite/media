@@ -1,12 +1,12 @@
 # NVL Media — API and usage
 
-[← NVL Laravel Suite](../../../README.md)
+[← NVL Laravel Suite](https://github.com/nvl-laravel-suite)
 
 ## Quick reference
 
 | Item | Value |
 |---|---|
-| Installed through | `composer require nvl/laravel-suite:^2.0` |
+| Installed through | `composer require nvl/media:^2.0` |
 | Module identifier | `nvl/media` |
 | PHP namespace | `Nvl\Media` |
 | Service provider | `Nvl\Media\Providers\MediaServiceProvider` |
@@ -40,7 +40,7 @@ Media owns the complete lifecycle of binary assets: ingestion, validation, conte
 - `league/flysystem-aws-s3-v3` is included for S3-compatible disks
 
 ```bash
-composer require nvl/laravel-suite:^2.0
+composer require nvl/media:^2.0
 php artisan migrate
 php artisan vendor:publish --tag=media-config
 php artisan vendor:publish --tag=media-skills
@@ -576,7 +576,7 @@ Authorized management APIs use privileged Data projections such as `MediaLibrary
 
 ## TypeScript, agent skill, and quality
 
-Media DTOs and enums register with `nvl/data` under `Nvl.Media.*`:
+Media DTOs and enums register with Core's Data provider under `Nvl.Media.*`:
 
 ```bash
 php artisan nvl:data:types:generate

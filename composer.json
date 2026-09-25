@@ -20,9 +20,8 @@
         "league/flysystem": "^3.25",
         "league/flysystem-aws-s3-v3": "^3.0",
         "nesbot/carbon": "^2.72 || ^3.0",
-        "nvl/data": "^2.0",
+        "nvl/core": "^2.0",
         "nvl/filterable": "^2.0",
-        "nvl/support": "^2.0",
         "nvl/tenancy": "^2.0",
         "nvl/translatable": "^2.0",
         "spatie/image": "^3.0",
@@ -90,6 +89,7 @@
     },
     "archive": {
         "exclude": [
+            "/composer-dependency-analyser.php",
             "/.temp",
             "/build",
             "/coverage",
