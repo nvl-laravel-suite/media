@@ -153,6 +153,10 @@ test('relative Markdown document links resolve', function (): void {
         );
 
         foreach ($links[1] as $link) {
+            if (parse_url($link, PHP_URL_SCHEME) !== null) {
+                continue;
+            }
+
             expect(dirname($document).'/'.$link)
                 ->toBeFile();
         }
