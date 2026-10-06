@@ -670,6 +670,26 @@ imperative `MediaAuthorization` callbacks are not converted into batch grants. U
 `MediaBatchReadException` before Media storage reads. Empty owner input returns an object map without SQL,
 even when no adapter is configured.
 
+Register the host policy in its service provider, then read the returned DTO map:
+
+```php
+use Nvl\Media\Contracts\ListOwnerMediaSlotsContract;
+use Nvl\Media\Contracts\MediaBatchAuthorization;
+
+$this->app->bind(MediaBatchAuthorization::class, App\Authorization\MediaBatchPolicy::class);
+
+$owners = Article::query()->limit(100)->get()->all();
+$result = app(ListOwnerMediaSlotsContract::class)->execute($owners, ['document'], $actor, 'bg');
+foreach ($result->order as $identity) {
+    $items = $result->owners->{$identity['type']}->{$identity['id']}->slots->document;
+    // Each item contains safe display fields; private URLs remain null.
+}
+```
+
+Here `$actor` is the application's resolved `MediaActorData`, and every admitted
+Article registers the requested `document` slot. The policy implements all four
+query-free SQL methods described in [extending](extending.md#explicit-batch-view-authorization).
+
 The reader accepts at most 100 persisted input models and 20 distinct registered slot names. It captures native
 morph/key pairs, deduplicates identical input, reloads each concrete class through canonical host scopes, and
 applies registered TenantBoundary ownership when enabled. Every canonical owner must register every requested
