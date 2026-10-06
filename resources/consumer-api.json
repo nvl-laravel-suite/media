@@ -1,0 +1,1680 @@
+{
+    "schema_version": 1,
+    "package": "nvl/media",
+    "psr4": {
+        "Nvl\\Media\\": "src",
+        "Nvl\\Media\\Database\\Factories\\": "database/factories",
+        "Nvl\\Media\\Database\\Seeders\\": "database/seeders"
+    },
+    "symbols": {
+        "Nvl\\Media\\Actions\\AbortMultipartUploadAction": {
+            "kind": "class",
+            "file": "src/Actions/AbortMultipartUploadAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\AdoptSpatieMediaAction": {
+            "kind": "class",
+            "file": "src/Actions/AdoptSpatieMediaAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\AttachMediaAction": {
+            "kind": "class",
+            "file": "src/Actions/AttachMediaAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\BulkDeleteMediaAction": {
+            "kind": "class",
+            "file": "src/Actions/BulkDeleteMediaAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\BulkMoveMediaAction": {
+            "kind": "class",
+            "file": "src/Actions/BulkMoveMediaAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\BulkTagMediaAction": {
+            "kind": "class",
+            "file": "src/Actions/BulkTagMediaAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\ClearOwnerMediaSlotAction": {
+            "kind": "class",
+            "file": "src/Actions/ClearOwnerMediaSlotAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\CompleteMultipartUploadAction": {
+            "kind": "class",
+            "file": "src/Actions/CompleteMultipartUploadAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\CopyOwnerMediaSlotAction": {
+            "kind": "class",
+            "file": "src/Actions/CopyOwnerMediaSlotAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\DeleteMediaAction": {
+            "kind": "class",
+            "file": "src/Actions/DeleteMediaAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\DetachMediaAction": {
+            "kind": "class",
+            "file": "src/Actions/DetachMediaAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\FinalizeMediaScanAction": {
+            "kind": "class",
+            "file": "src/Actions/FinalizeMediaScanAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\GenerateImageVariationAction": {
+            "kind": "class",
+            "file": "src/Actions/GenerateImageVariationAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\GetOwnerMediaSlotAction": {
+            "kind": "class",
+            "file": "src/Actions/GetOwnerMediaSlotAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\GrantMediaToTenantAction": {
+            "kind": "class",
+            "file": "src/Actions/GrantMediaToTenantAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\ImportPlatformMediaAction": {
+            "kind": "class",
+            "file": "src/Actions/ImportPlatformMediaAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\InitiateMultipartUploadAction": {
+            "kind": "class",
+            "file": "src/Actions/InitiateMultipartUploadAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\ListOwnerMediaSlotsAction": {
+            "kind": "class",
+            "file": "src/Actions/ListOwnerMediaSlotsAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\MutateMediaTagsAction": {
+            "kind": "class",
+            "file": "src/Actions/MutateMediaTagsAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\RelocateMediaAction": {
+            "kind": "class",
+            "file": "src/Actions/RelocateMediaAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\RenameMediaAction": {
+            "kind": "class",
+            "file": "src/Actions/RenameMediaAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\ReplaceMediaFileAction": {
+            "kind": "class",
+            "file": "src/Actions/ReplaceMediaFileAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\ReplaceOwnerMediaSlotAction": {
+            "kind": "class",
+            "file": "src/Actions/ReplaceOwnerMediaSlotAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\ReusePublicMediaAction": {
+            "kind": "class",
+            "file": "src/Actions/ReusePublicMediaAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\RevokeMediaTenantGrantAction": {
+            "kind": "class",
+            "file": "src/Actions/RevokeMediaTenantGrantAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\SignMultipartPartAction": {
+            "kind": "class",
+            "file": "src/Actions/SignMultipartPartAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\UpdateMediaMetadataAction": {
+            "kind": "class",
+            "file": "src/Actions/UpdateMediaMetadataAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\UploadMediaAction": {
+            "kind": "class",
+            "file": "src/Actions/UploadMediaAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\AttachMediaContract": {
+            "kind": "interface",
+            "file": "src/Contracts/AttachMediaContract.php",
+            "methods": [
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\DeleteMediaContract": {
+            "kind": "interface",
+            "file": "src/Contracts/DeleteMediaContract.php",
+            "methods": [
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\DetachMediaContract": {
+            "kind": "interface",
+            "file": "src/Contracts/DetachMediaContract.php",
+            "methods": [
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\HasMedia": {
+            "kind": "interface",
+            "file": "src/Contracts/HasMedia.php",
+            "methods": [
+                "addMedia",
+                "addMediaConversion",
+                "addMediaFromBase64",
+                "addMediaFromBinary",
+                "addMediaFromDisk",
+                "addMediaFromRequest",
+                "addMediaFromString",
+                "addMediaFromUrl",
+                "addMediaSlot",
+                "buildPublicUrl",
+                "buildUrl",
+                "clearMediaCollection",
+                "clearMediaCollectionExcept",
+                "copyMedia",
+                "deleteAllMedia",
+                "deleteMedia",
+                "deletePreservingMedia",
+                "detachMedia",
+                "getFallbackMediaPath",
+                "getFallbackMediaUrl",
+                "getFirstMedia",
+                "getFirstMediaPath",
+                "getFirstMediaUrl",
+                "getFirstTemporaryUrl",
+                "getLastMedia",
+                "getLastMediaPath",
+                "getLastMediaUrl",
+                "getMedia",
+                "getMediaModel",
+                "getMediaSlot",
+                "getModelConversions",
+                "getRegisteredMediaSlots",
+                "hasMedia",
+                "nvlMedia",
+                "registerMediaConversions",
+                "registerMediaSlots",
+                "registerNvlMedia",
+                "reusePublicMedia",
+                "updateMediaOrder"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\HasNvlMedia": {
+            "kind": "interface",
+            "file": "src/Contracts/HasNvlMedia.php",
+            "methods": [
+                "nvlMedia",
+                "registerNvlMedia"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\ListOwnerMediaSlotsContract": {
+            "kind": "interface",
+            "file": "src/Contracts/ListOwnerMediaSlotsContract.php",
+            "methods": [
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\MediaAuthorization": {
+            "kind": "interface",
+            "file": "src/Contracts/MediaAuthorization.php",
+            "methods": [
+                "allows"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\MediaBatchAuthorization": {
+            "kind": "interface",
+            "file": "src/Contracts/MediaBatchAuthorization.php",
+            "methods": [
+                "authorizeOwners",
+                "scopeAssociations",
+                "scopeHostAssociations",
+                "scopeMedia"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\MediaCatalogImport": {
+            "kind": "interface",
+            "file": "src/Contracts/MediaCatalogImport.php",
+            "methods": [
+                "discard",
+                "inspect",
+                "persist",
+                "stage"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\MediaContentScanner": {
+            "kind": "interface",
+            "file": "src/Contracts/MediaContentScanner.php",
+            "methods": [
+                "scan"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\MediaHostResolver": {
+            "kind": "interface",
+            "file": "src/Contracts/MediaHostResolver.php",
+            "methods": [
+                "resolve"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\MediaLibraryContract": {
+            "kind": "interface",
+            "file": "src/Contracts/MediaLibraryContract.php",
+            "methods": [
+                "abortMultipart",
+                "add",
+                "allows",
+                "attach",
+                "completeMultipart",
+                "copy",
+                "delete",
+                "detach",
+                "finalizeScan",
+                "findOrFail",
+                "fromBase64",
+                "fromBinary",
+                "fromDisk",
+                "fromRequest",
+                "fromString",
+                "fromUrl",
+                "generateVariation",
+                "initiateMultipart",
+                "paginate",
+                "relocate",
+                "rename",
+                "replace",
+                "reuse",
+                "signMultipartPart",
+                "updateMetadata",
+                "urlIfExists",
+                "usages"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\MediaSearchDriver": {
+            "kind": "interface",
+            "file": "src/Contracts/MediaSearchDriver.php",
+            "methods": [
+                "apply"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\MediaTenantWorklist": {
+            "kind": "interface",
+            "file": "src/Contracts/MediaTenantWorklist.php",
+            "methods": [
+                "activeTenantIds"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\MultipartUploadGateway": {
+            "kind": "interface",
+            "file": "src/Contracts/MultipartUploadGateway.php",
+            "methods": [
+                "abort",
+                "complete",
+                "initiate",
+                "signPart"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\RecoverableMultipartUploadGateway": {
+            "kind": "interface",
+            "file": "src/Contracts/RecoverableMultipartUploadGateway.php",
+            "methods": [
+                "abort",
+                "complete",
+                "initiate",
+                "inspect",
+                "signPart"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\ReusePublicMediaContract": {
+            "kind": "interface",
+            "file": "src/Contracts/ReusePublicMediaContract.php",
+            "methods": [
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\UploadMediaContract": {
+            "kind": "interface",
+            "file": "src/Contracts/UploadMediaContract.php",
+            "methods": [
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Conversions\\ConversionDefinition": {
+            "kind": "class",
+            "file": "src/Conversions/ConversionDefinition.php",
+            "methods": [
+                "__construct",
+                "background",
+                "blur",
+                "brightness",
+                "compression",
+                "contrast",
+                "crop",
+                "cropTo",
+                "disabled",
+                "enabled",
+                "fit",
+                "fitTo",
+                "flip",
+                "format",
+                "formatOnly",
+                "fromPayload",
+                "fromPreset",
+                "getResultExtension",
+                "getResultMimeType",
+                "greyscale",
+                "height",
+                "keepOriginalImageFormat",
+                "nonQueued",
+                "onQueue",
+                "orientation",
+                "performOnSlots",
+                "quality",
+                "queued",
+                "resize",
+                "sharpen",
+                "shouldBePerformedOn",
+                "toPayload",
+                "validate",
+                "watermark",
+                "width"
+            ],
+            "properties": [
+                "applyGreyscale",
+                "backgroundColor",
+                "blurAmount",
+                "brightnessAmount",
+                "compression",
+                "contrastAmount",
+                "cropHeight",
+                "cropPosition",
+                "cropWidth",
+                "enabled",
+                "fitHeight",
+                "fitMethod",
+                "fitWidth",
+                "flipDirection",
+                "name",
+                "outputFormat",
+                "performOnSlots",
+                "preserveOriginalFormat",
+                "queueName",
+                "rotationDegrees",
+                "sharpenAmount",
+                "shouldBeQueued",
+                "targetHeight",
+                "targetQuality",
+                "targetWidth",
+                "watermarkOpacity",
+                "watermarkPath",
+                "watermarkPosition"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Display\\MediaLibraryItem": {
+            "kind": "class",
+            "file": "src/Data/Display/MediaLibraryItem.php",
+            "methods": [
+                "__construct",
+                "scopedRules",
+                "toArray",
+                "toModel",
+                "toModelFiltered",
+                "toModelPatch",
+                "translatedAttributes",
+                "translatedMessages"
+            ],
+            "properties": [
+                "associationsCount",
+                "collection",
+                "createdAt",
+                "disk",
+                "extension",
+                "filename",
+                "folder",
+                "humanReadableSize",
+                "id",
+                "isPublic",
+                "mimeType",
+                "previewUrl",
+                "size",
+                "tags",
+                "title",
+                "type",
+                "updatedAt",
+                "url"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Display\\MediaUsage": {
+            "kind": "class",
+            "file": "src/Data/Display/MediaUsage.php",
+            "methods": [
+                "__construct",
+                "scopedRules",
+                "toArray",
+                "toModel",
+                "toModelFiltered",
+                "toModelPatch",
+                "translatedAttributes",
+                "translatedMessages"
+            ],
+            "properties": [
+                "collection",
+                "id",
+                "locale",
+                "modelId",
+                "order",
+                "type"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Display\\OwnerMediaSlotData": {
+            "kind": "class",
+            "file": "src/Data/Display/OwnerMediaSlotData.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "slots"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Display\\OwnerMediaSlotItemData": {
+            "kind": "class",
+            "file": "src/Data/Display/OwnerMediaSlotItemData.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "altText",
+                "associationId",
+                "caption",
+                "isPublic",
+                "mediaId",
+                "mimeType",
+                "size",
+                "title",
+                "url"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Display\\OwnerMediaSlots": {
+            "kind": "class",
+            "file": "src/Data/Display/OwnerMediaSlots.php",
+            "methods": [
+                "__construct",
+                "fromMap"
+            ],
+            "properties": [
+                "order",
+                "owners"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\MediaActorData": {
+            "kind": "class",
+            "file": "src/Data/MediaActorData.php",
+            "methods": [
+                "__construct",
+                "fromAuthenticatable",
+                "signed",
+                "system"
+            ],
+            "properties": [
+                "id",
+                "signed",
+                "system",
+                "type"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\MediaAdoptionResultData": {
+            "kind": "class",
+            "file": "src/Data/MediaAdoptionResultData.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "errors",
+                "matchedAssociations",
+                "matchedMedia",
+                "matchedTranslations",
+                "matchedVariations",
+                "missingPaths",
+                "mode",
+                "ready",
+                "sourceAssociations",
+                "sourceMedia",
+                "sourceTranslations",
+                "sourceVariations"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\MediaCatalogSnapshot": {
+            "kind": "class",
+            "file": "src/Data/MediaCatalogSnapshot.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "disk",
+                "extension",
+                "filename",
+                "grantId",
+                "grantRevision",
+                "metadata",
+                "mimeType",
+                "size",
+                "sourceDigest",
+                "sourceId",
+                "sourceRevision",
+                "storagePath",
+                "tags",
+                "translations"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\MediaFilter": {
+            "kind": "class",
+            "file": "src/Data/MediaFilter.php",
+            "methods": [
+                "__construct",
+                "attributes",
+                "messages",
+                "rules",
+                "scopedRules",
+                "toArray",
+                "toModel",
+                "toModelFiltered",
+                "toModelPatch",
+                "translatedAttributes",
+                "translatedMessages"
+            ],
+            "properties": [
+                "associableType",
+                "collection",
+                "disk",
+                "extension",
+                "folder",
+                "isPublic",
+                "locale",
+                "mimeType",
+                "page",
+                "perPage",
+                "search",
+                "sortBy",
+                "sortDirection",
+                "tag",
+                "type"
+            ],
+            "constants": [
+                "ALLOWED_SORT_COLUMNS"
+            ]
+        },
+        "Nvl\\Media\\Data\\MediaScanResultData": {
+            "kind": "class",
+            "file": "src/Data/MediaScanResultData.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "checksum",
+                "clean",
+                "diagnostics",
+                "extension",
+                "mimeType",
+                "size"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Multipart\\CompleteMultipartUploadData": {
+            "kind": "class",
+            "file": "src/Data/Multipart/CompleteMultipartUploadData.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "parts",
+                "uploadId"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Multipart\\CompletedMultipartObjectData": {
+            "kind": "class",
+            "file": "src/Data/Multipart/CompletedMultipartObjectData.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "checksum",
+                "mimeType",
+                "objectIdentity",
+                "path",
+                "size"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Multipart\\CompletedMultipartPartData": {
+            "kind": "class",
+            "file": "src/Data/Multipart/CompletedMultipartPartData.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "checksum",
+                "etag",
+                "partNumber"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Multipart\\InitiateMultipartUploadData": {
+            "kind": "class",
+            "file": "src/Data/Multipart/InitiateMultipartUploadData.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "checksum",
+                "disk",
+                "filename",
+                "folder",
+                "mimeType",
+                "size",
+                "visibility"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Multipart\\MultipartUploadSessionData": {
+            "kind": "class",
+            "file": "src/Data/Multipart/MultipartUploadSessionData.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "checksum",
+                "disk",
+                "expiresAt",
+                "filename",
+                "maximumParts",
+                "mimeType",
+                "minimumPartSize",
+                "objectKey",
+                "size",
+                "uploadId",
+                "uploaderId",
+                "uploaderType",
+                "visibility"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Multipart\\SignMultipartPartData": {
+            "kind": "class",
+            "file": "src/Data/Multipart/SignMultipartPartData.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "byteLength",
+                "checksum",
+                "partNumber",
+                "uploadId"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Multipart\\SignedMultipartPartData": {
+            "kind": "class",
+            "file": "src/Data/Multipart/SignedMultipartPartData.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "expiresAt",
+                "headers",
+                "partNumber",
+                "url"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Mutations\\ImportPlatformMediaData": {
+            "kind": "class",
+            "file": "src/Data/Mutations/ImportPlatformMediaData.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "expectedGrantRevision",
+                "expectedSourceRevision",
+                "grantId",
+                "idempotencyKey"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Mutations\\UpdateMediaPayload": {
+            "kind": "class",
+            "file": "src/Data/Mutations/UpdateMediaPayload.php",
+            "methods": [
+                "__construct",
+                "attributes",
+                "messages",
+                "rules",
+                "scopedRules",
+                "toArray",
+                "toModel",
+                "toModelFiltered",
+                "toModelPatch",
+                "translatedAttributes",
+                "translatedMessages"
+            ],
+            "properties": [
+                "isPublic",
+                "metadata",
+                "tags",
+                "translationMode",
+                "translations"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\StagedCatalogMedia": {
+            "kind": "class",
+            "file": "src/Data/StagedCatalogMedia.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "digest",
+                "disk",
+                "operationId",
+                "size",
+                "storagePath",
+                "tenantId"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Enums\\ImageCompression": {
+            "kind": "enum",
+            "file": "src/Enums/ImageCompression.php",
+            "methods": [
+                "cases",
+                "from",
+                "resolve",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "Lossless",
+                "Lossy"
+            ]
+        },
+        "Nvl\\Media\\Enums\\ImageFit": {
+            "kind": "enum",
+            "file": "src/Enums/ImageFit.php",
+            "methods": [
+                "cases",
+                "from",
+                "resolve",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "Contain",
+                "Crop",
+                "Max",
+                "Stretch"
+            ]
+        },
+        "Nvl\\Media\\Enums\\ImageFormat": {
+            "kind": "enum",
+            "file": "src/Enums/ImageFormat.php",
+            "methods": [
+                "cases",
+                "from",
+                "mimeType",
+                "resolve",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "Avif",
+                "Gif",
+                "Jpeg",
+                "Png",
+                "Webp"
+            ]
+        },
+        "Nvl\\Media\\Enums\\ImagePreset": {
+            "kind": "enum",
+            "file": "src/Enums/ImagePreset.php",
+            "methods": [
+                "cases",
+                "from",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "Medium",
+                "Small",
+                "Thumbnail"
+            ]
+        },
+        "Nvl\\Media\\Enums\\MediaAbility": {
+            "kind": "enum",
+            "file": "src/Enums/MediaAbility.php",
+            "methods": [
+                "cases",
+                "from",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "Associate",
+                "Delete",
+                "Download",
+                "List",
+                "ListAll",
+                "ManageStaging",
+                "Mutate",
+                "Reuse",
+                "Upload",
+                "View"
+            ]
+        },
+        "Nvl\\Media\\Enums\\MediaLifecycleStatus": {
+            "kind": "enum",
+            "file": "src/Enums/MediaLifecycleStatus.php",
+            "methods": [
+                "cases",
+                "from",
+                "isUsable",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "Available",
+                "Deleted",
+                "Failed",
+                "PendingScan",
+                "PendingUpload",
+                "ProcessingVariations",
+                "Quarantined"
+            ]
+        },
+        "Nvl\\Media\\Enums\\MediaType": {
+            "kind": "enum",
+            "file": "src/Enums/MediaType.php",
+            "methods": [
+                "cases",
+                "from",
+                "fromExtension",
+                "fromMimeType",
+                "getLabel",
+                "isVisual",
+                "options",
+                "supportsConversions",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "ARCHIVE",
+                "AUDIO",
+                "CODE",
+                "DOCUMENT",
+                "IMAGE",
+                "OTHER",
+                "VIDEO"
+            ]
+        },
+        "Nvl\\Media\\Enums\\MediaVisibility": {
+            "kind": "enum",
+            "file": "src/Enums/MediaVisibility.php",
+            "methods": [
+                "cases",
+                "from",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "Private",
+                "Public"
+            ]
+        },
+        "Nvl\\Media\\Enums\\MimeType": {
+            "kind": "enum",
+            "file": "src/Enums/MimeType.php",
+            "methods": [
+                "archives",
+                "audio",
+                "cases",
+                "documents",
+                "extension",
+                "from",
+                "fromExtension",
+                "fromMimeString",
+                "images",
+                "isAudio",
+                "isDocument",
+                "isImage",
+                "isLossyReEncode",
+                "isRasterOptimizable",
+                "isVideo",
+                "rasterImages",
+                "supportsConversion",
+                "toStrings",
+                "tryFrom",
+                "videos"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "Aac",
+                "Avif",
+                "Bmp",
+                "Csv",
+                "Flac",
+                "Gif",
+                "Gz",
+                "Jpg",
+                "Json",
+                "Mov",
+                "Mp3",
+                "Mp4",
+                "Mpeg",
+                "Ogg",
+                "Pdf",
+                "Png",
+                "Svg",
+                "Txt",
+                "Wav",
+                "Webm",
+                "Webp",
+                "Xml",
+                "Zip"
+            ]
+        },
+        "Nvl\\Media\\Exceptions\\MediaBatchReadException": {
+            "kind": "class",
+            "file": "src/Exceptions/MediaBatchReadException.php",
+            "methods": [],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Exceptions\\MediaUploadException": {
+            "kind": "class",
+            "file": "src/Exceptions/MediaUploadException.php",
+            "methods": [
+                "render"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Facades\\Media": {
+            "kind": "class",
+            "file": "src/Facades/Media.php",
+            "methods": [
+                "abortMultipart",
+                "add",
+                "allows",
+                "attach",
+                "completeMultipart",
+                "copy",
+                "delete",
+                "detach",
+                "finalizeScan",
+                "findOrFail",
+                "fromBase64",
+                "fromBinary",
+                "fromDisk",
+                "fromRequest",
+                "fromString",
+                "fromUrl",
+                "generateVariation",
+                "initiateMultipart",
+                "paginate",
+                "relocate",
+                "rename",
+                "replace",
+                "reuse",
+                "signMultipartPart",
+                "updateMetadata",
+                "urlIfExists",
+                "usages"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\MediaAdder": {
+            "kind": "class",
+            "file": "src/MediaAdder.php",
+            "methods": [
+                "__construct",
+                "allowingDuplicates",
+                "asPublic",
+                "preservingOriginal",
+                "sanitizingFileName",
+                "slot",
+                "slotOnCloudDisk",
+                "tags",
+                "toCollection",
+                "toDisk",
+                "toFolder",
+                "toLocale",
+                "upload",
+                "uploadedBy",
+                "usingFileName",
+                "usingSlot",
+                "withAssociationMeta",
+                "withCustomProperties",
+                "withOrder",
+                "withTags",
+                "withVariations",
+                "withoutVariations"
+            ],
+            "properties": [
+                "pendingSlot"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\MediaLibrary": {
+            "kind": "class",
+            "file": "src/MediaLibrary.php",
+            "methods": [
+                "__construct",
+                "abortMultipart",
+                "add",
+                "allows",
+                "attach",
+                "completeMultipart",
+                "copy",
+                "delete",
+                "detach",
+                "finalizeScan",
+                "findOrFail",
+                "fromBase64",
+                "fromBinary",
+                "fromDisk",
+                "fromRequest",
+                "fromString",
+                "fromUrl",
+                "generateVariation",
+                "initiateMultipart",
+                "paginate",
+                "relocate",
+                "rename",
+                "replace",
+                "reuse",
+                "signMultipartPart",
+                "updateMetadata",
+                "urlIfExists",
+                "usages"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\MediaOwner": {
+            "kind": "class",
+            "file": "src/MediaOwner.php",
+            "methods": [
+                "__construct",
+                "add",
+                "all",
+                "attach",
+                "buildPublicUrl",
+                "buildUrl",
+                "clear",
+                "clearExcept",
+                "conversions",
+                "copy",
+                "delete",
+                "deleteAll",
+                "deleteOwnerPreservingMedia",
+                "detach",
+                "fallbackPath",
+                "fallbackUrl",
+                "first",
+                "firstPath",
+                "firstTemporaryUrl",
+                "firstUrl",
+                "fromBase64",
+                "fromBinary",
+                "fromDisk",
+                "fromRequest",
+                "fromString",
+                "fromUrl",
+                "has",
+                "last",
+                "lastPath",
+                "lastUrl",
+                "modelClass",
+                "order",
+                "registration",
+                "reuse",
+                "slot",
+                "slots",
+                "sync"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\MediaRegistration": {
+            "kind": "class",
+            "file": "src/MediaRegistration.php",
+            "methods": [
+                "conversion",
+                "conversions",
+                "getSlot",
+                "slot",
+                "slots"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Models\\Media": {
+            "kind": "class",
+            "file": "src/Models/Media.php",
+            "methods": [
+                "getKey",
+                "getKeyName",
+                "getMorphClass",
+                "getRouteKey",
+                "getRouteKeyName",
+                "is",
+                "isNot",
+                "relationLoaded"
+            ],
+            "properties": [
+                "created_at",
+                "deleted_at",
+                "duration_ms",
+                "extension",
+                "filename",
+                "height",
+                "id",
+                "is_public",
+                "mime_type",
+                "revision",
+                "size",
+                "status",
+                "type",
+                "updated_at",
+                "visibility",
+                "width"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Models\\MediaAssociation": {
+            "kind": "class",
+            "file": "src/Models/MediaAssociation.php",
+            "methods": [
+                "getKey",
+                "getKeyName",
+                "getMorphClass",
+                "getRouteKey",
+                "getRouteKeyName",
+                "is",
+                "isNot",
+                "relationLoaded"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Models\\MediaImageVariation": {
+            "kind": "class",
+            "file": "src/Models/MediaImageVariation.php",
+            "methods": [
+                "getKey",
+                "getKeyName",
+                "getMorphClass",
+                "getRouteKey",
+                "getRouteKeyName",
+                "is",
+                "isNot",
+                "relationLoaded"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Models\\MediaTenantGrant": {
+            "kind": "class",
+            "file": "src/Models/MediaTenantGrant.php",
+            "methods": [
+                "getKey",
+                "getKeyName",
+                "getMorphClass",
+                "getRouteKey",
+                "getRouteKeyName",
+                "is",
+                "isNot",
+                "relationLoaded"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Slots\\MediaSlot": {
+            "kind": "class",
+            "file": "src/Slots/MediaSlot.php",
+            "methods": [
+                "__construct",
+                "acceptsFile",
+                "acceptsMimeTypes",
+                "addConversion",
+                "convertTo",
+                "exclusive",
+                "getConversionDefinitions",
+                "getFallbackPath",
+                "getFallbackUrl",
+                "isExclusive",
+                "isPrivate",
+                "isPublic",
+                "isReusable",
+                "isShared",
+                "maxFileSize",
+                "maxSize",
+                "oneToOne",
+                "onlyKeepLatest",
+                "path",
+                "privateExclusive",
+                "publicReusable",
+                "shared",
+                "shouldConvertOriginal",
+                "singleFile",
+                "useDisk",
+                "useFallbackPath",
+                "useFallbackUrl",
+                "withConversions",
+                "withQuality",
+                "withTags"
+            ],
+            "properties": [
+                "acceptedMimeTypes",
+                "conversions",
+                "convertFormat",
+                "convertMaxSize",
+                "convertQuality",
+                "defaultTags",
+                "disk",
+                "fallbackPaths",
+                "fallbackUrls",
+                "fileAcceptor",
+                "isPublic",
+                "isSingleFile",
+                "maxFileSize",
+                "name",
+                "pathTemplate",
+                "sharingMode",
+                "slotSizeLimit"
+            ],
+            "constants": [
+                "SHARING_EXCLUSIVE",
+                "SHARING_SHARED"
+            ]
+        },
+        "Nvl\\Media\\Traits\\InteractsWithMedia": {
+            "kind": "trait",
+            "file": "src/Traits/InteractsWithMedia.php",
+            "methods": [
+                "addMedia",
+                "addMediaConversion",
+                "addMediaFromBase64",
+                "addMediaFromBinary",
+                "addMediaFromDisk",
+                "addMediaFromRequest",
+                "addMediaFromString",
+                "addMediaFromUrl",
+                "addMediaSlot",
+                "buildPublicUrl",
+                "buildUrl",
+                "clearMediaCollection",
+                "clearMediaCollectionExcept",
+                "copyMedia",
+                "deleteAllMedia",
+                "deleteMedia",
+                "deletePreservingMedia",
+                "detachMedia",
+                "getFallbackMediaPath",
+                "getFallbackMediaUrl",
+                "getFirstMedia",
+                "getFirstMediaPath",
+                "getFirstMediaUrl",
+                "getFirstTemporaryUrl",
+                "getLastMedia",
+                "getLastMediaPath",
+                "getLastMediaUrl",
+                "getMedia",
+                "getMediaModel",
+                "getMediaSlot",
+                "getModelConversions",
+                "getRegisteredMediaSlots",
+                "hasMedia",
+                "nvlMedia",
+                "registerMediaConversions",
+                "registerMediaSlots",
+                "registerNvlMedia",
+                "reusePublicMedia",
+                "scopeHasNvlMedia",
+                "updateMediaOrder"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Traits\\InteractsWithNvlMedia": {
+            "kind": "trait",
+            "file": "src/Traits/InteractsWithNvlMedia.php",
+            "methods": [
+                "nvlMedia",
+                "registerNvlMedia",
+                "scopeHasNvlMedia"
+            ],
+            "properties": [],
+            "constants": []
+        }
+    },
+    "models": {
+        "Nvl\\Media\\Models\\Media": {
+            "read": [
+                "created_at",
+                "deleted_at",
+                "duration_ms",
+                "extension",
+                "filename",
+                "height",
+                "id",
+                "is_public",
+                "mime_type",
+                "revision",
+                "size",
+                "status",
+                "type",
+                "updated_at",
+                "visibility",
+                "width"
+            ],
+            "identity_methods": [
+                "getKey",
+                "getKeyName",
+                "getMorphClass",
+                "getRouteKey",
+                "getRouteKeyName",
+                "is",
+                "isNot",
+                "relationLoaded"
+            ],
+            "capability_relations": []
+        },
+        "Nvl\\Media\\Models\\MediaAssociation": {
+            "read": [],
+            "identity_methods": [
+                "getKey",
+                "getKeyName",
+                "getMorphClass",
+                "getRouteKey",
+                "getRouteKeyName",
+                "is",
+                "isNot",
+                "relationLoaded"
+            ],
+            "capability_relations": []
+        },
+        "Nvl\\Media\\Models\\MediaImageVariation": {
+            "read": [],
+            "identity_methods": [
+                "getKey",
+                "getKeyName",
+                "getMorphClass",
+                "getRouteKey",
+                "getRouteKeyName",
+                "is",
+                "isNot",
+                "relationLoaded"
+            ],
+            "capability_relations": []
+        },
+        "Nvl\\Media\\Models\\MediaTenantGrant": {
+            "read": [],
+            "identity_methods": [
+                "getKey",
+                "getKeyName",
+                "getMorphClass",
+                "getRouteKey",
+                "getRouteKeyName",
+                "is",
+                "isNot",
+                "relationLoaded"
+            ],
+            "capability_relations": []
+        }
+    },
+    "capability_relations": {
+        "Nvl\\Media\\Traits\\InteractsWithMedia": [
+            "media",
+            "mediaAssociations"
+        ],
+        "Nvl\\Media\\Traits\\InteractsWithNvlMedia": [
+            "nvlMediaAssociations"
+        ]
+    },
+    "tables": {
+        "associations": "nvl_media_associations",
+        "i18n": "nvl_media_i18n",
+        "image_variations": "nvl_media_image_variations",
+        "media": "nvl_media_media",
+        "multipart_uploads": "nvl_media_multipart_uploads",
+        "owner_slot_operations": "nvl_media_owner_slot_operations",
+        "tenant_adoption_copies": "nvl_media_tenant_adoption_copies",
+        "tenant_grant_locks": "nvl_media_tenant_grant_locks",
+        "tenant_grants": "nvl_media_tenant_grants"
+    }
+}
