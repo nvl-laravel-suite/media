@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use LogicException;
+use Nvl\Media\Contracts\AdoptSpatieMediaContract;
 use Nvl\Media\Data\MediaAdoptionResultData;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\MediaLifecycleStatus;
@@ -25,7 +26,7 @@ use Throwable;
  *
  * @api
  */
-final readonly class AdoptSpatieMediaAction
+final readonly class AdoptSpatieMediaAction implements AdoptSpatieMediaContract
 {
     /**
      * Create the adoption action.

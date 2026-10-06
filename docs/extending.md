@@ -605,3 +605,31 @@ batch to imply a wildcard, never invents persisted prototype facts, and never lo
 SQL callbacks run inside mandatory package ownership, canonical type/key/slot, active-association, available-lifecycle,
 and nondeleted-asset predicates. OR conditions cannot reopen those boundaries. Builder access is only for expressing
 these read predicates; it grants no package write authority. Loaded-data authorization must execute no SQL.
+
+
+## Focused consumer workflows
+
+Inject the operation's `Nvl\Media\Contracts\*Contract` rather than subclassing its
+final Action. For example, a host service can declare
+`public function __construct(private ReplaceOwnerMediaSlotContract $replace) {}`
+and pass the native actor, owner, slot, media ID, and optional idempotency key to
+`$this->replace->execute(...)`. Bind that contract to a host implementation or
+instance before package discovery; the default `bindIf` preserves it. Concrete
+Actions still resolve normally and internal workflows retain their existing chains.
+
+All selected workflows are listed in [php-api.md](php-api.md#focused-workflow-interfaces).
+The five original mutation contracts and `ListOwnerMediaSlotsContract` are reused.
+The established `AttachMediaContract` has seven parameters; its concrete Action
+also retains the optional internal `requirePublic` eighth argument.
+
+Scanner, host resolver, search, multipart, and focused mutation defaults now respect
+existing host bindings. Scoped catalog import and library defaults use `scopedIf`;
+the importer concrete default also preserves a supplied host instance. This does
+not change internal helper lifetimes.
+
+For a complete replacement, implement all 27 `MediaLibraryContract` methods and
+return `MediaUploadBuilder` from the eight source methods. `FakeMediaLibrary` and
+`FakeMediaUploadBuilder` provide explicit native-return scripting for application
+orchestration tests; see [the fake API](php-api.md#replaceable-workflows-and-scripted-uploads).
+A source method's script is a builder, and a terminal's script is a Media handle.
+Never use a synthetic library `upload` script or a partially initialized real adder.

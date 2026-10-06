@@ -7,14 +7,13 @@ namespace Nvl\Media\Actions;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Nvl\Media\Contracts\UploadMediaContract;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Data\Ingestion\ValidatedMediaFileData;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Enums\MediaVisibility;
-use Nvl\Media\Events\MediaUploadedEvent;
+use Nvl\Media\Events\MediaUploaded;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaDeduplicationLock;
@@ -31,6 +30,9 @@ use Nvl\Media\Services\MediaVariationDefinitionNormalizer;
 use Nvl\Media\Services\MediaVariationDispatcher;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaHashGenerator;
+use Nvl\Support\Events\ConnectionCommitCallbacks;
+use Nvl\Support\Events\DomainEventDispatcher;
+use Nvl\Support\Logging\PackageLogger;
 use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Throwable;
 
@@ -55,6 +57,9 @@ final class UploadMediaAction implements UploadMediaContract
         private readonly MediaVariationDefinitionNormalizer $definitionNormalizer,
         private readonly MediaTenantOwnerResolver $owners,
         private readonly TenantBoundary $tenantBoundary,
+        private DomainEventDispatcher $domainEvents,
+        private ConnectionCommitCallbacks $eventCommits,
+        private PackageLogger $packageLogger,
     ) {}
 
     /**
@@ -237,17 +242,18 @@ final class UploadMediaAction implements UploadMediaContract
 
         $stored_path = $storageFolder ? $storageFolder.'/'.$hash : $hash;
 
+        $writeCommitted = false;
         try {
             $storedDigest = $this->disks->checksum($disk, $stored_path);
 
             if (! hash_equals($validatedFile->digest, $storedDigest)) {
-                Log::error('Media upload integrity verification failed.', [
+                $this->packageLogger->log('media', 'error', 'nvl.media.upload_integrity.failed', [
                     'disk' => $disk,
                     'path' => $stored_path,
                     'mismatch' => 'checksum',
                     'expected_checksum' => $validatedFile->digest,
                     'actual_checksum' => $storedDigest,
-                ]);
+                ], 'normal');
 
                 throw new MediaUploadException(
                     "Checksum verification failed for uploaded media [{$fileName}].",
@@ -257,20 +263,20 @@ final class UploadMediaAction implements UploadMediaContract
             $storedSize = $this->disks->size($disk, $stored_path);
 
             if ($storedSize !== $validatedFile->size) {
-                Log::error('Media upload integrity verification failed.', [
+                $this->packageLogger->log('media', 'error', 'nvl.media.upload_integrity.failed', [
                     'disk' => $disk,
                     'path' => $stored_path,
                     'mismatch' => 'size',
                     'expected_size' => $validatedFile->size,
                     'actual_size' => $storedSize,
-                ]);
+                ], 'normal');
 
                 throw new MediaUploadException(
                     "Size verification failed for uploaded media [{$fileName}].",
                 );
             }
 
-            $media = DB::transaction(function () use ($validatedFile, $disk, $isPublic, $fileName, $hash, $folder, $tags, $metadata, $uploaderId, $uploaderType, $stored_path, $variationDefinitions): Media {
+            $media = (new Media)->getConnection()->transaction(function () use ($validatedFile, $disk, $isPublic, $fileName, $hash, $folder, $tags, $metadata, $uploaderId, $uploaderType, $stored_path, $variationDefinitions, $skipAutoVariations, &$writeCommitted): Media {
                 $this->fileEffects->deleteAfterRollback(
                     $disk,
                     [$stored_path],
@@ -280,7 +286,7 @@ final class UploadMediaAction implements UploadMediaContract
                 $ownership = $this->tenantBoundary->attributes('media.assets');
                 $pathIdentity = config('nvl-tenancy.enabled') === true ? ['storage_path' => $stored_path] : [];
 
-                return Media::query()->forceCreate([
+                $created = Media::query()->forceCreate([
                     ...$ownership,
                     ...$pathIdentity,
                     'filename' => $fileName,
@@ -306,8 +312,22 @@ final class UploadMediaAction implements UploadMediaContract
                     'uploaded_by' => $uploaderId,
                     'uploaded_by_type' => $uploaderType,
                 ]);
+
+                $this->eventCommits->afterCommit((new Media)->getConnection(), static function () use (&$writeCommitted): void {
+                    $writeCommitted = true;
+                });
+                if (! $skipAutoVariations) {
+                    $this->variationDispatcher->dispatchConfiguredForUpload($created);
+                }
+                $this->domainEvents->dispatch(new MediaUploaded($created->id), $created->getConnection());
+
+                return $created;
             });
         } catch (Throwable $e) {
+            if ($writeCommitted) {
+                throw $e;
+            }
+
             $this->fileEffects->deleteNow(
                 $disk,
                 [$stored_path],
@@ -316,12 +336,6 @@ final class UploadMediaAction implements UploadMediaContract
 
             throw $e;
         }
-
-        if (! $skipAutoVariations) {
-            $this->variationDispatcher->dispatchConfiguredForUpload($media);
-        }
-
-        MediaUploadedEvent::dispatch($media);
 
         return $media;
     }
@@ -341,7 +355,7 @@ final class UploadMediaAction implements UploadMediaContract
             : $this->mutationLock->execute(
                 $media->id,
                 function () use ($media, $requestedDefinitions): Media {
-                    return DB::transaction(function () use ($media, $requestedDefinitions): Media {
+                    return (new Media)->getConnection()->transaction(function () use ($media, $requestedDefinitions): Media {
                         $locked = Media::query()->lockForUpdate()->findOrFail($media->id);
                         $existingDefinitions = is_array($locked->variation_definitions)
                             ? $locked->variation_definitions

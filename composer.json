@@ -11,8 +11,7 @@
         "translation"
     ],
     "require": {
-        "php": "^8.3",
-        "aws/aws-sdk-php": "^3.322.9",
+        "php": "^8.4",
         "ext-ctype": "*",
         "ext-curl": "*",
         "ext-dom": "*",
@@ -22,30 +21,31 @@
         "ext-mbstring": "*",
         "guzzlehttp/guzzle": "^7.8.2 || ^8.0",
         "guzzlehttp/psr7": "^2.7",
-        "laravel/framework": "^13.0",
+        "laravel/framework": "^12.0 || ^13.0",
         "league/flysystem": "^3.25",
-        "league/flysystem-aws-s3-v3": "^3.0",
         "nesbot/carbon": "^2.72 || ^3.0",
         "nvl/core": "^5.0",
         "nvl/filterable": "^5.0",
         "nvl/translatable": "^5.0",
         "spatie/image": "^3.0",
         "spatie/laravel-data": "^4.23",
-        "spatie/typescript-transformer": "^3.3",
         "symfony/http-foundation": "^7.0 || ^8.0",
         "symfony/http-kernel": "^7.0 || ^8.0"
     },
     "require-dev": {
+        "aws/aws-sdk-php": "^3.322.9",
         "ext-gd": "*",
         "ext-pcntl": "*",
         "larastan/larastan": "^3.10",
         "laravel/pint": "^1.27",
+        "league/flysystem-aws-s3-v3": "^3.0",
         "mockery/mockery": "^1.6",
         "nvl/tenancy": "^5.0",
-        "orchestra/testbench": "^11.0",
+        "orchestra/testbench": "^10.0 || ^11.0",
         "pestphp/pest": "^4.0",
         "pestphp/pest-plugin-laravel": "^4.0",
-        "shipmonk/composer-dependency-analyser": "^1.8"
+        "shipmonk/composer-dependency-analyser": "^1.8",
+        "spatie/typescript-transformer": "^3.3"
     },
     "autoload": {
         "psr-4": {
@@ -108,15 +108,39 @@
             "/phpunit.xml.dist",
             "/tests",
             "/.DS_Store",
-            "/**/.DS_Store"
+            "/**/.DS_Store",
+            "/.gitattributes",
+            "/**/.gitattributes",
+            "/.gitignore",
+            "/**/.gitignore",
+            "/**/.gitkeep"
         ]
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
     "suggest": {
-        "nvl/tenancy": "Enables enforcing tenant ownership, scoped execution, adoption, and captured tenant queue contexts."
+        "aws/aws-sdk-php": "Built-in S3 uploads and multipart storage: composer require league/flysystem-aws-s3-v3:^3.0 aws/aws-sdk-php:^3.322.9 --with-all-dependencies.",
+        "league/flysystem-aws-s3-v3": "Built-in S3 uploads and multipart storage: composer require league/flysystem-aws-s3-v3:^3.0 aws/aws-sdk-php:^3.322.9 --with-all-dependencies.",
+        "nvl/tenancy": "Enables enforcing tenant ownership, scoped execution, adoption, and captured tenant queue contexts.",
+        "spatie/typescript-transformer": "Consume the declared TypeScript attributes and metadata (^3.3); Core retains the runtime transformation engine."
     },
     "conflict": {
+        "aws/aws-sdk-php": "<3.322.9 || >=4.0",
+        "league/flysystem-aws-s3-v3": "<3.0 || >=4.0",
         "nvl/tenancy": "<5.0 || >=6.0"
+    },
+    "homepage": "https://github.com/nvl-laravel-suite/media",
+    "authors": [
+        {
+            "name": "Nicolas Vlachos",
+            "homepage": "https://github.com/nicolasvlachos",
+            "role": "Developer"
+        }
+    ],
+    "support": {
+        "source": "https://github.com/nvl-laravel-suite/media",
+        "docs": "https://github.com/nvl-laravel-suite/media#readme",
+        "issues": "https://github.com/nvl-laravel-suite/media/issues",
+        "security": "https://github.com/nvl-laravel-suite/media/security/policy"
     }
 }

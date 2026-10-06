@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Composer\InstalledVersions;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Tests\Fixtures\MediaTenancyScenario;
 use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
@@ -9,8 +10,8 @@ use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Process\Process;
 
 it('restores Media tenant context in a real database queue worker', function (): void {
-    $root = dirname(__DIR__, 6);
-    $source = $root.'/packages/nvl/media/tests/Fixtures/tenancy-consumer';
+    $vendor = dirname((new ReflectionClass(InstalledVersions::class))->getFileName(), 2);
+    $source = dirname(__DIR__, 2).'/Fixtures/tenancy-consumer';
     $fixture = sys_get_temp_dir().'/nvl-media-worker-'.bin2hex(random_bytes(8));
     $database = $fixture.'/database.sqlite';
     $queue = 'media-tenant-proof-'.bin2hex(random_bytes(6));
@@ -34,7 +35,7 @@ it('restores Media tenant context in a real database queue worker', function ():
             'APP_ENV' => 'testing',
             'APP_BASE_PATH' => $fixture,
             'APP_KEY' => 'base64:'.base64_encode(str_repeat('a', 32)),
-            'NVL_TEST_SUITE_ROOT' => $root,
+            'NVL_TEST_VENDOR_DIR' => $vendor,
             'DB_CONNECTION' => 'sqlite',
             'DB_DATABASE' => $database,
             'CACHE_STORE' => 'file',

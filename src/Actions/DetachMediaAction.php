@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Nvl\Media\Actions;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
 use Nvl\Media\Contracts\DetachMediaContract;
 use Nvl\Media\Events\MediaDetached;
 use Nvl\Media\Models\Media;
@@ -13,6 +12,7 @@ use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaTenantOwnerResolver;
 use Nvl\Media\Support\MediaAssociationSnapshot;
+use Nvl\Support\Events\DomainEventDispatcher;
 
 /**
  * Removes association records between a media and a model.
@@ -24,6 +24,7 @@ final readonly class DetachMediaAction implements DetachMediaContract
     public function __construct(
         private MediaMutationLock $mutationLock,
         private MediaTenantOwnerResolver $owners,
+        private DomainEventDispatcher $domainEvents,
     ) {}
 
     /**
@@ -43,7 +44,7 @@ final readonly class DetachMediaAction implements DetachMediaContract
 
         /** @var array{0: int, 1: array<int, array{media_id: string, associable_type: string, associable_id: string, collection: string, locale: string|null}>} $result */
         $result = $this->mutationLock->execute($mediaId, function () use ($mediaId, $model, $collection): array {
-            return DB::transaction(function () use ($mediaId, $model, $collection): array {
+            return (new Media)->getConnection()->transaction(function () use ($mediaId, $model, $collection): array {
                 Media::query()
                     ->withTrashed()
                     ->lockForUpdate()
@@ -60,15 +61,15 @@ final readonly class DetachMediaAction implements DetachMediaContract
                 $snapshots = MediaAssociationSnapshot::fromAssociations($associations);
                 $count = $query->delete();
 
+                if ($count > 0) {
+                    $this->domainEvents->dispatch(new MediaDetached($mediaId, $snapshots), (new Media)->getConnection());
+                }
+
                 return [$count, $snapshots];
             });
         });
 
         [$count, $snapshots] = $result;
-
-        if ($count > 0) {
-            MediaDetached::dispatch($mediaId, $snapshots);
-        }
 
         return $count;
     }

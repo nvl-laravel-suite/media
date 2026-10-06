@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Nvl\Media\Data\Display;
 
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Log;
 use Nvl\Data\Traits\DataTransform;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
@@ -13,6 +12,7 @@ use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Support\MediaImageConfiguration;
+use Nvl\Support\Facades\PackageLog;
 use Spatie\LaravelData\Attributes\MapOutputName;
 use Spatie\LaravelData\Data;
 use Spatie\LaravelData\Mappers\CamelCaseMapper;
@@ -113,7 +113,7 @@ final class MediaManagementData extends Data
         try {
             return $media->buildUrl();
         } catch (Throwable $exception) {
-            Log::warning("Media management URL build failed for [{$media->id}]: {$exception->getMessage()}");
+            PackageLog::log('media', 'warning', 'nvl.media.management_url.failed', ['media_id' => $media->id, 'exception' => $exception::class], 'normal');
 
             return null;
         }
@@ -132,7 +132,7 @@ final class MediaManagementData extends Data
 
             return $fallback ?? $media->buildUrl();
         } catch (Throwable $exception) {
-            Log::warning("Media management preview URL build failed for [{$media->id}]: {$exception->getMessage()}");
+            PackageLog::log('media', 'warning', 'nvl.media.management_preview.failed', ['media_id' => $media->id, 'exception' => $exception::class], 'normal');
 
             return null;
         }

@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Nvl\Media\Services;
 
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Log;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Enums\MimeType;
 use Nvl\Media\Exceptions\FileUnacceptableForCollection;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaMimeResolver;
+use Nvl\Support\Logging\PackageLogger;
 use Throwable;
 
 /**
@@ -29,6 +29,7 @@ class ImageOptimizationService
     public function __construct(
         private readonly MediaImageTransformer $imageTransformer,
         private readonly MediaTemporaryFileRegistry $temporaryFiles,
+        private PackageLogger $packageLogger,
     ) {}
 
     /**
@@ -203,11 +204,11 @@ class ImageOptimizationService
      */
     private function handleFailure(UploadedFile $file, MediaSlot $slot, string $reason): UploadedFile
     {
-        Log::warning('Image optimization failed.', [
+        $this->packageLogger->log('media', 'warning', 'nvl.media.image_optimization.failed', [
             'filename' => $file->getClientOriginalName(),
             'slot' => $slot->name,
             'reason' => $reason,
-        ]);
+        ], 'normal');
 
         // When maxSize is set, validate original dimensions — prevent oversized files
         // from silently bypassing slot rules when optimization fails.

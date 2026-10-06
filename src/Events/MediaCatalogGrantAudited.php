@@ -4,14 +4,13 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Events;
 
-use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
-use Illuminate\Foundation\Events\Dispatchable;
+use Nvl\Support\Contracts\DomainEvent;
 
-/** Scalar-only audit fact for a committed catalog grant lifecycle change. */
-final readonly class MediaCatalogGrantAudited implements ShouldDispatchAfterCommit
+/** Scalar-only audit fact for a committed catalog grant lifecycle change. *
+ * @api
+ */
+final readonly class MediaCatalogGrantAudited implements DomainEvent
 {
-    use Dispatchable;
-
     public function __construct(
         public string $operation,
         public string $grantId,
@@ -19,5 +18,12 @@ final readonly class MediaCatalogGrantAudited implements ShouldDispatchAfterComm
         public string $mediaId,
         public int $sourceRevision,
         public int $grantRevision,
+        public int $schemaVersion = 1,
     ) {}
+
+    /** Return the immutable event payload schema version. */
+    public function schemaVersion(): int
+    {
+        return $this->schemaVersion;
+    }
 }

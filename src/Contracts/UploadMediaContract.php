@@ -18,7 +18,7 @@ use Nvl\Media\Slots\MediaSlot;
 interface UploadMediaContract
 {
     /**
-     * @param  list<string>  $tags
+     * @param  string[]  $tags
      * @param  array<string, mixed>  $metadata
      * @param  array<string, ConversionDefinition|array<string, mixed>>  $variationDefinitions
      */

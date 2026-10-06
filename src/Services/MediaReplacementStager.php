@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace Nvl\Media\Services;
 
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Log;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Data\Ingestion\StagedMediaFileData;
+use Nvl\Media\Exceptions\MediaStorageException;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaHashGenerator;
-use RuntimeException;
+use Nvl\Support\Logging\PackageLogger;
 use Throwable;
 
 /**
@@ -29,13 +29,14 @@ final class MediaReplacementStager
         private readonly MediaFileOperator $files,
         private readonly MediaIngestionPipeline $ingestion,
         private readonly MediaPathResolver $pathResolver,
+        private PackageLogger $packageLogger,
     ) {}
 
     /**
      * Stage one replacement file on the media record's current disk.
      *
      * @throws MediaUploadException
-     * @throws RuntimeException
+     * @throws MediaStorageException
      */
     public function stage(Media $media, UploadedFile $file): StagedMediaFileData
     {
@@ -79,7 +80,7 @@ final class MediaReplacementStager
         );
 
         if ($stored === false) {
-            throw new RuntimeException("Failed to store replacement file for media [{$media->id}].");
+            throw new MediaStorageException("Failed to store replacement file for media [{$media->id}].");
         }
 
         $path = is_string($stored)
@@ -92,7 +93,7 @@ final class MediaReplacementStager
 
             if (! hash_equals($validatedFile->digest, $storedDigest)
                 || $storedSize !== $validatedFile->size) {
-                Log::error('Media replacement integrity verification failed.', [
+                $this->packageLogger->log('media', 'error', 'nvl.media.replacement_integrity.failed', [
                     'media_id' => $media->id,
                     'disk' => $media->disk,
                     'path' => $path,
@@ -100,7 +101,7 @@ final class MediaReplacementStager
                     'actual_checksum' => $storedDigest,
                     'expected_size' => $validatedFile->size,
                     'actual_size' => $storedSize,
-                ]);
+                ], 'normal');
 
                 throw new MediaUploadException(
                     "Integrity verification failed for replacement media [{$media->id}].",
@@ -109,20 +110,20 @@ final class MediaReplacementStager
         } catch (Throwable $exception) {
             try {
                 if (! $this->files->delete($media->disk, $path)) {
-                    Log::warning('Media replacement cleanup reported failure.', [
+                    $this->packageLogger->log('media', 'warning', 'nvl.media.replacement_cleanup.rejected', [
                         'media_id' => $media->id,
                         'disk' => $media->disk,
                         'path' => $path,
-                    ]);
+                    ], 'normal');
                 }
             } catch (Throwable $cleanupException) {
-                Log::error('Media replacement cleanup threw an exception.', [
+                $this->packageLogger->log('media', 'error', 'nvl.media.replacement_cleanup.failed', [
                     'media_id' => $media->id,
                     'disk' => $media->disk,
                     'path' => $path,
                     'exception' => $cleanupException::class,
                     'error' => $cleanupException->getMessage(),
-                ]);
+                ], 'normal');
             }
 
             throw $exception;

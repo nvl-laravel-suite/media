@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Actions;
 
 use Illuminate\Support\Facades\DB;
+use Nvl\Media\Contracts\MutateMediaTagsContract;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaMutationLock;
 
@@ -13,7 +14,7 @@ use Nvl\Media\Services\MediaMutationLock;
  *
  * @api
  */
-final class MutateMediaTagsAction
+final class MutateMediaTagsAction implements MutateMediaTagsContract
 {
     public function __construct(
         private readonly MediaMutationLock $mutationLock,

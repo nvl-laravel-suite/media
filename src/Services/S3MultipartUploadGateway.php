@@ -8,7 +8,6 @@ use Aws\S3\Exception\S3Exception;
 use Aws\S3\S3Client;
 use DateTimeImmutable;
 use Illuminate\Filesystem\AwsS3V3Adapter;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Contracts\RecoverableMultipartUploadGateway;
 use Nvl\Media\Data\Multipart\CompletedMultipartObjectData;
@@ -18,6 +17,7 @@ use Nvl\Media\Data\Multipart\SignedMultipartPartData;
 use Nvl\Media\Data\Multipart\SignMultipartPartData;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\MediaMultipartUpload;
+use Nvl\Support\Logging\PackageLogger;
 use Throwable;
 
 /**
@@ -27,6 +27,7 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
 {
     public function __construct(
         private MediaDiskGateway $disks,
+        private PackageLogger $packageLogger,
     ) {}
 
     public function initiate(MultipartUploadSessionData $session): void
@@ -59,12 +60,12 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
             try {
                 $this->abortProvider($client, $bucket, $key, $providerUploadId);
             } catch (Throwable $cleanupException) {
-                Log::error('S3 multipart initiation compensation failed.', [
+                $this->packageLogger->log('media', 'error', 'nvl.media.multipart_compensation.failed', [
                     'session_id' => $session->uploadId,
                     'disk' => $session->disk,
                     'exception' => $cleanupException::class,
                     'error' => $cleanupException->getMessage(),
-                ]);
+                ], 'normal');
             }
 
             throw $exception;
@@ -179,6 +180,7 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
      */
     private function provider(MultipartUploadSessionData $session): array
     {
+        (new MediaS3DependencyGuard)->assertAvailable();
         $filesystem = Storage::disk($session->disk);
 
         if (! $filesystem instanceof AwsS3V3Adapter) {

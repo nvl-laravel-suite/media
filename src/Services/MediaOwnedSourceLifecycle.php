@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Services;
 
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use Nvl\Support\Logging\PackageLogger;
 use Throwable;
 
 /**
@@ -13,6 +13,9 @@ use Throwable;
  */
 final class MediaOwnedSourceLifecycle
 {
+    /** Retain the stateless package diagnostic logger. */
+    public function __construct(private PackageLogger $packageLogger) {}
+
     /**
      * Remove an explicitly owned local source only after the root commit.
      */
@@ -21,16 +24,16 @@ final class MediaOwnedSourceLifecycle
         DB::afterCommit(function () use ($path): void {
             try {
                 if (is_file($path) && ! unlink($path)) {
-                    Log::warning('Owned media source cleanup reported failure.', [
+                    $this->packageLogger->log('media', 'warning', 'nvl.media.owned_source_cleanup.rejected', [
                         'path' => $path,
-                    ]);
+                    ], 'normal');
                 }
             } catch (Throwable $exception) {
-                Log::error('Owned media source cleanup threw an exception.', [
+                $this->packageLogger->log('media', 'error', 'nvl.media.owned_source_cleanup.failed', [
                     'path' => $path,
                     'exception' => $exception::class,
                     'error' => $exception->getMessage(),
-                ]);
+                ], 'normal');
             }
         });
     }

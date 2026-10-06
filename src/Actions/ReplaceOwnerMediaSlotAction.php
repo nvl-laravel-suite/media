@@ -6,6 +6,7 @@ namespace Nvl\Media\Actions;
 
 use Illuminate\Database\Eloquent\Model;
 use Nvl\Media\Contracts\HasNvlMedia;
+use Nvl\Media\Contracts\ReplaceOwnerMediaSlotContract;
 use Nvl\Media\Data\Display\MediaLibraryItem;
 use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Services\MediaOwnerSlotWorkflow;
@@ -15,7 +16,7 @@ use Nvl\Media\Services\MediaOwnerSlotWorkflow;
  *
  * @api
  */
-final readonly class ReplaceOwnerMediaSlotAction
+final readonly class ReplaceOwnerMediaSlotAction implements ReplaceOwnerMediaSlotContract
 {
     public function __construct(
         private MediaOwnerSlotWorkflow $workflow,

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Actions;
 
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\DB;
+use Nvl\Media\Contracts\ReplaceMediaFileContract;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Events\MediaMutated;
 use Nvl\Media\Models\Media;
@@ -14,6 +14,8 @@ use Nvl\Media\Services\MediaFileEffectScheduler;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaReplacementStager;
 use Nvl\Media\Services\MediaVariationDispatcher;
+use Nvl\Support\Events\ConnectionCommitCallbacks;
+use Nvl\Support\Events\DomainEventDispatcher;
 use RuntimeException;
 use Throwable;
 
@@ -22,7 +24,7 @@ use Throwable;
  *
  * @api
  */
-final class ReplaceMediaFileAction
+final class ReplaceMediaFileAction implements ReplaceMediaFileContract
 {
     /**
      * Create the replacement action.
@@ -32,6 +34,8 @@ final class ReplaceMediaFileAction
         private readonly MediaFileEffectScheduler $fileEffects,
         private readonly MediaMutationLock $mutationLock,
         private readonly MediaVariationDispatcher $variationDispatcher,
+        private DomainEventDispatcher $domainEvents,
+        private ConnectionCommitCallbacks $eventCommits,
     ) {}
 
     /**
@@ -55,13 +59,16 @@ final class ReplaceMediaFileAction
                 static fn (MediaImageVariation $variation): string => $variation->getPath(),
             )->all();
 
+            $writeCommitted = false;
             try {
-                DB::transaction(function () use (
+                (new Media)->getConnection()->transaction(function () use (
                     $mediaId,
                     $sourceDisk,
                     $sourcePath,
                     $sourceRevision,
+                    $sourceVariationPaths,
                     $staged,
+                    &$writeCommitted,
                 ): void {
                     $this->fileEffects->deleteAfterRollback(
                         $sourceDisk,
@@ -99,8 +106,22 @@ final class ReplaceMediaFileAction
                         'failure_code' => null,
                         'failure_context' => null,
                     ]);
+                    $this->eventCommits->afterCommit((new Media)->getConnection(), static function () use (&$writeCommitted): void {
+                        $writeCommitted = true;
+                    });
+                    $this->fileEffects->deleteAfterCommit(
+                        $sourceDisk,
+                        [$sourcePath, ...$sourceVariationPaths],
+                        'replace_superseded_objects',
+                    );
+                    $this->variationDispatcher->dispatchForCurrentState($lockedMedia->refresh()->load(['associations.associable', 'imageVariations', 'translations']));
+                    $this->domainEvents->dispatch(new MediaMutated($lockedMedia->id, 'file_replaced'), $lockedMedia->getConnection());
                 });
             } catch (Throwable $exception) {
+                if ($writeCommitted) {
+                    throw $exception;
+                }
+
                 $this->fileEffects->deleteNow(
                     $sourceDisk,
                     [$staged->path],
@@ -113,14 +134,6 @@ final class ReplaceMediaFileAction
             $freshMedia = Media::query()
                 ->with(['associations.associable', 'imageVariations', 'translations'])
                 ->findOrFail($mediaId);
-
-            $this->fileEffects->deleteAfterCommit(
-                $sourceDisk,
-                [$sourcePath, ...$sourceVariationPaths],
-                'replace_superseded_objects',
-            );
-            $this->variationDispatcher->dispatchForCurrentState($freshMedia);
-            MediaMutated::dispatch($freshMedia->id, 'file_replaced');
 
             return $freshMedia;
         });

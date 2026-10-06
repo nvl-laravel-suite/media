@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Nvl\Media\Services;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Log;
 use Nvl\Media\Actions\GenerateImageVariationAction;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Conversions\ConversionDefinition;
@@ -13,6 +12,7 @@ use Nvl\Media\Jobs\GenerateImageVariationJob;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaQueueConfiguration;
+use Nvl\Support\Logging\PackageLogger;
 use Nvl\Support\Tenancy\Contracts\TenantContext;
 use Nvl\Support\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
@@ -26,6 +26,7 @@ final class MediaVariationDispatcher
         private readonly MediaFileEffectScheduler $fileEffects,
         private readonly MediaVariationDefinitionNormalizer $definitionNormalizer,
         private readonly TenantContext $tenantContext,
+        private PackageLogger $packageLogger,
     ) {}
 
     /**
@@ -223,7 +224,7 @@ final class MediaVariationDispatcher
 
                 $this->generateVariation->execute($media, $definition);
             } catch (Throwable $e) {
-                Log::warning("Variation dispatch [{$definition->name}] failed for media [{$media->id}]: {$e->getMessage()}");
+                $this->packageLogger->log('media', 'warning', 'nvl.media.variation_dispatch.failed', ['media_id' => $media->id, 'exception' => $e::class], 'normal');
             }
         }
     }

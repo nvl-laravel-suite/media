@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Nvl\Media\Exceptions\MediaStorageException;
 use Nvl\Media\Support\MediaTemporaryLocalFile;
-use RuntimeException;
 use Throwable;
 
 /**
@@ -65,7 +65,7 @@ final class MediaLocalFileMaterializer
         $stream = $this->disks->readStream($disk, $path);
 
         if (! is_resource($stream)) {
-            throw new RuntimeException("Unable to open media stream for [{$disk}:{$path}].");
+            throw new MediaStorageException("Unable to open media stream for [{$disk}:{$path}].");
         }
 
         $temporaryPath = tempnam(sys_get_temp_dir(), $prefix);
@@ -73,7 +73,7 @@ final class MediaLocalFileMaterializer
         if ($temporaryPath === false) {
             fclose($stream);
 
-            throw new RuntimeException("Unable to create temporary file for [{$disk}:{$path}].");
+            throw new MediaStorageException("Unable to create temporary file for [{$disk}:{$path}].");
         }
 
         $this->temporaryFiles->track($temporaryPath);
@@ -83,13 +83,13 @@ final class MediaLocalFileMaterializer
             fclose($stream);
             $this->temporaryFiles->release($temporaryPath);
 
-            throw new RuntimeException("Unable to open temporary file for [{$disk}:{$path}].");
+            throw new MediaStorageException("Unable to open temporary file for [{$disk}:{$path}].");
         }
 
         try {
             try {
                 if (stream_copy_to_stream($stream, $target) === false) {
-                    throw new RuntimeException("Unable to download media stream for [{$disk}:{$path}].");
+                    throw new MediaStorageException("Unable to download media stream for [{$disk}:{$path}].");
                 }
             } finally {
                 fclose($stream);

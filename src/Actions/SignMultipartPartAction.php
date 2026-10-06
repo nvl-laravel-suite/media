@@ -6,6 +6,7 @@ namespace Nvl\Media\Actions;
 
 use Illuminate\Support\Facades\DB;
 use Nvl\Media\Contracts\MultipartUploadGateway;
+use Nvl\Media\Contracts\SignMultipartPartContract;
 use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Data\Multipart\SignedMultipartPartData;
 use Nvl\Media\Data\Multipart\SignMultipartPartData;
@@ -19,7 +20,7 @@ use Nvl\Media\Services\MediaMultipartSessionMapper;
  *
  * @api
  */
-final readonly class SignMultipartPartAction
+final readonly class SignMultipartPartAction implements SignMultipartPartContract
 {
     public function __construct(
         private MultipartUploadGateway $gateway,

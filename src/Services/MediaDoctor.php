@@ -53,6 +53,7 @@ final readonly class MediaDoctor
     {
         return [
             $this->permissionAdoptionCheck(),
+            $this->s3DependencyCheck(),
             ...$this->schemaChecks(),
             ...$this->tenancyChecks(),
             $this->migrationOwnershipCheck(),
@@ -68,6 +69,27 @@ final readonly class MediaDoctor
             ...$this->bindingChecks($production),
             ...$this->multipartChecks($production),
         ];
+    }
+
+    /** Report optional S3 readiness from declared feature selection without resolving an adapter. */
+    private function s3DependencyCheck(): MediaDoctorCheckData
+    {
+        $disks = config('nvl-media.allowed_disks', []);
+        $selected = false;
+        foreach (is_array($disks) ? $disks : [] as $disk) {
+            if (is_string($disk) && config("filesystems.disks.{$disk}.driver") === 's3') {
+                $selected = true;
+                break;
+            }
+        }
+        $available = (new MediaS3DependencyGuard)->available();
+
+        return new MediaDoctorCheckData(
+            'dependencies.s3', $selected ? 'error' : 'info', ! $selected || $available,
+            $selected
+                ? ($available ? 'The selected built-in S3 dependencies are available.' : 'Install league/flysystem-aws-s3-v3:^3.0 and aws/aws-sdk-php:^3.322.9 before selecting built-in S3 storage.')
+                : 'Built-in S3 storage is inactive; its SDK and adapter are optional.',
+        );
     }
 
     /** Validate the opt-in bridge and report only explicitly selected permission names. */
@@ -914,6 +936,12 @@ final readonly class MediaDoctor
                 || (bool) config('nvl-media.scanner.allow_noop', false));
 
         return [
+            new MediaDoctorCheckData(
+                'scanner.required',
+                'error',
+                ! (bool) config('nvl-media.scanner.required', false) || ($scanner instanceof MediaContentScanner && ! $scanner instanceof NullMediaContentScanner),
+                'Required scanner readiness needs a real scanner in every environment; allow_noop is a development bypass only.',
+            ),
             new MediaDoctorCheckData(
                 'binding.authorization',
                 'error',

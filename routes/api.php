@@ -8,6 +8,7 @@ use Nvl\Media\Http\Controllers\Api\MediaLibraryController;
 use Nvl\Media\Http\Controllers\Api\MediaMutationController;
 use Nvl\Media\Http\Controllers\Api\MediaUploadController;
 use Nvl\Media\Http\Controllers\Api\MediaVariationController;
+use Nvl\Media\Http\Middleware\RenderMediaExceptions;
 
 /** @var list<string> $managementMiddleware */
 $managementMiddleware = array_values(array_filter(
@@ -17,7 +18,7 @@ $managementMiddleware = array_values(array_filter(
 
 Route::prefix('media')
     ->name('nvl.media.management.')
-    ->middleware($managementMiddleware)
+    ->middleware([RenderMediaExceptions::class, ...$managementMiddleware])
     ->group(function (): void {
         Route::get('/', [MediaLibraryController::class, 'index'])->name('index');
         Route::post('/', [MediaUploadController::class, 'store'])->name('store');

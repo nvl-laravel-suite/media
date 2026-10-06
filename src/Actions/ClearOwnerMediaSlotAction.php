@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Actions;
 
 use Illuminate\Database\Eloquent\Model;
+use Nvl\Media\Contracts\ClearOwnerMediaSlotContract;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Services\MediaOwnerSlotWorkflow;
@@ -14,7 +15,7 @@ use Nvl\Media\Services\MediaOwnerSlotWorkflow;
  *
  * @api
  */
-final readonly class ClearOwnerMediaSlotAction
+final readonly class ClearOwnerMediaSlotAction implements ClearOwnerMediaSlotContract
 {
     public function __construct(
         private MediaOwnerSlotWorkflow $workflow,

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Actions;
 
-use Illuminate\Support\Facades\DB;
+use Nvl\Media\Contracts\BulkMoveMediaContract;
 use Nvl\Media\Events\MediaMutated;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
@@ -15,6 +15,8 @@ use Nvl\Media\Services\MediaFileOperator;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\MediaQueryService;
+use Nvl\Support\Events\ConnectionCommitCallbacks;
+use Nvl\Support\Events\DomainEventDispatcher;
 use RuntimeException;
 use Throwable;
 
@@ -23,7 +25,7 @@ use Throwable;
  *
  * @api
  */
-final class BulkMoveMediaAction
+final class BulkMoveMediaAction implements BulkMoveMediaContract
 {
     /**
      * Create the bulk move action.
@@ -36,6 +38,8 @@ final class BulkMoveMediaAction
         private readonly MediaMutationLock $mutationLock,
         private readonly MediaPathResolver $pathResolver,
         private readonly MediaQueryService $queries,
+        private DomainEventDispatcher $domainEvents,
+        private ConnectionCommitCallbacks $eventCommits,
     ) {}
 
     /**
@@ -103,6 +107,7 @@ final class BulkMoveMediaAction
 
             $completedCopies = [];
 
+            $writeCommitted = false;
             try {
                 foreach ($copies as $copy) {
                     if ($this->existence->exists($copy['disk'], $copy['new'])) {
@@ -136,10 +141,11 @@ final class BulkMoveMediaAction
                     }
                 }
 
-                DB::transaction(function () use (
+                (new Media)->getConnection()->transaction(function () use (
                     $mediaIds,
                     $sanitizedFolder,
                     $completedCopies,
+                    &$writeCommitted,
                 ): void {
                     foreach ($completedCopies as $copy) {
                         $this->fileEffects->deleteAfterRollback(
@@ -164,14 +170,23 @@ final class BulkMoveMediaAction
                                 ->forceFill(['folder' => $sanitizedFolder])
                                 ->save(),
                         );
+                    $this->eventCommits->afterCommit((new Media)->getConnection(), static function () use (&$writeCommitted): void {
+                        $writeCommitted = true;
+                    });
+                    foreach ($completedCopies as $copy) {
+                        $this->fileEffects->deleteNow(
+                            $copy['disk'],
+                            [$copy['new']],
+                            'bulk_move_pre_commit_failure',
+                        );
+                    }
+                    foreach ($mediaIds as $mediaId) {
+                        $this->domainEvents->dispatch(new MediaMutated($mediaId, 'moved'), (new Media)->getConnection());
+                    }
                 });
             } catch (Throwable $exception) {
-                foreach ($completedCopies as $copy) {
-                    $this->fileEffects->deleteNow(
-                        $copy['disk'],
-                        [$copy['new']],
-                        'bulk_move_pre_commit_failure',
-                    );
+                if ($writeCommitted) {
+                    throw $exception;
                 }
 
                 throw $exception;
@@ -183,10 +198,6 @@ final class BulkMoveMediaAction
                     [$copy['old']],
                     'bulk_move_source',
                 );
-            }
-
-            foreach ($mediaIds as $mediaId) {
-                MediaMutated::dispatch($mediaId, 'moved');
             }
 
             return count($mediaIds);

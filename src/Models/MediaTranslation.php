@@ -6,9 +6,11 @@ namespace Nvl\Media\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
+use Nvl\Media\Database\Factories\MediaTranslationFactory;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
 use Nvl\Support\Config\PackageStorage;
@@ -27,10 +29,17 @@ use Nvl\Support\Config\PackageStorage;
  * @property string|null $description
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ *
+ * @api
+ *
+ * @nvl-consumer-read id
  */
 class MediaTranslation extends Model
 {
     use GuardsTenantOwnership;
+
+    /** @use HasFactory<MediaTranslationFactory> */
+    use HasFactory;
     use HasUuids;
 
     public const string TABLE = MediaTables::I18n;
@@ -90,5 +99,15 @@ class MediaTranslation extends Model
     public function getConnectionName(): ?string
     {
         return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('media') ?? parent::getConnectionName());
+    }
+
+    /**
+     * Return the package's runtime fixture factory.
+     *
+     * @internal
+     */
+    protected static function newFactory(): MediaTranslationFactory
+    {
+        return MediaTranslationFactory::new();
     }
 }

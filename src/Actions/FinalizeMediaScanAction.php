@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Actions;
 
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use Nvl\Media\Contracts\FinalizeMediaScanContract;
 use Nvl\Media\Data\MediaScanResultData;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Exceptions\MediaUploadException;
@@ -14,19 +14,21 @@ use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaFileTypePolicy;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaVariationDispatcher;
+use Nvl\Support\Logging\PackageLogger;
 
 /**
  * Finalizes an out-of-band scan using scanner-attested technical metadata.
  *
  * @api
  */
-final class FinalizeMediaScanAction
+final class FinalizeMediaScanAction implements FinalizeMediaScanContract
 {
     public function __construct(
         private readonly MediaDiskGateway $disks,
         private readonly MediaFileTypePolicy $fileTypes,
         private readonly MediaMutationLock $mutationLock,
         private readonly MediaVariationDispatcher $variationDispatcher,
+        private PackageLogger $packageLogger,
     ) {}
 
     public function execute(
@@ -149,10 +151,10 @@ final class FinalizeMediaScanAction
             'failure_context' => $context,
         ])->save();
 
-        Log::warning('Media scanner quarantined a direct upload.', [
+        $this->packageLogger->log('media', 'warning', 'nvl.media.direct_scan.quarantined', [
             'media_id' => $media->id,
             'failure_code' => $code,
             'diagnostics' => $context,
-        ]);
+        ], 'normal');
     }
 }

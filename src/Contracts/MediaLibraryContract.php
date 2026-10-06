@@ -22,7 +22,6 @@ use Nvl\Media\Data\Multipart\SignMultipartPartData;
 use Nvl\Media\Data\Mutations\UpdateMediaPayload;
 use Nvl\Media\Enums\MediaAbility;
 use Nvl\Media\Enums\MediaVisibility;
-use Nvl\Media\MediaAdder;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Models\MediaImageVariation;
@@ -42,25 +41,25 @@ interface MediaLibraryContract
         Model&HasNvlMedia $owner,
         UploadedFile|string $file,
         ?string $slot = null,
-    ): MediaAdder;
+    ): MediaUploadBuilder;
 
-    public function copy(Model&HasNvlMedia $owner, UploadedFile|string $file): MediaAdder;
+    public function copy(Model&HasNvlMedia $owner, UploadedFile|string $file): MediaUploadBuilder;
 
-    public function fromRequest(Model&HasNvlMedia $owner, string $key): MediaAdder;
+    public function fromRequest(Model&HasNvlMedia $owner, string $key): MediaUploadBuilder;
 
     public function fromUrl(
         Model&HasNvlMedia $owner,
         string $url,
         string ...$allowedMimeTypes,
-    ): MediaAdder;
+    ): MediaUploadBuilder;
 
     public function fromBase64(
         Model&HasNvlMedia $owner,
         string $payload,
         string ...$allowedMimeTypes,
-    ): MediaAdder;
+    ): MediaUploadBuilder;
 
-    public function fromString(Model&HasNvlMedia $owner, string $contents): MediaAdder;
+    public function fromString(Model&HasNvlMedia $owner, string $contents): MediaUploadBuilder;
 
     /**
      * Create an upload builder from generated binary content.
@@ -70,13 +69,13 @@ interface MediaLibraryContract
         string $contents,
         string $filename,
         string ...$allowedMimeTypes,
-    ): MediaAdder;
+    ): MediaUploadBuilder;
 
     public function fromDisk(
         Model&HasNvlMedia $owner,
         string $key,
         ?string $disk = null,
-    ): MediaAdder;
+    ): MediaUploadBuilder;
 
     /**
      * @param  MediaFilter|array<string, mixed>  $filters

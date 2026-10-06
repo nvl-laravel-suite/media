@@ -11,11 +11,33 @@ use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Nvl\Data\Services\TypeScriptSourceRegistry;
+use Nvl\Media\Actions\AbortMultipartUploadAction;
+use Nvl\Media\Actions\AdoptSpatieMediaAction;
 use Nvl\Media\Actions\AttachMediaAction;
+use Nvl\Media\Actions\BulkDeleteMediaAction;
+use Nvl\Media\Actions\BulkMoveMediaAction;
+use Nvl\Media\Actions\BulkTagMediaAction;
+use Nvl\Media\Actions\ClearOwnerMediaSlotAction;
+use Nvl\Media\Actions\CompleteMultipartUploadAction;
+use Nvl\Media\Actions\CopyOwnerMediaSlotAction;
 use Nvl\Media\Actions\DeleteMediaAction;
 use Nvl\Media\Actions\DetachMediaAction;
+use Nvl\Media\Actions\FinalizeMediaScanAction;
+use Nvl\Media\Actions\GenerateImageVariationAction;
+use Nvl\Media\Actions\GetOwnerMediaSlotAction;
+use Nvl\Media\Actions\GrantMediaToTenantAction;
+use Nvl\Media\Actions\ImportPlatformMediaAction;
+use Nvl\Media\Actions\InitiateMultipartUploadAction;
 use Nvl\Media\Actions\ListOwnerMediaSlotsAction;
+use Nvl\Media\Actions\MutateMediaTagsAction;
+use Nvl\Media\Actions\RelocateMediaAction;
+use Nvl\Media\Actions\RenameMediaAction;
+use Nvl\Media\Actions\ReplaceMediaFileAction;
+use Nvl\Media\Actions\ReplaceOwnerMediaSlotAction;
 use Nvl\Media\Actions\ReusePublicMediaAction;
+use Nvl\Media\Actions\RevokeMediaTenantGrantAction;
+use Nvl\Media\Actions\SignMultipartPartAction;
+use Nvl\Media\Actions\UpdateMediaMetadataAction;
 use Nvl\Media\Actions\UploadMediaAction;
 use Nvl\Media\Console\Commands\AdoptSpatieMediaCommand;
 use Nvl\Media\Console\Commands\MediaDoctorCommand;
@@ -24,9 +46,23 @@ use Nvl\Media\Console\Commands\PruneExpiredMultipartUploadsCommand;
 use Nvl\Media\Console\Commands\PruneMediaOwnerSlotOperationsCommand;
 use Nvl\Media\Console\Commands\RegenerateVariationsCommand;
 use Nvl\Media\Console\Commands\StorageHealthCommand;
+use Nvl\Media\Contracts\AbortMultipartUploadContract;
+use Nvl\Media\Contracts\AdoptSpatieMediaContract;
 use Nvl\Media\Contracts\AttachMediaContract;
+use Nvl\Media\Contracts\BulkDeleteMediaContract;
+use Nvl\Media\Contracts\BulkMoveMediaContract;
+use Nvl\Media\Contracts\BulkTagMediaContract;
+use Nvl\Media\Contracts\ClearOwnerMediaSlotContract;
+use Nvl\Media\Contracts\CompleteMultipartUploadContract;
+use Nvl\Media\Contracts\CopyOwnerMediaSlotContract;
 use Nvl\Media\Contracts\DeleteMediaContract;
 use Nvl\Media\Contracts\DetachMediaContract;
+use Nvl\Media\Contracts\FinalizeMediaScanContract;
+use Nvl\Media\Contracts\GenerateImageVariationContract;
+use Nvl\Media\Contracts\GetOwnerMediaSlotContract;
+use Nvl\Media\Contracts\GrantMediaToTenantContract;
+use Nvl\Media\Contracts\ImportPlatformMediaContract;
+use Nvl\Media\Contracts\InitiateMultipartUploadContract;
 use Nvl\Media\Contracts\ListOwnerMediaSlotsContract;
 use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Contracts\MediaBatchAuthorization;
@@ -37,8 +73,18 @@ use Nvl\Media\Contracts\MediaLibraryContract;
 use Nvl\Media\Contracts\MediaSearchDriver;
 use Nvl\Media\Contracts\MediaTenantWorklist;
 use Nvl\Media\Contracts\MultipartUploadGateway;
+use Nvl\Media\Contracts\MutateMediaTagsContract;
+use Nvl\Media\Contracts\RelocateMediaContract;
+use Nvl\Media\Contracts\RenameMediaContract;
+use Nvl\Media\Contracts\ReplaceMediaFileContract;
+use Nvl\Media\Contracts\ReplaceOwnerMediaSlotContract;
 use Nvl\Media\Contracts\ReusePublicMediaContract;
+use Nvl\Media\Contracts\RevokeMediaTenantGrantContract;
+use Nvl\Media\Contracts\SignMultipartPartContract;
+use Nvl\Media\Contracts\UpdateMediaMetadataContract;
 use Nvl\Media\Contracts\UploadMediaContract;
+use Nvl\Media\Events\MediaUploaded;
+use Nvl\Media\Events\MediaUploadedEvent;
 use Nvl\Media\MediaLibrary;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
@@ -97,6 +143,7 @@ use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Tenancy\MediaAdoptionAdapter;
 use Nvl\Media\Tenancy\MediaTenancyResources;
 use Nvl\Support\Doctor\PackageDoctorContributor;
+use Nvl\Support\Events\EventAliases;
 use Nvl\Support\Globals\GlobalNames;
 use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Support\Tenancy\Contracts\TenantBoundary;
@@ -126,6 +173,7 @@ final class MediaServiceProvider extends ServiceProvider
         TenantResourceRegistry $tenantResourceRegistry,
         TenantBoundary $tenantBoundary,
     ): void {
+        $this->app->make(EventAliases::class)->register(MediaUploaded::class, MediaUploadedEvent::class);
         $events->listen(
             TransactionRolledBack::class,
             $rollbackCallbacks->handle(...),
@@ -244,7 +292,7 @@ final class MediaServiceProvider extends ServiceProvider
     {
         $this->app->scoped(MediaAccessService::class);
         $this->app->scoped(MediaCatalogReader::class);
-        $this->app->scoped(MediaCatalogImporter::class);
+        $this->app->scopedIf(MediaCatalogImporter::class);
         $this->app->scoped(MediaDiskGateway::class);
         $this->app->scoped(MediaDoctor::class);
         $this->app->scoped(MediaFileEffectScheduler::class);
@@ -280,7 +328,7 @@ final class MediaServiceProvider extends ServiceProvider
         $this->app->scoped(MediaVariationDefinitionNormalizer::class);
         $this->app->scoped(MediaScannerPolicy::class);
 
-        $this->app->bind(
+        $this->app->bindIf(
             MediaContentScanner::class,
             MediaConfiguration::string(
                 'nvl-media.content_scanner',
@@ -290,10 +338,10 @@ final class MediaServiceProvider extends ServiceProvider
         $this->app->bindIf(MediaAuthorization::class, DefaultMediaAuthorization::class);
         $this->app->bindIf(MediaBatchAuthorization::class, UnsupportedMediaBatchAuthorization::class);
         $this->app->bindIf(ListOwnerMediaSlotsContract::class, ListOwnerMediaSlotsAction::class);
-        $this->app->scoped(MediaCatalogImport::class, MediaCatalogImporter::class);
+        $this->app->scopedIf(MediaCatalogImport::class, MediaCatalogImporter::class);
         $this->app->bindIf(MediaTenantWorklist::class, ConfiguredMediaTenantWorklist::class);
-        $this->app->bind(MediaHostResolver::class, SystemMediaHostResolver::class);
-        $this->app->bind(
+        $this->app->bindIf(MediaHostResolver::class, SystemMediaHostResolver::class);
+        $this->app->bindIf(
             MediaSearchDriver::class,
             MediaConfiguration::string(
                 'nvl-media.query.search_driver',
@@ -306,13 +354,35 @@ final class MediaServiceProvider extends ServiceProvider
                 UnsupportedMultipartUploadGateway::class,
             )
             : UnsupportedMultipartUploadGateway::class;
-        $this->app->bind(MultipartUploadGateway::class, $multipartGateway);
-        $this->app->bind(UploadMediaContract::class, UploadMediaAction::class);
-        $this->app->bind(DeleteMediaContract::class, DeleteMediaAction::class);
-        $this->app->bind(AttachMediaContract::class, AttachMediaAction::class);
-        $this->app->bind(DetachMediaContract::class, DetachMediaAction::class);
-        $this->app->bind(ReusePublicMediaContract::class, ReusePublicMediaAction::class);
-        $this->app->scoped(MediaLibraryContract::class, MediaLibrary::class);
+        $this->app->bindIf(MultipartUploadGateway::class, $multipartGateway);
+        $this->app->bindIf(UploadMediaContract::class, UploadMediaAction::class);
+        $this->app->bindIf(DeleteMediaContract::class, DeleteMediaAction::class);
+        $this->app->bindIf(AttachMediaContract::class, AttachMediaAction::class);
+        $this->app->bindIf(DetachMediaContract::class, DetachMediaAction::class);
+        $this->app->bindIf(ReusePublicMediaContract::class, ReusePublicMediaAction::class);
+        $this->app->bindIf(AbortMultipartUploadContract::class, AbortMultipartUploadAction::class);
+        $this->app->bindIf(AdoptSpatieMediaContract::class, AdoptSpatieMediaAction::class);
+        $this->app->bindIf(BulkDeleteMediaContract::class, BulkDeleteMediaAction::class);
+        $this->app->bindIf(BulkMoveMediaContract::class, BulkMoveMediaAction::class);
+        $this->app->bindIf(BulkTagMediaContract::class, BulkTagMediaAction::class);
+        $this->app->bindIf(ClearOwnerMediaSlotContract::class, ClearOwnerMediaSlotAction::class);
+        $this->app->bindIf(CompleteMultipartUploadContract::class, CompleteMultipartUploadAction::class);
+        $this->app->bindIf(CopyOwnerMediaSlotContract::class, CopyOwnerMediaSlotAction::class);
+        $this->app->bindIf(FinalizeMediaScanContract::class, FinalizeMediaScanAction::class);
+        $this->app->bindIf(GenerateImageVariationContract::class, GenerateImageVariationAction::class);
+        $this->app->bindIf(GetOwnerMediaSlotContract::class, GetOwnerMediaSlotAction::class);
+        $this->app->bindIf(GrantMediaToTenantContract::class, GrantMediaToTenantAction::class);
+        $this->app->bindIf(ImportPlatformMediaContract::class, ImportPlatformMediaAction::class);
+        $this->app->bindIf(InitiateMultipartUploadContract::class, InitiateMultipartUploadAction::class);
+        $this->app->bindIf(MutateMediaTagsContract::class, MutateMediaTagsAction::class);
+        $this->app->bindIf(RelocateMediaContract::class, RelocateMediaAction::class);
+        $this->app->bindIf(RenameMediaContract::class, RenameMediaAction::class);
+        $this->app->bindIf(ReplaceMediaFileContract::class, ReplaceMediaFileAction::class);
+        $this->app->bindIf(ReplaceOwnerMediaSlotContract::class, ReplaceOwnerMediaSlotAction::class);
+        $this->app->bindIf(RevokeMediaTenantGrantContract::class, RevokeMediaTenantGrantAction::class);
+        $this->app->bindIf(SignMultipartPartContract::class, SignMultipartPartAction::class);
+        $this->app->bindIf(UpdateMediaMetadataContract::class, UpdateMediaMetadataAction::class);
+        $this->app->scopedIf(MediaLibraryContract::class, MediaLibrary::class);
     }
 
     protected function registerConfig(): void

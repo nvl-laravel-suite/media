@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Actions;
 
 use Illuminate\Database\Eloquent\Model;
+use Nvl\Media\Contracts\CopyOwnerMediaSlotContract;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Data\Display\MediaLibraryItem;
 use Nvl\Media\Data\MediaActorData;
@@ -15,7 +16,7 @@ use Nvl\Media\Services\MediaOwnerSlotCopyWorkflow;
  *
  * @api
  */
-final readonly class CopyOwnerMediaSlotAction
+final readonly class CopyOwnerMediaSlotAction implements CopyOwnerMediaSlotContract
 {
     public function __construct(
         private MediaOwnerSlotCopyWorkflow $workflow,

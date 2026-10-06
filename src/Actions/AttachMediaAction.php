@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Nvl\Media\Actions;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Nvl\Media\Contracts\AttachMediaContract;
 use Nvl\Media\Contracts\HasNvlMedia;
@@ -17,6 +16,7 @@ use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaTenantOwnerResolver;
 use Nvl\Media\Services\MediaVariationDispatcher;
+use Nvl\Support\Events\DomainEventDispatcher;
 use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 
 /**
@@ -31,6 +31,7 @@ final class AttachMediaAction implements AttachMediaContract
         private readonly MediaMutationLock $mutationLock,
         private readonly MediaTenantOwnerResolver $owners,
         private readonly TenantBoundary $tenantBoundary,
+        private DomainEventDispatcher $domainEvents,
     ) {}
 
     /**
@@ -63,7 +64,7 @@ final class AttachMediaAction implements AttachMediaContract
         }
 
         $association = $this->mutationLock->execute($media->id, function () use (&$media, $morph_type, $morph_id, $collection, $locale, $order, $metadata, $requirePublic): MediaAssociation {
-            return DB::transaction(function () use (&$media, $morph_type, $morph_id, $collection, $locale, $order, $metadata, $requirePublic): MediaAssociation {
+            return (new Media)->getConnection()->transaction(function () use (&$media, $morph_type, $morph_id, $collection, $locale, $order, $metadata, $requirePublic): MediaAssociation {
                 $media = Media::query()->lockForUpdate()->findOrFail($media->id);
 
                 if ($requirePublic && ! $media->is_public) {
@@ -96,6 +97,8 @@ final class AttachMediaAction implements AttachMediaContract
                 }
                 $association->save();
 
+                $this->domainEvents->dispatch(MediaAttached::fromAssociation($association), $association->getConnection());
+
                 return $association;
             });
         });
@@ -109,8 +112,6 @@ final class AttachMediaAction implements AttachMediaContract
 
             $this->variationDispatcher->dispatchMissingForAssociation($media, $model, $resolvedSlotName);
         }
-
-        event(MediaAttached::fromAssociation($association));
 
         return $association;
     }

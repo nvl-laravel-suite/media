@@ -1,5 +1,28 @@
 # NVL Media — API and usage
 
+## Quickstart
+
+```sh
+composer require nvl/media:^5.0
+php artisan nvl:install media --dry-run
+php artisan nvl:install media
+```
+
+Required NVL dependencies: `nvl/core` (`^5.0`), `nvl/filterable` (`^5.0`), `nvl/translatable` (`^5.0`). Configure disks, scanner policy and owner capabilities. Resolve authorization from the host. S3/images/scanning need their documented optional features; factories do not create files.
+Review the published common config, select one migration owner, and run schema preflight before existing-table upgrades. The installer does not enable features or run migrations. Follow the detailed installation and capability sections below before invoking a storage/provider operation.
+
+Inject `Nvl\Media\Contracts\MediaLibraryContract` in a host service. After supplying the trusted inputs described above, the first public call is:
+
+```php
+use Nvl\Media\Contracts\MediaLibraryContract;
+
+/** @var MediaLibraryContract $capability */
+$result = $capability->paginate([], $actor);
+```
+
+Use the [event catalog](docs/events.md) and [Testing your app](#testing-your-app) below. The suite [getting-started guide](https://github.com/nvl-laravel-suite/laravel-suite/blob/main/docs/getting-started.md) provides a complete Comments host fixture; package archives retain their own local references.
+
+
 [← NVL Laravel Suite](https://github.com/nvl-laravel-suite)
 
 For support, [open an issue](https://github.com/nvl-laravel-suite/media/issues). For vulnerabilities, use
@@ -631,10 +654,6 @@ A package model returned or accepted by a public workflow is an identity/result 
 
 The current readable handle fields are `Media`: `id`, `filename`, `extension`, `mime_type`, `size`, `is_public`, `visibility`, `status`, `revision`, `width`, `height`, `duration_ms`, `type`, `created_at`, `updated_at`, `deleted_at`. All other package model handles have no readable attribute grant.
 
-## License
-
-Released under the [MIT License](LICENSE).
-
 ## Shared owner identity
 
 Declare a model once in `config/nvl-core.php`:
@@ -690,3 +709,165 @@ Owned cache and lock identities follow `nvl:<package>:<purpose>:…`. Mutation, 
 ## Canonical configuration ownership
 
 Use `nvl-media` settings in `config/nvl-media.php` and canonical package environment names. Old generic roots are foreign unless an upgrading NVL host explicitly selects them in Core's default-off compatibility. Canonical false/null/empty values win; no old roots are populated or written back. Keep logical package/resource IDs unchanged. Review [Core's rename inventory and cache/worker cutover](https://github.com/nvl-laravel-suite/core/blob/main/UPGRADING.md#major-5-canonical-configuration-and-environment).
+
+
+## Replaceable workflows and scripted uploads
+
+Inject `MediaLibraryContract` for the complete Media API, or the focused workflow
+contract (for example `ReplaceOwnerMediaSlotContract`) for one operation. Selected
+Action contracts retain the native `execute()` arguments and results; the default
+implementations retain their concrete constructors and final/readonly qualifiers.
+Defaults use conditional bindings so an earlier host binding remains authoritative.
+`MediaLibraryContract` and `MediaCatalogImport` retain scoped defaults.
+
+The eight library source methods return `MediaUploadBuilder`: `add`, `copy`,
+`fromRequest`, `fromUrl`, `fromBase64`, `fromString`, `fromBinary`, and `fromDisk`.
+The real library still returns `MediaAdder` covariantly. Type consumer orchestration
+against the builder interface when replacement is required.
+
+```php
+use Nvl\Media\Contracts\MediaLibraryContract;
+use Nvl\Media\Models\Media;
+use Nvl\Media\Testing\FakeMediaLibrary;
+use Nvl\Media\Testing\FakeMediaUploadBuilder;
+use Nvl\Support\Testing\FakeCall;
+
+// $app is the explicit application container; $owner is an in-memory media owner.
+$asset = new Media;
+$asset->forceFill(['id' => 'example-asset', 'is_public' => false]);
+$builder = (new FakeMediaUploadBuilder)->willReturn('upload', $asset);
+$fake = FakeMediaLibrary::fake($app)->willReturn('fromString', $builder);
+
+$result = $app->make(MediaLibraryContract::class)
+    ->fromString($owner, 'document bytes')
+    ->usingSlot('document')
+    ->asPublic(false)
+    ->upload();
+
+$builder->assertCalled('upload', fn (FakeCall $call): bool =>
+    $call->arguments['options']['slot'] === 'document'
+    && $call->arguments['options']['public'] === false);
+```
+
+Library scripts use the actual library method name and return its declared native
+result. Every call consumes one FIFO result or exception and is recorded before
+throwing or reporting exhaustion. Use `willThrow($method, $exception)` for failures,
+`calls($method)` for ordered immutable `FakeCall` records, and
+`assertCalled($method, $predicate, $times)` for exact counts. Predicates receive a
+`FakeCall`; zero is a valid expected count and negative counts fail. Nullable and
+void successes require an explicit `willReturn($method, null)`. Authorization and
+URLs must be explicitly scripted, including `false` or `null`; they are never inferred.
+
+Script each fresh `FakeMediaUploadBuilder` under its own `upload`, `slot`, or
+`slotOnCloudDisk` terminal name. Each source entry initializes its returned fake
+builder exactly once from the actual source arguments and owner identity. Reusing
+that builder in another library entry fails without overwriting the original
+context. An arbitrary host `MediaUploadBuilder` is returned unchanged. Repeated
+terminals consume new scripts, recording one complete request per attempt.
+
+Terminal `FakeCall::arguments` contains `arguments` (the native terminal arguments),
+`source` (`method` and its original named `arguments`, excluding owner), `owner`
+(`model`, native `id`, and morph `type`), and an `options` snapshot. Options retain
+`slot`, `pendingSlot`, resolved `collection`, `fileName`, inert `fileNameSanitizer`,
+`preserveOriginal`, `customProperties`, appended `tags`, `locale`, `order`, `disk`,
+`folder`, nullable `public`, keyed `variations`, independent `skipVariations`,
+`associationMeta` with the resolved slot, `allowDuplicates`, `uploaderId`, and
+`uploaderType`. Later setters do not change earlier array snapshots. Model objects
+and closures retain identity; they are not serialized or executed.
+
+The fake performs no source reads, decoding, downloads, filesystem mutations,
+scanning, SQL, or job dispatch, and does not resolve owner-slot defaults. `copy`
+presets preservation, null slot names fall back while empty names remain empty,
+and a terminal disk override remains for later terminals. Variation maps retain
+supplied keys; property, metadata, and tag merges follow native `array_merge`.
+Uploader identifiers use the native string conversion; owner keys retain their
+native type. The cloud disk is captured from the explicit installation container,
+with native `s3` fallback, rather than a global application.
+
+Install before resolving consumer services. Installation binds the supplied
+container's `MediaLibraryContract` instance and clears that facade accessor's cached
+root; it does not change Laravel's global facade application. A fake installed
+after normal scoped registration is forgotten on `forgetScopedInstances()`; a
+pre-discovery host instance preserved by `scopedIf` remains host-owned. Scope flushes
+do not automatically clear Laravel facade caches. Use a separate fake per container.
+
+## Testing your app
+
+Inject the supported contract rather than constructing its concrete Action or querying package tables. Replace `Nvl\Media\Contracts\MediaLibraryContract` in Laravel's native container for a host-workflow test:
+
+```php
+use Nvl\Media\Contracts\MediaLibraryContract;
+
+$double = Mockery::mock(MediaLibraryContract::class);
+$this->app->instance(MediaLibraryContract::class, $double);
+// Configure the exact paginate arguments and documented return value for your host case.
+```
+
+The package's conditional native binding preserves host substitutions. Production uses the real contract; test doubles do not prove its storage/authorization behavior.
+
+A detached fixture for a returned identity/data handle is:
+
+```php
+use Nvl\Media\Models\Media;
+$fixture = Media::factory()->withoutParents()->make();
+```
+
+Ordinary `make()` may persist declared package parents. `withoutParents()->make()` disables parent expansion/admission for detached fixtures; use explicit persisted parents/owners and matching effective connections for a real `create()`. Factories do not authorize workflows, call Stripe, create backing Media objects or publish Template artifacts. Enabled tenancy requires explicit admitted persisted tenants/parents. Your host test installation supplies Faker; no test runner is a runtime package dependency.
+
+`Nvl\Media\Testing\FakeMediaLibrary::fake($this->app)` installs the complete interface fake and clears the matching facade root. Script library and builder terminal results explicitly; no real upload/source resolution/URL generation occurs. Use `ListOwnerMediaSlotsContract` for batched owner slots and the documented eager-load adapter for host queries.
+
+Use Laravel `Event::fake()`, `Queue::fake()`, `Mail::fake()` or `Storage::fake()` only for the effects the host test intends to isolate. Use real commits/listeners for timing proof. Add the optional Core consumer boundary rules to host PHPStan:
+
+```neon
+includes:
+    - vendor/nvl/core/support/consumer-audit.neon
+parameters:
+    nvlConsumer:
+        testPaths: [tests]
+        tableNames: []
+        exceptions: []
+```
+
+Rules read installed public metadata without suite boot. They flag internal symbols, package model queries/writes, capability relations and owned tables; they cannot prove dynamic code or runtime authorization. Exact exceptions require `file`, `identifier`, `symbol`, and a documented `reason`. New C3/C4/E tests, archives and guide execution remain pending until the integration phase records results.
+
+### Shipped factory states
+
+These runtime builders keep Laravel's native Factory API. The listed methods name explicit supported parent/owner/lifecycle states; follow each factory's native admission requirements. Detached examples above do not assert persistence validity.
+
+| Factory | Explicit states |
+| --- | --- |
+| [`MediaAssociationFactory`](database/factories/MediaAssociationFactory.php) | `forMedia(Media $parent)`, `forOwner(Model $owner)` |
+| [`MediaFactory`](database/factories/MediaFactory.php) | Native Factory states only |
+| [`MediaImageVariationFactory`](database/factories/MediaImageVariationFactory.php) | `forMedia(Media $parent)` |
+| [`MediaTenantGrantFactory`](database/factories/MediaTenantGrantFactory.php) | `forMedia(Media $parent)`, `forRecipient(TenantId $recipient)` |
+| [`MediaTranslationFactory`](database/factories/MediaTranslationFactory.php) | `forMedia(Media $parent)` |
+
+## Error codes and events
+
+All recognized package failures implement `Nvl\Support\Contracts\PackageException`; only `RespondableException` opts into safe response metadata. Keep native PHP programmer errors and Laravel/SDK exceptions distinct. The optional `PackageExceptionRenderer` is registered by the host in `withExceptions`; it leaves unrelated, marker-only and non-JSON handling to the host. Its JSON envelope is `{message:string, code:string, context:object}`. Request locale is host-owned; diagnostics/previous exceptions are not public copy. Event schemas and source connections are documented in [events](docs/events.md).
+
+The table lists enum discriminators, including any successful codes retained for compatibility. A code is not itself an HTTP status; the throwing exception's `suggestedStatus()` is authoritative, especially legacy/custom constructors. Empty context renders as `{}`; only documented JSON-safe context is presented.
+
+| Code | Suggested status | Public context | Translation key |
+| --- | --- | --- | --- |
+| `file_unacceptable_for_collection` | 422 | Declared safe scalar/array map; otherwise `{}` | `nvl-media::responsecode.file_unacceptable_for_collection` |
+| `conversion_failed` | 500 | Declared safe scalar/array map; otherwise `{}` | `nvl-media::responsecode.conversion_failed` |
+| `disk_not_defined` | 500 | Declared safe scalar/array map; otherwise `{}` | `nvl-media::responsecode.disk_not_defined` |
+| `media_upload_failed` | 422 | Declared safe scalar/array map; otherwise `{}` | `nvl-media::responsecode.media_upload_failed` |
+| `media_in_use` | 409 | {media_id:string, association_count:int} | `nvl-media::responsecode.media_in_use` |
+| `storage_unavailable` | 500 | Declared safe scalar/array map; otherwise `{}` | `nvl-media::responsecode.storage_unavailable` |
+| `updated` | Exception-defined; see `suggestedStatus()` | Declared safe scalar/array map; otherwise `{}` | `nvl-media::responsecode.updated` |
+| `deleted` | Exception-defined; see `suggestedStatus()` | Declared safe scalar/array map; otherwise `{}` | `nvl-media::responsecode.deleted` |
+| `batch_read_unavailable` | 500 | Declared safe scalar/array map; otherwise `{}` | `nvl-media::responsecode.batch_read_unavailable` |
+| `media_not_reusable` | 422 | Declared safe scalar/array map; otherwise `{}` | `nvl-media::responsecode.media_not_reusable` |
+| `s3_dependency_unavailable` | 500 | Declared safe scalar/array map; otherwise `{}` | `nvl-media::responsecode.s3_dependency_unavailable` |
+| `operation_failed` | Exception-defined; see `suggestedStatus()` | Declared safe scalar/array map; otherwise `{}` | `nvl-media::responsecode.operation_failed` |
+
+### Operational logging
+
+`nvl-core.logging` defaults to channel `nvl`, normal verbosity and a CSV quiet override. Configure package `channel`/`verbosity` overrides under `packages`; verbosity is `quiet`, `normal` or `verbose`. Warnings/errors survive every setting. The absent `nvl` channel becomes a stack of the host default; a configured host channel wins. Do not configure a self-referential stack. Doctor diagnoses missing/cyclic channels without logging to them. Stable `nvl.<package>.<operation>.<result>` keys carry bounded diagnostics, never retained tenant/job context. CSV logs one failed-row warning summary per chunk; row details require verbose mode and contain no raw row values.
+
+
+## License
+
+Released under the [MIT License](LICENSE).

@@ -10,11 +10,11 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
 use Nvl\Media\Support\MediaQueueConfiguration;
 use Nvl\Media\Support\MediaQueueEnvelope;
+use Nvl\Support\Facades\PackageLog;
 use Nvl\Support\Tenancy\Contracts\TenantQueuedJob;
 use Nvl\Support\Tenancy\Enums\TenantContextMode;
 use Nvl\Support\Tenancy\ValueObjects\TenantJobEnvelope;
@@ -57,9 +57,9 @@ final class ProcessMediaVariationsJob implements ShouldBeUnique, ShouldQueue, Te
         $media = Media::find($this->mediaId);
 
         if ($media === null) {
-            Log::warning('ProcessMediaVariationsJob: media not found, skipping.', [
+            PackageLog::log('media', 'warning', 'nvl.media.variation_processing.missing', [
                 'media_id' => $this->mediaId,
-            ]);
+            ], 'normal');
 
             return;
         }
@@ -113,9 +113,9 @@ final class ProcessMediaVariationsJob implements ShouldBeUnique, ShouldQueue, Te
 
     public function failed(?Throwable $exception): void
     {
-        Log::error('ProcessMediaVariationsJob exhausted its retry budget.', [
+        PackageLog::log('media', 'error', 'nvl.media.variation_processing.exhausted', [
             'media_id' => $this->mediaId,
             'exception' => $exception?->getMessage(),
-        ]);
+        ], 'normal');
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Actions;
 
 use Illuminate\Support\Facades\DB;
+use Nvl\Media\Contracts\BulkTagMediaContract;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaQueryService;
@@ -14,7 +15,7 @@ use Nvl\Media\Services\MediaQueryService;
  *
  * @api
  */
-final class BulkTagMediaAction
+final class BulkTagMediaAction implements BulkTagMediaContract
 {
     public function __construct(
         private readonly MediaMutationLock $mutationLock,

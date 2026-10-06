@@ -7,19 +7,24 @@ namespace Nvl\Media\Enums;
 use Nvl\Support\Contracts\ResponseCode;
 
 /**
- * Catalog of response codes for the Media module's Inertia (admin library) flows.
+ * Stable Media mutation and failure discriminators, preserving existing Inertia flash values.
  *
- * Each case value is a short, opaque discriminator emitted by `MediaLibraryController`
- * in `flash.message`. The frontend `useAction` hook does NOT translate these — the
- * action declares its own `messages.success` / `messages.error` via typed `t()` calls.
- *
- * The JSON-API `MediaController` (at `routes/api.php`) is intentionally excluded from
- * this contract; its responses are consumed via direct fetch/axios, not Inertia flash.
+ * @api
  */
 enum MediaResponseCode: string implements ResponseCode
 {
+    case FileUnacceptableForCollection = 'file_unacceptable_for_collection';
+    case ConversionFailed = 'conversion_failed';
+    case DiskNotDefined = 'disk_not_defined';
+    case MediaUploadFailed = 'media_upload_failed';
+    case MediaInUse = 'media_in_use';
+    case StorageUnavailable = 'storage_unavailable';
+
     case Updated = 'updated';
     case Deleted = 'deleted';
 
+    case BatchReadUnavailable = 'batch_read_unavailable';
+    case MediaNotReusable = 'media_not_reusable';
+    case S3DependencyUnavailable = 's3_dependency_unavailable';
     case OperationFailed = 'operation_failed';
 }

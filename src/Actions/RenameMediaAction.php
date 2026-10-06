@@ -4,20 +4,22 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Actions;
 
-use Illuminate\Support\Facades\DB;
+use Nvl\Media\Contracts\RenameMediaContract;
 use Nvl\Media\Events\MediaMutated;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaMutationLock;
+use Nvl\Support\Events\DomainEventDispatcher;
 
 /**
  * Renames the display filename for a media record.
  *
  * @api
  */
-final class RenameMediaAction
+final class RenameMediaAction implements RenameMediaContract
 {
     public function __construct(
         private readonly MediaMutationLock $mutationLock,
+        private DomainEventDispatcher $domainEvents,
     ) {}
 
     /**
@@ -31,17 +33,17 @@ final class RenameMediaAction
     {
         $mediaId = $media instanceof Media ? $media->id : $media;
         $freshMedia = $this->mutationLock->execute($mediaId, function () use ($mediaId, $filename): Media {
-            return DB::transaction(function () use ($mediaId, $filename): Media {
+            return (new Media)->getConnection()->transaction(function () use ($mediaId, $filename): Media {
                 $media = Media::query()->lockForUpdate()->findOrFail($mediaId);
                 $media->update(['filename' => $filename]);
+
+                $this->domainEvents->dispatch(new MediaMutated($media->id, 'renamed'), $media->getConnection());
 
                 return Media::query()
                     ->with(['imageVariations', 'translations'])
                     ->findOrFail($media->id);
             });
         });
-
-        MediaMutated::dispatch($freshMedia->id, 'renamed');
 
         return $freshMedia;
     }

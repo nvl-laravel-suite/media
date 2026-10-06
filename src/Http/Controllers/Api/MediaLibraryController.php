@@ -11,7 +11,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Routing\Controller;
-use Illuminate\Support\Facades\Log;
 use LogicException;
 use Nvl\Media\Data\Display\MediaImageVariationPayload;
 use Nvl\Media\Data\MediaFilter;
@@ -23,6 +22,7 @@ use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaLibraryItemDataFactory;
 use Nvl\Media\Services\MediaManagementDataFactory;
 use Nvl\Media\Services\MediaQueryService;
+use Nvl\Support\Facades\PackageLog;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -161,11 +161,11 @@ final class MediaLibraryController extends Controller
                     ?: (string) trans('nvl-media::media/messages.error.unauthorized'),
             ], 403);
         } catch (Throwable $exception) {
-            Log::error('Media download failed.', [
+            PackageLog::log('media', 'error', 'nvl.media.download.failed', [
                 'media_id' => $media->id,
                 'exception' => $exception::class,
                 'error' => $exception->getMessage(),
-            ]);
+            ], 'normal');
 
             return response()->json([
                 'message' => (string) trans('nvl-media::media/messages.error.unexpected'),

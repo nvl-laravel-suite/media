@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Nvl\Media\Actions;
 
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Nvl\Media\Contracts\GenerateImageVariationContract;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Exceptions\ConversionFailedException;
@@ -20,6 +20,7 @@ use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\MediaTemporaryFileRegistry;
 use Nvl\Media\Support\MediaVariationFileNamer;
+use Nvl\Support\Logging\PackageLogger;
 use Throwable;
 
 /**
@@ -27,7 +28,7 @@ use Throwable;
  *
  * @api
  */
-final class GenerateImageVariationAction
+final class GenerateImageVariationAction implements GenerateImageVariationContract
 {
     /**
      * Create the image variation action.
@@ -40,6 +41,7 @@ final class GenerateImageVariationAction
         private readonly MediaMutationLock $mutationLock,
         private readonly MediaPathResolver $pathResolver,
         private readonly MediaTemporaryFileRegistry $temporaryFiles,
+        private PackageLogger $packageLogger,
     ) {}
 
     /**
@@ -327,11 +329,11 @@ final class GenerateImageVariationAction
         ConversionDefinition $definition,
         int $expectedRevision,
     ): void {
-        Log::info('Media variation work became stale.', [
+        $this->packageLogger->log('media', 'info', 'nvl.media.variation_work.stale', [
             'media_id' => $media->id,
             'variation' => $definition->name,
             'expected_revision' => $expectedRevision,
             'current_revision' => $media->revision,
-        ]);
+        ], 'normal');
     }
 }

@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Schema;
 use Nvl\Data\Providers\DataServiceProvider;
 use Nvl\Filterable\Providers\FilterableServiceProvider;
 use Nvl\Media\Providers\MediaServiceProvider;
+use Nvl\Support\Providers\LocaleServiceProvider;
 use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Tenancy\Providers\TenancyServiceProvider;
 use Nvl\Translatable\Providers\TranslatableServiceProvider;
@@ -31,10 +32,11 @@ abstract class MediaTestCase extends Orchestra
     protected function getPackageProviders($app): array
     {
         return [
+            LocaleServiceProvider::class,
             DataServiceProvider::class,
             FilterableServiceProvider::class,
             SupportServiceProvider::class,
-            TenancyServiceProvider::class,
+            ...(class_exists(TenancyServiceProvider::class) ? [TenancyServiceProvider::class] : []),
             TranslatableServiceProvider::class,
             MediaServiceProvider::class,
         ];

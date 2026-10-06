@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Actions;
 
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Nvl\Media\Contracts\GrantMediaToTenantContract;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Events\MediaCatalogGrantAudited;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaTenantGrant;
+use Nvl\Support\Events\DomainEventDispatcher;
 use Nvl\Support\Tenancy\Contracts\TenantContext;
 use Nvl\Support\Tenancy\Contracts\TenantDirectory;
 use Nvl\Support\Tenancy\Enums\TenantContextMode;
@@ -23,9 +24,9 @@ use Nvl\Support\Tenancy\ValueObjects\TenantId;
  *
  * @api
  */
-final readonly class GrantMediaToTenantAction
+final readonly class GrantMediaToTenantAction implements GrantMediaToTenantContract
 {
-    public function __construct(private TenantContext $context, private TenantDirectory $directory) {}
+    public function __construct(private TenantContext $context, private TenantDirectory $directory, private DomainEventDispatcher $domainEvents) {}
 
     public function execute(string $mediaId, TenantId $recipient, int $sourceRevision): MediaTenantGrant
     {
@@ -34,14 +35,14 @@ final readonly class GrantMediaToTenantAction
             throw new TenantBoundaryViolation('Media grants require platform context and an active recipient.');
         }
 
-        return DB::transaction(function () use ($mediaId, $recipient, $sourceRevision): MediaTenantGrant {
-            DB::table(MediaTables::get(MediaTables::TenantGrantLocks))->insertOrIgnore([
+        return (new Media)->getConnection()->transaction(function () use ($mediaId, $recipient, $sourceRevision): MediaTenantGrant {
+            (new Media)->getConnection()->table(MediaTables::get(MediaTables::TenantGrantLocks))->insertOrIgnore([
                 'tenant_id' => $recipient->value,
                 'media_id' => $mediaId,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            DB::table(MediaTables::get(MediaTables::TenantGrantLocks))
+            (new Media)->getConnection()->table(MediaTables::get(MediaTables::TenantGrantLocks))
                 ->where('tenant_id', $recipient->value)
                 ->where('media_id', $mediaId)
                 ->lockForUpdate()
@@ -71,9 +72,9 @@ final readonly class GrantMediaToTenantAction
                     'revoked_at' => null,
                 ])->save();
 
-                MediaCatalogGrantAudited::dispatch(
+                $this->domainEvents->dispatch(new MediaCatalogGrantAudited(
                     'refreshed', $existing->id, $recipient->value, $source->id, $sourceRevision, $existing->revision,
-                );
+                ), $existing->getConnection());
 
                 return $existing->refresh();
             }
@@ -86,9 +87,9 @@ final readonly class GrantMediaToTenantAction
                 'revision' => 1,
                 'enabled' => true,
             ]);
-            MediaCatalogGrantAudited::dispatch(
+            $this->domainEvents->dispatch(new MediaCatalogGrantAudited(
                 'created', $grant->id, $recipient->value, $source->id, $sourceRevision, $grant->revision,
-            );
+            ), $grant->getConnection());
 
             return $grant;
         });

@@ -718,3 +718,111 @@ text correlation for integer, UUID, and string keys. It is independent of Spatie
 The normal localized read budget is one canonical query per concrete owner class plus three Media queries when
 assets exist. A cold disabled-Tenancy call adds one fixed installation safety probe. Empty associations need no
 asset/translation reads; no query scales with owner count or projected item count.
+
+
+## Replaceable workflows and scripted uploads
+
+Inject `MediaLibraryContract` for the complete Media API, or the focused workflow
+contract (for example `ReplaceOwnerMediaSlotContract`) for one operation. Selected
+Action contracts retain the native `execute()` arguments and results; the default
+implementations retain their concrete constructors and final/readonly qualifiers.
+Defaults use conditional bindings so an earlier host binding remains authoritative.
+`MediaLibraryContract` and `MediaCatalogImport` retain scoped defaults.
+
+The eight library source methods return `MediaUploadBuilder`: `add`, `copy`,
+`fromRequest`, `fromUrl`, `fromBase64`, `fromString`, `fromBinary`, and `fromDisk`.
+The real library still returns `MediaAdder` covariantly. Type consumer orchestration
+against the builder interface when replacement is required.
+
+```php
+use Nvl\Media\Contracts\MediaLibraryContract;
+use Nvl\Media\Models\Media;
+use Nvl\Media\Testing\FakeMediaLibrary;
+use Nvl\Media\Testing\FakeMediaUploadBuilder;
+use Nvl\Support\Testing\FakeCall;
+
+// $app is the explicit application container; $owner is an in-memory media owner.
+$asset = new Media;
+$asset->forceFill(['id' => 'example-asset', 'is_public' => false]);
+$builder = (new FakeMediaUploadBuilder)->willReturn('upload', $asset);
+$fake = FakeMediaLibrary::fake($app)->willReturn('fromString', $builder);
+
+$result = $app->make(MediaLibraryContract::class)
+    ->fromString($owner, 'document bytes')
+    ->usingSlot('document')
+    ->asPublic(false)
+    ->upload();
+
+$builder->assertCalled('upload', fn (FakeCall $call): bool =>
+    $call->arguments['options']['slot'] === 'document'
+    && $call->arguments['options']['public'] === false);
+```
+
+Library scripts use the actual library method name and return its declared native
+result. Every call consumes one FIFO result or exception and is recorded before
+throwing or reporting exhaustion. Use `willThrow($method, $exception)` for failures,
+`calls($method)` for ordered immutable `FakeCall` records, and
+`assertCalled($method, $predicate, $times)` for exact counts. Predicates receive a
+`FakeCall`; zero is a valid expected count and negative counts fail. Nullable and
+void successes require an explicit `willReturn($method, null)`. Authorization and
+URLs must be explicitly scripted, including `false` or `null`; they are never inferred.
+
+Script each fresh `FakeMediaUploadBuilder` under its own `upload`, `slot`, or
+`slotOnCloudDisk` terminal name. Each source entry initializes its returned fake
+builder exactly once from the actual source arguments and owner identity. Reusing
+that builder in another library entry fails without overwriting the original
+context. An arbitrary host `MediaUploadBuilder` is returned unchanged. Repeated
+terminals consume new scripts, recording one complete request per attempt.
+
+Terminal `FakeCall::arguments` contains `arguments` (the native terminal arguments),
+`source` (`method` and its original named `arguments`, excluding owner), `owner`
+(`model`, native `id`, and morph `type`), and an `options` snapshot. Options retain
+`slot`, `pendingSlot`, resolved `collection`, `fileName`, inert `fileNameSanitizer`,
+`preserveOriginal`, `customProperties`, appended `tags`, `locale`, `order`, `disk`,
+`folder`, nullable `public`, keyed `variations`, independent `skipVariations`,
+`associationMeta` with the resolved slot, `allowDuplicates`, `uploaderId`, and
+`uploaderType`. Later setters do not change earlier array snapshots. Model objects
+and closures retain identity; they are not serialized or executed.
+
+The fake performs no source reads, decoding, downloads, filesystem mutations,
+scanning, SQL, or job dispatch, and does not resolve owner-slot defaults. `copy`
+presets preservation, null slot names fall back while empty names remain empty,
+and a terminal disk override remains for later terminals. Variation maps retain
+supplied keys; property, metadata, and tag merges follow native `array_merge`.
+Uploader identifiers use the native string conversion; owner keys retain their
+native type. The cloud disk is captured from the explicit installation container,
+with native `s3` fallback, rather than a global application.
+
+Install before resolving consumer services. Installation binds the supplied
+container's `MediaLibraryContract` instance and clears that facade accessor's cached
+root; it does not change Laravel's global facade application. A fake installed
+after normal scoped registration is forgotten on `forgetScopedInstances()`; a
+pre-discovery host instance preserved by `scopedIf` remains host-owned. Scope flushes
+do not automatically clear Laravel facade caches. Use a separate fake per container.
+
+### Focused workflow interfaces
+
+- `Nvl\Media\Contracts\AbortMultipartUploadContract` — `AbortMultipartUploadAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\AdoptSpatieMediaContract` — `AdoptSpatieMediaAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\BulkDeleteMediaContract` — `BulkDeleteMediaAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\BulkMoveMediaContract` — `BulkMoveMediaAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\BulkTagMediaContract` — `BulkTagMediaAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\ClearOwnerMediaSlotContract` — `ClearOwnerMediaSlotAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\CompleteMultipartUploadContract` — `CompleteMultipartUploadAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\CopyOwnerMediaSlotContract` — `CopyOwnerMediaSlotAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\FinalizeMediaScanContract` — `FinalizeMediaScanAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\GenerateImageVariationContract` — `GenerateImageVariationAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\GetOwnerMediaSlotContract` — `GetOwnerMediaSlotAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\GrantMediaToTenantContract` — `GrantMediaToTenantAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\ImportPlatformMediaContract` — `ImportPlatformMediaAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\InitiateMultipartUploadContract` — `InitiateMultipartUploadAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\MutateMediaTagsContract` — `MutateMediaTagsAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\RelocateMediaContract` — `RelocateMediaAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\RenameMediaContract` — `RenameMediaAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\ReplaceMediaFileContract` — `ReplaceMediaFileAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\ReplaceOwnerMediaSlotContract` — `ReplaceOwnerMediaSlotAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\RevokeMediaTenantGrantContract` — `RevokeMediaTenantGrantAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\SignMultipartPartContract` — `SignMultipartPartAction::execute()` arguments and results.
+- `Nvl\Media\Contracts\UpdateMediaMetadataContract` — `UpdateMediaMetadataAction::execute()` arguments and results.
+
+Existing `UploadMediaContract`, `AttachMediaContract`, `DetachMediaContract`, `DeleteMediaContract`, `ReusePublicMediaContract`, and `ListOwnerMediaSlotsContract` remain the established seams. `MediaUploadBuilder` exposes all eighteen native fluent setters and the three native terminals; its internal fake initialization method is not a consumer API.

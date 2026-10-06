@@ -1,15 +1,28 @@
 # Changelog
 
+## Unreleased — consumer runtime integration
+
+- Added focused consumer contract/testing guidance and shipped-factory usage limits.
+- Versioned committed event payloads and documented canonical aliases, source connections, failure metadata and optional safe rendering.
+- Added explicit first-use/installer and deployment guidance; new acceptance checks remain pending.
+
+
 All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
 ### Added
 
+- Add focused consumer contracts for all selected Media workflows, preserving the six established Action seams.
+- Add `MediaUploadBuilder`, `FakeMediaLibrary`, and `FakeMediaUploadBuilder` with explicit native-return FIFO scripts, immutable call records, and complete fluent request snapshots.
+
 - Add bounded authorized owner-slot DTO reads with explicit SQL View policy, canonical owner admission, exact identity correlation, bounded locale projection, and no variation queries.
 - Add the independent `hasNvlMedia()` host existence scope with canonical connection/FROM guards and complete SQL authorization.
 
 ### Changed
+
+- Widen only the eight library-contract/facade source returns to `MediaUploadBuilder`; retain real `MediaAdder` return covariance and upload behavior.
+- Preserve early host bindings for selected workflow and extension defaults while retaining scoped library/catalog lifetimes.
 
 - Classify the supported consumer PHP surface with explicit source annotations and restrict package model handles to declared identity and in-memory read fields; preserve existing workflow behavior and concrete signatures.
 - Preserve early host `MediaAuthorization` bindings with `bindIf`; private batch URLs remain null and use separate authorized Download delivery.

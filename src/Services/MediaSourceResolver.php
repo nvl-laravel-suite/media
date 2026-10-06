@@ -13,13 +13,13 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Nvl\Media\Contracts\MediaHostResolver;
 use Nvl\Media\Exceptions\FileUnacceptableForCollection;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaDiskResolver;
 use Nvl\Media\Support\MediaMimeResolver;
+use Nvl\Support\Logging\PackageLogger;
 use Throwable;
 
 /**
@@ -33,6 +33,7 @@ final class MediaSourceResolver
         private readonly MediaDiskGateway $disks,
         private readonly MediaHostResolver $hostResolver,
         private readonly MediaTemporaryFileRegistry $temporaryFiles,
+        private PackageLogger $packageLogger,
     ) {}
 
     /**
@@ -661,12 +662,12 @@ final class MediaSourceResolver
         $host = parse_url($url, PHP_URL_HOST);
         $scheme = parse_url($url, PHP_URL_SCHEME);
 
-        Log::warning('Media remote source was rejected.', [
+        $this->packageLogger->log('media', 'warning', 'nvl.media.remote_source.rejected', [
             'host' => is_string($host) ? $host : null,
             'scheme' => is_string($scheme) ? mb_strtolower($scheme) : null,
             'exception' => $exception::class,
             'error' => mb_substr($exception->getMessage(), 0, 1000),
-        ]);
+        ], 'normal');
     }
 
     private function maxSourceBytes(): int

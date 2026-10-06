@@ -1,0 +1,422 @@
+{
+  "schema_version": 1,
+  "package": "nvl/media",
+  "documentation": "docs/events.md",
+  "implementation_status": "implemented; executable acceptance proof pending",
+  "events": [
+    {
+      "class": "Nvl\\Media\\Events\\MediaAttached",
+      "source": "packages/nvl/media/src/Events/MediaAttached.php",
+      "constructor_fields": [
+        {
+          "name": "mediaId",
+          "type": "string",
+          "visibility": "public",
+          "required": true,
+          "phpdoc_type": "string"
+        },
+        {
+          "name": "association",
+          "type": "array",
+          "visibility": "public",
+          "required": true,
+          "phpdoc_type": "array{media_id: string, associable_type: string, associable_id: string, collection: string, locale: string|null}"
+        },
+        {
+          "name": "schemaVersion",
+          "type": "int",
+          "visibility": "public",
+          "required": false,
+          "default_expression": "1"
+        }
+      ],
+      "public_fields": [
+        {
+          "name": "mediaId",
+          "type": "string",
+          "phpdoc_type": "string"
+        },
+        {
+          "name": "association",
+          "type": "array",
+          "phpdoc_type": "array{media_id: string, associable_type: string, associable_id: string, collection: string, locale: string|null}"
+        },
+        {
+          "name": "schemaVersion",
+          "type": "int"
+        }
+      ],
+      "kind": "value_object",
+      "schema_version": 1,
+      "trigger": "Generic media association persisted.",
+      "aliases": [],
+      "producers": [
+        {
+          "path": "packages/nvl/media/src/Actions/AttachMediaAction.php",
+          "trigger": "Generic media association persisted.",
+          "connection": "$association->getConnection()",
+          "construction_expression": "MediaAttached::fromAssociation($association)"
+        }
+      ],
+      "security_notes": [
+        "Media/grant and morph owner identities, revisions and association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Tenant grants expose persisted ownership identifiers."
+      ],
+      "no_op_semantics": "Existing changed-state/association/grant guards govern publication. File effect commit marking, prior-object cleanup and variation scheduling retain their ordering before publication; listener errors after commit cannot undo committed file ownership."
+    },
+    {
+      "class": "Nvl\\Media\\Events\\MediaCatalogGrantAudited",
+      "source": "packages/nvl/media/src/Events/MediaCatalogGrantAudited.php",
+      "constructor_fields": [
+        {
+          "name": "operation",
+          "type": "string",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "grantId",
+          "type": "string",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "tenantId",
+          "type": "string",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "mediaId",
+          "type": "string",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "sourceRevision",
+          "type": "int",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "grantRevision",
+          "type": "int",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "schemaVersion",
+          "type": "int",
+          "visibility": "public",
+          "required": false,
+          "default_expression": "1"
+        }
+      ],
+      "public_fields": [
+        {
+          "name": "operation",
+          "type": "string"
+        },
+        {
+          "name": "grantId",
+          "type": "string"
+        },
+        {
+          "name": "tenantId",
+          "type": "string"
+        },
+        {
+          "name": "mediaId",
+          "type": "string"
+        },
+        {
+          "name": "sourceRevision",
+          "type": "int"
+        },
+        {
+          "name": "grantRevision",
+          "type": "int"
+        },
+        {
+          "name": "schemaVersion",
+          "type": "int"
+        }
+      ],
+      "kind": "value_object",
+      "schema_version": 1,
+      "trigger": "Tenant catalog grant changed.",
+      "aliases": [],
+      "producers": [
+        {
+          "path": "packages/nvl/media/src/Actions/GrantMediaToTenantAction.php",
+          "trigger": "Tenant catalog grant changed.",
+          "connection": "$existing->getConnection()",
+          "construction_expression": "new MediaCatalogGrantAudited( 'refreshed', $existing->id, $recipient->value, $source->id, $sourceRevision, $existing->revision, )"
+        },
+        {
+          "path": "packages/nvl/media/src/Actions/GrantMediaToTenantAction.php",
+          "trigger": "Tenant catalog grant changed.",
+          "connection": "$grant->getConnection()",
+          "construction_expression": "new MediaCatalogGrantAudited( 'created', $grant->id, $recipient->value, $source->id, $sourceRevision, $grant->revision, )"
+        },
+        {
+          "path": "packages/nvl/media/src/Actions/RevokeMediaTenantGrantAction.php",
+          "trigger": "Tenant catalog grant changed.",
+          "connection": "$grant->getConnection()",
+          "construction_expression": "new MediaCatalogGrantAudited( 'revoked', $grant->id, $grant->tenant_id, $grant->media_id, $grant->source_revision, $grant->revision, )"
+        }
+      ],
+      "security_notes": [
+        "Media/grant and morph owner identities, revisions and association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Tenant grants expose persisted ownership identifiers."
+      ],
+      "no_op_semantics": "Existing changed-state/association/grant guards govern publication. File effect commit marking, prior-object cleanup and variation scheduling retain their ordering before publication; listener errors after commit cannot undo committed file ownership."
+    },
+    {
+      "class": "Nvl\\Media\\Events\\MediaDetached",
+      "source": "packages/nvl/media/src/Events/MediaDetached.php",
+      "constructor_fields": [
+        {
+          "name": "mediaId",
+          "type": "string",
+          "visibility": "public",
+          "required": true,
+          "phpdoc_type": "string"
+        },
+        {
+          "name": "affectedAssociations",
+          "type": "array",
+          "visibility": "public",
+          "required": true,
+          "phpdoc_type": "array<int, array{media_id: string, associable_type: string, associable_id: string, collection: string, locale: string|null}>"
+        },
+        {
+          "name": "schemaVersion",
+          "type": "int",
+          "visibility": "public",
+          "required": false,
+          "default_expression": "1"
+        }
+      ],
+      "public_fields": [
+        {
+          "name": "mediaId",
+          "type": "string",
+          "phpdoc_type": "string"
+        },
+        {
+          "name": "affectedAssociations",
+          "type": "array",
+          "phpdoc_type": "array<int, array{media_id: string, associable_type: string, associable_id: string, collection: string, locale: string|null}>"
+        },
+        {
+          "name": "schemaVersion",
+          "type": "int"
+        }
+      ],
+      "kind": "value_object",
+      "schema_version": 1,
+      "trigger": "Generic association snapshots removed.",
+      "aliases": [],
+      "producers": [
+        {
+          "path": "packages/nvl/media/src/Actions/DetachMediaAction.php",
+          "trigger": "Generic association snapshots removed.",
+          "connection": "(new Media)->getConnection()",
+          "construction_expression": "new MediaDetached($mediaId, $snapshots)"
+        }
+      ],
+      "security_notes": [
+        "Media/grant and morph owner identities, revisions and association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Tenant grants expose persisted ownership identifiers."
+      ],
+      "no_op_semantics": "Existing changed-state/association/grant guards govern publication. File effect commit marking, prior-object cleanup and variation scheduling retain their ordering before publication; listener errors after commit cannot undo committed file ownership."
+    },
+    {
+      "class": "Nvl\\Media\\Events\\MediaMutated",
+      "source": "packages/nvl/media/src/Events/MediaMutated.php",
+      "constructor_fields": [
+        {
+          "name": "mediaId",
+          "type": "string",
+          "visibility": "public",
+          "required": true,
+          "phpdoc_type": "string"
+        },
+        {
+          "name": "mutation",
+          "type": "string",
+          "visibility": "public",
+          "required": true,
+          "phpdoc_type": "string"
+        },
+        {
+          "name": "affectedAssociations",
+          "type": "array",
+          "visibility": "public",
+          "required": false,
+          "default_expression": "[]",
+          "phpdoc_type": "array<int, array{media_id: string, associable_type: string, associable_id: string, collection: string, locale: string|null}>"
+        },
+        {
+          "name": "schemaVersion",
+          "type": "int",
+          "visibility": "public",
+          "required": false,
+          "default_expression": "1"
+        }
+      ],
+      "public_fields": [
+        {
+          "name": "mediaId",
+          "type": "string",
+          "phpdoc_type": "string"
+        },
+        {
+          "name": "mutation",
+          "type": "string",
+          "phpdoc_type": "string"
+        },
+        {
+          "name": "affectedAssociations",
+          "type": "array",
+          "phpdoc_type": "array<int, array{media_id: string, associable_type: string, associable_id: string, collection: string, locale: string|null}>"
+        },
+        {
+          "name": "schemaVersion",
+          "type": "int"
+        }
+      ],
+      "kind": "value_object",
+      "schema_version": 1,
+      "trigger": "Media public state changed.",
+      "aliases": [],
+      "producers": [
+        {
+          "path": "packages/nvl/media/src/Actions/BulkMoveMediaAction.php",
+          "trigger": "Media public state changed.",
+          "connection": "(new Media)->getConnection()",
+          "construction_expression": "new MediaMutated($mediaId, 'moved')"
+        },
+        {
+          "path": "packages/nvl/media/src/Actions/DeleteMediaAction.php",
+          "trigger": "Media public state changed.",
+          "connection": "$lockedMedia->getConnection()",
+          "construction_expression": "new MediaMutated($mediaId, 'deleted', $affectedAssociations)"
+        },
+        {
+          "path": "packages/nvl/media/src/Actions/RelocateMediaAction.php",
+          "trigger": "Media public state changed.",
+          "connection": "$locked->getConnection()",
+          "construction_expression": "new MediaMutated($locked->id, 'relocated')"
+        },
+        {
+          "path": "packages/nvl/media/src/Actions/RenameMediaAction.php",
+          "trigger": "Media public state changed.",
+          "connection": "$media->getConnection()",
+          "construction_expression": "new MediaMutated($media->id, 'renamed')"
+        },
+        {
+          "path": "packages/nvl/media/src/Actions/ReplaceMediaFileAction.php",
+          "trigger": "Media public state changed.",
+          "connection": "$lockedMedia->getConnection()",
+          "construction_expression": "new MediaMutated($lockedMedia->id, 'file_replaced')"
+        },
+        {
+          "path": "packages/nvl/media/src/Actions/UpdateMediaMetadataAction.php",
+          "trigger": "Media public state changed.",
+          "connection": "$media->getConnection()",
+          "construction_expression": "new MediaMutated($media->id, 'metadata_updated')"
+        }
+      ],
+      "security_notes": [
+        "Media/grant and morph owner identities, revisions and association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Tenant grants expose persisted ownership identifiers."
+      ],
+      "no_op_semantics": "Existing changed-state/association/grant guards govern publication. File effect commit marking, prior-object cleanup and variation scheduling retain their ordering before publication; listener errors after commit cannot undo committed file ownership."
+    },
+    {
+      "class": "Nvl\\Media\\Events\\MediaUploaded",
+      "source": "packages/nvl/media/src/Events/MediaUploaded.php",
+      "constructor_fields": [
+        {
+          "name": "mediaId",
+          "type": "string",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "schemaVersion",
+          "type": "int",
+          "visibility": "public",
+          "required": false,
+          "default_expression": "1"
+        }
+      ],
+      "public_fields": [
+        {
+          "name": "mediaId",
+          "type": "string"
+        },
+        {
+          "name": "schemaVersion",
+          "type": "int"
+        }
+      ],
+      "kind": "value_object",
+      "schema_version": 1,
+      "trigger": "Media row and physical object created.",
+      "aliases": [
+        {
+          "legacy": "Nvl\\Media\\Events\\MediaUploadedEvent",
+          "canonical": "Nvl\\Media\\Events\\MediaUploaded",
+          "path": "packages/nvl/media/src/Events/MediaUploadedEvent.php",
+          "deprecated_in_major": 5,
+          "removal_not_before_major": 6
+        }
+      ],
+      "producers": [
+        {
+          "path": "packages/nvl/media/src/Actions/UploadMediaAction.php",
+          "trigger": "Media row and physical object created.",
+          "connection": "$created->getConnection()",
+          "construction_expression": "new MediaUploaded($created->id)"
+        }
+      ],
+      "security_notes": [
+        "Media/grant and morph owner identities, revisions and association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Tenant grants expose persisted ownership identifiers."
+      ],
+      "no_op_semantics": "Existing changed-state/association/grant guards govern publication. File effect commit marking, prior-object cleanup and variation scheduling retain their ordering before publication; listener errors after commit cannot undo committed file ownership."
+    }
+  ],
+  "value_types": [],
+  "aliases": [
+    {
+      "legacy": "Nvl\\Media\\Events\\MediaUploadedEvent",
+      "canonical": "Nvl\\Media\\Events\\MediaUploaded",
+      "path": "packages/nvl/media/src/Events/MediaUploadedEvent.php",
+      "deprecated_in_major": 5,
+      "removal_not_before_major": 6
+    }
+  ],
+  "publication": {
+    "publication": "The native host dispatcher receives the captured event after the supplied source connection outer commit, or immediately when that connection has no active transaction.",
+    "rollback": "Callbacks attach to the matching native connection and current nesting record; native outer/savepoint rollback discards the corresponding callbacks.",
+    "registration_failure": "Missing source transaction records fail before commit; Mail Notifications reports and drops unusable observations.",
+    "host_policy": "Host after-commit listeners and queue after_commit policies can add their own deferral after publication. Host transaction infrastructure and dispatcher bindings are preserved.",
+    "delivery_limit": "Local callbacks are not an outbox. Process exit between commit and callback can lose delivery; no crash durability or exactly-once delivery is promised.",
+    "cardinality": "One canonical object is dispatched per qualifying producer call. This is local publication, not cross-process deduplication or a guarantee that repeated observations are unique.",
+    "manual_producers": "Use Nvl\\Support\\Events\\DomainEventDispatcher::dispatch($event, $writerConnection). Native Event::dispatch() is immediate and has no package interception."
+  },
+  "security_notes": [
+    "Media/grant and morph owner identities, revisions and association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Tenant grants expose persisted ownership identifiers."
+  ],
+  "no_op_semantics": "Existing changed-state/association/grant guards govern publication. File effect commit marking, prior-object cleanup and variation scheduling retain their ordering before publication; listener errors after commit cannot undo committed file ownership.",
+  "notes": [
+    "MediaAttached::fromAssociation snapshots the persisted association; deletion/detachment use captured association arrays because the rows may no longer be queryable at publication."
+  ],
+  "alias_policy": [
+    "Legacy names are deprecated for major 5 and removed no earlier than major 6. class_alias preserves imports, instanceof, listener type hints and the new versioned constructor, not the former model-bearing API.",
+    "The native Laravel exact-listener bridge reads getRawListeners at delivery time and prepares legacy listeners through makeListener; strict-identical canonical registrations are skipped. Late registration, subscribers, cached discovery and queued listener preparation use the native dispatcher seams; proof is pending.",
+    "One canonical object is emitted once. Native wildcard/interface listeners see the canonical event once; suffix-specific *Event wildcards must migrate. The bridge does not redispatch a legacy string.",
+    "Drain old queued model-bearing payloads and restart workers before upgrade. New serialized alias instances restore the canonical versioned class without model restoration.",
+    "Event fakes/filters and assertions use canonical class names. EventAliases::canonicalName() helps migrate old names; old fake filters are not automatically rewritten.",
+    "Host custom dispatchers are retained. Explicit EventAliases::listen($event, $listener) maps through the canonical adapter; absent native bridging/host adapter, Doctor reports the deprecated-name limitation."
+  ]
+}

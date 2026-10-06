@@ -8,7 +8,8 @@ use Closure;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\DatabaseTransactionRecord;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Logging\PackageLogger;
 use Throwable;
 
 /**
@@ -26,6 +27,7 @@ final class MediaFileEffectScheduler
         private readonly MediaFileOperator $files,
         private readonly Container $container,
         private readonly MediaTransactionRollbackRegistry $rollbackCallbacks,
+        private PackageLogger $packageLogger,
     ) {}
 
     /**
@@ -113,7 +115,7 @@ final class MediaFileEffectScheduler
 
     private function rootTransaction(): ?DatabaseTransactionRecord
     {
-        $connection = DB::connection();
+        $connection = DB::connection(PackageStorage::connection('media'));
 
         if ($connection->transactionLevel() === 0) {
             return null;
@@ -152,22 +154,22 @@ final class MediaFileEffectScheduler
                 }
 
                 $successful = false;
-                Log::warning('Media storage cleanup reported failure.', [
+                $this->packageLogger->log('media', 'warning', 'nvl.media.storage_cleanup.rejected', [
                     'disk' => $disk,
                     'path' => $path,
                     'operation' => $operation,
                     'transaction_outcome' => $transactionOutcome,
-                ]);
+                ], 'normal');
             } catch (Throwable $exception) {
                 $successful = false;
-                Log::error('Media storage cleanup threw an exception.', [
+                $this->packageLogger->log('media', 'error', 'nvl.media.storage_cleanup.failed', [
                     'disk' => $disk,
                     'path' => $path,
                     'operation' => $operation,
                     'transaction_outcome' => $transactionOutcome,
                     'exception' => $exception::class,
                     'error' => $exception->getMessage(),
-                ]);
+                ], 'normal');
             }
         }
 

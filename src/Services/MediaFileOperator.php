@@ -6,10 +6,10 @@ namespace Nvl\Media\Services;
 
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use League\Flysystem\UnableToCreateDirectory;
 use Nvl\Media\Enums\MediaVisibility;
+use Nvl\Support\Logging\PackageLogger;
 use Throwable;
 
 /**
@@ -23,6 +23,7 @@ final class MediaFileOperator
     public function __construct(
         private readonly MediaDiskGateway $disks,
         private readonly MediaFileExistence $existence,
+        private PackageLogger $packageLogger,
     ) {}
 
     /**
@@ -239,11 +240,11 @@ final class MediaFileOperator
             $this->existence->forget($disk, $directory);
         } catch (UnableToCreateDirectory $exception) {
             if (! $this->disks->isLocal($disk)) {
-                Log::error('MediaFileOperator failed to create remote directory.', [
+                $this->packageLogger->log('media', 'error', 'nvl.media.remote_directory.failed', [
                     'disk' => $disk,
                     'directory' => $directory,
                     'error' => $exception->getMessage(),
-                ]);
+                ], 'normal');
 
                 throw $exception;
             }
@@ -251,12 +252,12 @@ final class MediaFileOperator
             $absolutePath = $this->disks->localPath($disk, $directory);
 
             if (! is_dir($absolutePath) && ! @mkdir($absolutePath, 0755, true) && ! is_dir($absolutePath)) {
-                Log::error('MediaFileOperator failed to create local directory.', [
+                $this->packageLogger->log('media', 'error', 'nvl.media.local_directory.failed', [
                     'disk' => $disk,
                     'directory' => $directory,
                     'absolute_path' => $absolutePath,
                     'error' => $exception->getMessage(),
-                ]);
+                ], 'normal');
 
                 throw $exception;
             }
@@ -271,6 +272,10 @@ final class MediaFileOperator
      */
     private function disk(string $disk): FilesystemAdapter
     {
+        if (config("filesystems.disks.{$disk}.driver") === 's3') {
+            (new MediaS3DependencyGuard)->assertAvailable();
+        }
+
         /** @var FilesystemAdapter */
         return Storage::disk($disk);
     }
@@ -310,17 +315,17 @@ final class MediaFileOperator
     {
         try {
             if ($this->existence->exists($disk, $path) && ! $this->delete($disk, $path)) {
-                Log::warning('MediaFileOperator could not remove an unverified destination object.', [
+                $this->packageLogger->log('media', 'warning', 'nvl.media.destination_cleanup.failed', [
                     'disk' => $disk,
                     'path' => $path,
-                ]);
+                ], 'normal');
             }
         } catch (Throwable $cleanupError) {
-            Log::warning('MediaFileOperator could not remove an unverified destination object.', [
+            $this->packageLogger->log('media', 'warning', 'nvl.media.destination_cleanup.failed', [
                 'disk' => $disk,
                 'path' => $path,
                 'error' => $cleanupError->getMessage(),
-            ]);
+            ], 'normal');
         }
     }
 

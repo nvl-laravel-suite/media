@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Actions;
 
-use Illuminate\Support\Facades\DB;
+use Nvl\Media\Contracts\UpdateMediaMetadataContract;
 use Nvl\Media\Data\Mutations\UpdateMediaPayload;
 use Nvl\Media\Events\MediaMutated;
 use Nvl\Media\Exceptions\MediaInUseException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaMutationLock;
+use Nvl\Support\Events\DomainEventDispatcher;
 use Nvl\Translatable\Services\TranslationWriter;
 use Spatie\LaravelData\Optional;
 
@@ -18,7 +19,7 @@ use Spatie\LaravelData\Optional;
  *
  * @api
  */
-final readonly class UpdateMediaMetadataAction
+final readonly class UpdateMediaMetadataAction implements UpdateMediaMetadataContract
 {
     /**
      * Create the media metadata action.
@@ -26,6 +27,7 @@ final readonly class UpdateMediaMetadataAction
     public function __construct(
         private TranslationWriter $translations,
         private MediaMutationLock $mutationLock,
+        private DomainEventDispatcher $domainEvents,
     ) {}
 
     /**
@@ -35,7 +37,7 @@ final readonly class UpdateMediaMetadataAction
     {
         $mediaId = $media instanceof Media ? $media->id : $media;
         $freshMedia = $this->mutationLock->execute($mediaId, function () use ($mediaId, $data): Media {
-            return DB::transaction(function () use ($mediaId, $data): Media {
+            return (new Media)->getConnection()->transaction(function () use ($mediaId, $data): Media {
                 $media = Media::query()->lockForUpdate()->findOrFail($mediaId);
                 $mediaFields = [];
 
@@ -75,13 +77,13 @@ final readonly class UpdateMediaMetadataAction
                     );
                 }
 
+                $this->domainEvents->dispatch(new MediaMutated($media->id, 'metadata_updated'), $media->getConnection());
+
                 return Media::query()
                     ->with(['imageVariations', 'translations'])
                     ->findOrFail($media->id);
             });
         });
-
-        MediaMutated::dispatch($freshMedia->id, 'metadata_updated');
 
         return $freshMedia;
     }

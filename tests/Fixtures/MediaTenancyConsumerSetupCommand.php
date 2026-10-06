@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Tests\Fixtures;
 
+use Composer\InstalledVersions;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Foundation\MaintenanceMode;
 use Illuminate\Database\Schema\Blueprint;
@@ -76,18 +77,18 @@ final class MediaTenancyConsumerSetupCommand extends Command
     /** Create tenancy, Media, queue, failure, and probe schema explicitly. */
     private function createInfrastructure(): void
     {
-        $root = getenv('NVL_TEST_SUITE_ROOT');
-        if (! is_string($root) || $root === '') {
-            throw new RuntimeException('The fixture requires NVL_TEST_SUITE_ROOT.');
-        }
+        $tenancyPath = InstalledVersions::getInstallPath('nvl/tenancy')
+            ?? throw new RuntimeException('The worker fixture requires the installed optional Tenancy package.');
         $schema = DB::connection()->getSchemaBuilder();
         $schema->create('migrations', static function (Blueprint $table): void {
             $table->increments('id');
             $table->string('migration');
             $table->integer('batch');
         });
-        $this->runMigration($root.'/packages/nvl/tenancy/database/migrations/tenancy/2026_09_16_000001_nvl_tenancy_create_tenancy_core_tables.php');
-        foreach (glob($root.'/packages/nvl/media/database/migrations/*.php') ?: [] as $migration) {
+        $this->runMigration($tenancyPath.'/database/migrations/tenancy/2026_09_16_000001_nvl_tenancy_create_tenancy_core_tables.php');
+        $mediaPath = InstalledVersions::getInstallPath('nvl/media')
+            ?? throw new RuntimeException('The worker fixture requires the installed Media package.');
+        foreach (glob($mediaPath.'/database/migrations/*.php') ?: [] as $migration) {
             $this->runMigration($migration);
         }
         $schema->create('jobs', static function (Blueprint $table): void {

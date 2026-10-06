@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Actions;
 
+use Nvl\Media\Contracts\BulkDeleteMediaContract;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaQueryService;
 
@@ -15,7 +16,7 @@ use Nvl\Media\Services\MediaQueryService;
  *
  * @api
  */
-final class BulkDeleteMediaAction
+final class BulkDeleteMediaAction implements BulkDeleteMediaContract
 {
     public function __construct(
         private readonly DeleteMediaAction $deleteAction,

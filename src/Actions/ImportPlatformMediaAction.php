@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Actions;
 
+use Nvl\Media\Contracts\ImportPlatformMediaContract;
 use Nvl\Media\Contracts\MediaCatalogImport;
 use Nvl\Media\Data\Mutations\ImportPlatformMediaData;
 use Nvl\Media\Models\Media;
@@ -16,7 +17,7 @@ use Throwable;
  *
  * @api
  */
-final readonly class ImportPlatformMediaAction
+final readonly class ImportPlatformMediaAction implements ImportPlatformMediaContract
 {
     public function __construct(private MediaCatalogImport $imports, private EffectiveTenantConnection $connections) {}
 

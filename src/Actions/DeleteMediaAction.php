@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Actions;
 
-use Illuminate\Support\Facades\DB;
 use Nvl\Media\Contracts\DeleteMediaContract;
 use Nvl\Media\Events\MediaMutated;
 use Nvl\Media\Exceptions\MediaInUseException;
@@ -13,6 +12,7 @@ use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Services\MediaFileEffectScheduler;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Support\MediaAssociationSnapshot;
+use Nvl\Support\Events\DomainEventDispatcher;
 
 /**
  * Soft-deletes a media record and removes its objects after the root commit.
@@ -27,6 +27,7 @@ final class DeleteMediaAction implements DeleteMediaContract
     public function __construct(
         private readonly MediaFileEffectScheduler $fileEffects,
         private readonly MediaMutationLock $mutationLock,
+        private DomainEventDispatcher $domainEvents,
     ) {}
 
     /**
@@ -55,7 +56,7 @@ final class DeleteMediaAction implements DeleteMediaContract
             $affectedAssociations = [];
             $disk = '';
 
-            $deleted = DB::transaction(function () use (
+            $deleted = (new Media)->getConnection()->transaction(function () use (
                 $mediaId,
                 $force,
                 &$originalPath,
@@ -87,22 +88,24 @@ final class DeleteMediaAction implements DeleteMediaContract
                     $lockedMedia->associations,
                 );
 
-                return (bool) $lockedMedia->delete();
+                $deleted = (bool) $lockedMedia->delete();
+                if ($deleted) {
+                    if ((bool) config('nvl-media.delete_files_on_media_delete', true)) {
+                        $this->fileEffects->deleteAfterCommit(
+                            $disk,
+                            [$originalPath, ...$variationPaths],
+                            'delete_media_objects',
+                        );
+                    }
+                    $this->domainEvents->dispatch(new MediaMutated($mediaId, 'deleted', $affectedAssociations), $lockedMedia->getConnection());
+                }
+
+                return $deleted;
             });
 
             if (! $deleted) {
                 return false;
             }
-
-            if ((bool) config('nvl-media.delete_files_on_media_delete', true)) {
-                $this->fileEffects->deleteAfterCommit(
-                    $disk,
-                    [$originalPath, ...$variationPaths],
-                    'delete_media_objects',
-                );
-            }
-
-            MediaMutated::dispatch($mediaId, 'deleted', $affectedAssociations);
 
             return true;
         })();

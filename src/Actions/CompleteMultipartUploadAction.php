@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Actions;
 
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use Nvl\Media\Contracts\CompleteMultipartUploadContract;
 use Nvl\Media\Contracts\MultipartUploadGateway;
 use Nvl\Media\Contracts\RecoverableMultipartUploadGateway;
 use Nvl\Media\Data\MediaActorData;
@@ -23,6 +23,7 @@ use Nvl\Media\Services\MediaFileEffectScheduler;
 use Nvl\Media\Services\MediaMultipartLock;
 use Nvl\Media\Services\MediaMultipartSessionMapper;
 use Nvl\Media\Services\MediaPathResolver;
+use Nvl\Support\Logging\PackageLogger;
 use Throwable;
 
 /**
@@ -30,7 +31,7 @@ use Throwable;
  *
  * @api
  */
-final readonly class CompleteMultipartUploadAction
+final readonly class CompleteMultipartUploadAction implements CompleteMultipartUploadContract
 {
     public function __construct(
         private MultipartUploadGateway $gateway,
@@ -38,6 +39,7 @@ final readonly class CompleteMultipartUploadAction
         private MediaMultipartLock $lock,
         private MediaMultipartSessionMapper $sessionMapper,
         private MediaPathResolver $paths,
+        private PackageLogger $packageLogger,
     ) {}
 
     public function execute(
@@ -248,21 +250,21 @@ final readonly class CompleteMultipartUploadAction
             $recovered = $this->gateway->inspect($session);
 
             if ($recovered instanceof CompletedMultipartObjectData) {
-                Log::warning('Recovered multipart object after interrupted completion.', [
+                $this->packageLogger->log('media', 'warning', 'nvl.media.multipart_completion.recovered', [
                     'session_id' => $session->uploadId,
                     'exception' => $exception::class,
                     'error' => $exception->getMessage(),
-                ]);
+                ], 'normal');
 
                 return $recovered;
             }
         }
 
-        Log::error('Multipart completion requires recovery.', [
+        $this->packageLogger->log('media', 'error', 'nvl.media.multipart_completion.pending', [
             'session_id' => $session->uploadId,
             'exception' => $exception::class,
             'error' => $exception->getMessage(),
-        ]);
+        ], 'normal');
 
         throw $exception;
     }
@@ -302,11 +304,11 @@ final readonly class CompleteMultipartUploadAction
                 'failure_context' => json_encode($context, JSON_THROW_ON_ERROR),
             ]);
 
-        Log::error('Multipart session failed verification.', [
+        $this->packageLogger->log('media', 'error', 'nvl.media.multipart_verification.failed', [
             'session_id' => $session->id,
             'failure_code' => $code,
             ...$context,
-        ]);
+        ], 'normal');
     }
 
     private function bestEffortAbort(
@@ -315,11 +317,11 @@ final readonly class CompleteMultipartUploadAction
         try {
             $this->gateway->abort($session);
         } catch (Throwable $exception) {
-            Log::warning('Multipart cleanup failed after verification rejection.', [
+            $this->packageLogger->log('media', 'warning', 'nvl.media.multipart_cleanup.failed', [
                 'session_id' => $session->uploadId,
                 'exception' => $exception::class,
                 'error' => $exception->getMessage(),
-            ]);
+            ], 'normal');
         }
     }
 

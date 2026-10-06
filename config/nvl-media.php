@@ -13,6 +13,7 @@ use Nvl\Media\Services\PortableMediaSearchDriver;
 use Nvl\Media\Services\S3MultipartUploadGateway;
 use Nvl\Support\Config\PackageEnvironment;
 
+/** Complete runtime defaults; publication sections are declared in ../resources/config/sections.json. */
 return [
     'tenancy' => [
         // Ownership classification is separate from HTTP association allowlists.

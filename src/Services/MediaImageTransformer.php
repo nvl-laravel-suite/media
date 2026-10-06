@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
-use Illuminate\Support\Facades\Log;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Enums\MediaImageDriver;
 use Nvl\Media\Exceptions\ConversionFailedException;
+use Nvl\Support\Logging\PackageLogger;
 use Spatie\Image\Enums\AlignPosition;
 use Spatie\Image\Enums\Constraint;
 use Spatie\Image\Enums\Fit;
@@ -25,6 +25,9 @@ use Throwable;
  */
 class MediaImageTransformer
 {
+    /** Retain the stateless package diagnostic logger. */
+    public function __construct(private PackageLogger $packageLogger) {}
+
     /**
      * Transform an image with the given conversion definition.
      *
@@ -62,7 +65,7 @@ class MediaImageTransformer
             }
 
             $duration = round((microtime(true) - $startTime) * 1000, 1);
-            Log::debug('Image processed.', [
+            $this->packageLogger->log('media', 'debug', 'nvl.media.image_processing.completed', [
                 'source' => basename($sourcePath),
                 'output' => basename($outputPath),
                 'conversion' => $definition->name,
@@ -70,7 +73,7 @@ class MediaImageTransformer
                 'height' => $height,
                 'size' => $size,
                 'duration_ms' => $duration,
-            ]);
+            ], 'verbose');
 
             return [
                 'width' => $width,

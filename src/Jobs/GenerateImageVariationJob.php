@@ -10,12 +10,12 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 use Nvl\Media\Actions\GenerateImageVariationAction;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Support\MediaQueueConfiguration;
 use Nvl\Media\Support\MediaQueueEnvelope;
+use Nvl\Support\Facades\PackageLog;
 use Nvl\Support\Tenancy\Contracts\TenantQueuedJob;
 use Nvl\Support\Tenancy\Enums\TenantContextMode;
 use Nvl\Support\Tenancy\ValueObjects\TenantJobEnvelope;
@@ -85,19 +85,19 @@ final class GenerateImageVariationJob implements ShouldBeUnique, ShouldQueue, Te
         $media = Media::find($this->mediaId);
 
         if ($media === null) {
-            Log::warning('GenerateImageVariationJob: media not found, skipping.', [
+            PackageLog::log('media', 'warning', 'nvl.media.variation.missing', [
                 'media_id' => $this->mediaId,
-            ]);
+            ], 'normal');
 
             return;
         }
 
         if ($media->revision !== $this->sourceRevision) {
-            Log::info('GenerateImageVariationJob: source revision changed, skipping stale job.', [
+            PackageLog::log('media', 'info', 'nvl.media.variation.stale', [
                 'media_id' => $this->mediaId,
                 'expected_revision' => $this->sourceRevision,
                 'current_revision' => $media->revision,
-            ]);
+            ], 'normal');
 
             return;
         }
@@ -109,11 +109,11 @@ final class GenerateImageVariationJob implements ShouldBeUnique, ShouldQueue, Te
         try {
             $action->execute($media, $this->definition, $this->sourceRevision);
         } catch (Throwable $e) {
-            Log::warning('GenerateImageVariationJob: variation generation failed.', [
+            PackageLog::log('media', 'warning', 'nvl.media.variation.failed', [
                 'preset' => $this->presetName,
                 'media_id' => $this->mediaId,
                 'error' => $e->getMessage(),
-            ]);
+            ], 'normal');
 
             throw $e;
         }
@@ -142,10 +142,10 @@ final class GenerateImageVariationJob implements ShouldBeUnique, ShouldQueue, Te
      */
     public function failed(?Throwable $exception): void
     {
-        Log::error('GenerateImageVariationJob exhausted its retry budget.', [
+        PackageLog::log('media', 'error', 'nvl.media.variation.exhausted', [
             'media_id' => $this->mediaId,
             'preset' => $this->presetName,
             'exception' => $exception?->getMessage(),
-        ]);
+        ], 'normal');
     }
 }

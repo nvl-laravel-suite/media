@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Actions;
 
-use Illuminate\Support\Facades\Log;
+use Nvl\Media\Contracts\InitiateMultipartUploadContract;
 use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Contracts\MultipartUploadGateway;
 use Nvl\Media\Data\MediaActorData;
@@ -21,6 +21,7 @@ use Nvl\Media\Services\MediaMultipartSessionMapper;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaHashGenerator;
+use Nvl\Support\Logging\PackageLogger;
 use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Throwable;
 
@@ -29,7 +30,7 @@ use Throwable;
  *
  * @api
  */
-final readonly class InitiateMultipartUploadAction
+final readonly class InitiateMultipartUploadAction implements InitiateMultipartUploadContract
 {
     public function __construct(
         private MediaDiskGuard $diskGuard,
@@ -40,6 +41,7 @@ final readonly class InitiateMultipartUploadAction
         private MediaFileTypePolicy $fileTypes,
         private MediaMultipartSessionMapper $sessionMapper,
         private TenantBoundary $tenantBoundary,
+        private PackageLogger $packageLogger,
     ) {}
 
     public function execute(
@@ -131,13 +133,13 @@ final readonly class InitiateMultipartUploadAction
         } catch (Throwable $exception) {
             $cleanupException = $this->cleanupFailedInitiation($sessionData);
             $this->recordInitiationFailure($session, $exception, $cleanupException);
-            Log::error('Multipart provider initiation failed.', [
+            $this->packageLogger->log('media', 'error', 'nvl.media.multipart_initiation.failed', [
                 'session_id' => $session->id,
                 'disk' => $session->disk,
                 'exception' => $exception::class,
                 'error' => $exception->getMessage(),
                 'cleanup_pending' => $cleanupException instanceof Throwable,
-            ]);
+            ], 'normal');
 
             throw $exception;
         }
@@ -153,12 +155,12 @@ final readonly class InitiateMultipartUploadAction
 
             return null;
         } catch (Throwable $exception) {
-            Log::warning('Multipart provider initiation cleanup requires retry.', [
+            $this->packageLogger->log('media', 'warning', 'nvl.media.multipart_cleanup.retry', [
                 'session_id' => $session->uploadId,
                 'disk' => $session->disk,
                 'exception' => $exception::class,
                 'error' => $exception->getMessage(),
-            ]);
+            ], 'normal');
 
             return $exception;
         }
@@ -198,12 +200,12 @@ final readonly class InitiateMultipartUploadAction
         try {
             $session->forceFill($attributes)->save();
         } catch (Throwable $persistenceException) {
-            Log::error('Multipart initiation failure state could not be persisted.', [
+            $this->packageLogger->log('media', 'error', 'nvl.media.multipart_failure_state.failed', [
                 'session_id' => $session->id,
                 'disk' => $session->disk,
                 'exception' => $persistenceException::class,
                 'error' => $persistenceException->getMessage(),
-            ]);
+            ], 'normal');
         }
     }
 

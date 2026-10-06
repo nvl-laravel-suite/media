@@ -12,6 +12,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Facade;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\MediaLibraryContract;
+use Nvl\Media\Contracts\MediaUploadBuilder;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Data\Display\MediaUsage;
 use Nvl\Media\Data\MediaActorData;
@@ -25,7 +26,6 @@ use Nvl\Media\Data\Multipart\SignMultipartPartData;
 use Nvl\Media\Data\Mutations\UpdateMediaPayload;
 use Nvl\Media\Enums\MediaAbility;
 use Nvl\Media\Enums\MediaVisibility;
-use Nvl\Media\MediaAdder;
 use Nvl\Media\MediaLibrary;
 use Nvl\Media\Models\Media as MediaModel;
 use Nvl\Media\Models\MediaAssociation;
@@ -34,14 +34,14 @@ use Nvl\Media\Models\MediaImageVariation;
 /**
  * Laravel facade for the replaceable MediaLibraryContract.
  *
- * @method static MediaAdder add(Model&HasNvlMedia $owner, UploadedFile|string $file, ?string $slot = null)
- * @method static MediaAdder copy(Model&HasNvlMedia $owner, UploadedFile|string $file)
- * @method static MediaAdder fromRequest(Model&HasNvlMedia $owner, string $key)
- * @method static MediaAdder fromUrl(Model&HasNvlMedia $owner, string $url, string ...$allowedMimeTypes)
- * @method static MediaAdder fromBase64(Model&HasNvlMedia $owner, string $payload, string ...$allowedMimeTypes)
- * @method static MediaAdder fromString(Model&HasNvlMedia $owner, string $contents)
- * @method static MediaAdder fromBinary(Model&HasNvlMedia $owner, string $contents, string $filename, string ...$allowedMimeTypes)
- * @method static MediaAdder fromDisk(Model&HasNvlMedia $owner, string $key, ?string $disk = null)
+ * @method static MediaUploadBuilder add(Model&HasNvlMedia $owner, UploadedFile|string $file, ?string $slot = null)
+ * @method static MediaUploadBuilder copy(Model&HasNvlMedia $owner, UploadedFile|string $file)
+ * @method static MediaUploadBuilder fromRequest(Model&HasNvlMedia $owner, string $key)
+ * @method static MediaUploadBuilder fromUrl(Model&HasNvlMedia $owner, string $url, string ...$allowedMimeTypes)
+ * @method static MediaUploadBuilder fromBase64(Model&HasNvlMedia $owner, string $payload, string ...$allowedMimeTypes)
+ * @method static MediaUploadBuilder fromString(Model&HasNvlMedia $owner, string $contents)
+ * @method static MediaUploadBuilder fromBinary(Model&HasNvlMedia $owner, string $contents, string $filename, string ...$allowedMimeTypes)
+ * @method static MediaUploadBuilder fromDisk(Model&HasNvlMedia $owner, string $key, ?string $disk = null)
  * @method static LengthAwarePaginator<int, MediaModel> paginate(MediaFilter|array<string, mixed> $filters = [], ?Authenticatable $actor = null, bool $includeVariations = false)
  * @method static MediaModel findOrFail(string $id, bool $includeVariations = true)
  * @method static string|null urlIfExists(MediaModel|null $media, string $variation = '')

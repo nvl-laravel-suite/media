@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Actions;
 
-use Illuminate\Support\Facades\DB;
+use Nvl\Media\Contracts\RelocateMediaContract;
 use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Events\MediaMutated;
 use Nvl\Media\Exceptions\MediaUploadException;
@@ -15,6 +15,8 @@ use Nvl\Media\Services\MediaFileEffectScheduler;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaFileOperator;
 use Nvl\Media\Services\MediaMutationLock;
+use Nvl\Support\Events\ConnectionCommitCallbacks;
+use Nvl\Support\Events\DomainEventDispatcher;
 use Throwable;
 
 /**
@@ -22,7 +24,7 @@ use Throwable;
  *
  * @api
  */
-final readonly class RelocateMediaAction
+final readonly class RelocateMediaAction implements RelocateMediaContract
 {
     /**
      * Create the single-media relocation action.
@@ -34,6 +36,8 @@ final readonly class RelocateMediaAction
         private MediaFileExistence $existence,
         private MediaFileOperator $files,
         private MediaMutationLock $mutationLock,
+        private DomainEventDispatcher $domainEvents,
+        private ConnectionCommitCallbacks $eventCommits,
     ) {}
 
     /**
@@ -93,6 +97,7 @@ final readonly class RelocateMediaAction
 
         $staged = [];
 
+        $writeCommitted = false;
         try {
             foreach (array_values(array_unique($paths)) as $path) {
                 if (! $this->existence->existsFresh($sourceDisk, $path)) {
@@ -118,12 +123,14 @@ final readonly class RelocateMediaAction
                 $this->assertIntegrity($sourceDisk, $disk, $path);
             }
 
-            $relocated = DB::transaction(function () use (
+            $relocated = (new Media)->getConnection()->transaction(function () use (
                 $mediaId,
                 $disk,
                 $visibility,
                 $expectedRevision,
                 $staged,
+                $sourceDisk,
+                &$writeCommitted,
             ): Media {
                 $locked = Media::query()->with('imageVariations')->lockForUpdate()->findOrFail($mediaId);
 
@@ -149,20 +156,23 @@ final readonly class RelocateMediaAction
                 ])->save();
                 $locked->imageVariations()->update(['source_revision' => $nextRevision]);
 
+                $this->eventCommits->afterCommit((new Media)->getConnection(), static function () use (&$writeCommitted): void {
+                    $writeCommitted = true;
+                });
+                $this->fileEffects->deleteAfterCommit($sourceDisk, $staged, 'relocate_source');
+                $this->domainEvents->dispatch(new MediaMutated($locked->id, 'relocated'), $locked->getConnection());
+
                 return $locked->refresh()->load('imageVariations');
             });
         } catch (Throwable $exception) {
+            if ($writeCommitted) {
+                throw $exception;
+            }
+
             $this->fileEffects->deleteNow($disk, $staged, 'relocate_pre_commit_failure');
 
             throw $exception;
         }
-
-        $this->fileEffects->deleteAfterCommit($sourceDisk, $staged, 'relocate_source');
-        $this->fileEffects->afterCommit(
-            static function () use ($mediaId): void {
-                MediaMutated::dispatch($mediaId, 'relocated');
-            },
-        );
 
         return $relocated;
     }

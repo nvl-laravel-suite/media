@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Nvl\Media\Services;
 
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Log;
 use Nvl\Media\Contracts\MediaContentScanner;
 use Nvl\Media\Data\Ingestion\ValidatedMediaFileData;
 use Nvl\Media\Slots\MediaSlot;
+use Nvl\Support\Logging\PackageLogger;
 use Throwable;
 
 /**
@@ -21,6 +21,7 @@ final class MediaIngestionPipeline
         private readonly MediaContentScanner $contentScanner,
         private readonly MediaScannerPolicy $scannerPolicy,
         private readonly SvgScanner $svgScanner,
+        private PackageLogger $packageLogger,
     ) {}
 
     /**
@@ -53,14 +54,14 @@ final class MediaIngestionPipeline
                 $this->svgScanner->scan($validatedFile->realPath);
             }
         } catch (Throwable $exception) {
-            Log::warning('Media ingestion scanner rejected a source.', [
+            $this->packageLogger->log('media', 'warning', 'nvl.media.ingestion_scan.rejected', [
                 'filename' => $validatedFile->displayFilename,
                 'mime_type' => $validatedFile->mimeType,
                 'size' => $validatedFile->size,
                 'scanner' => $this->contentScanner::class,
                 'exception' => $exception::class,
                 'error' => mb_substr($exception->getMessage(), 0, 1000),
-            ]);
+            ], 'normal');
 
             throw $exception;
         }

@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Nvl\Media\Contracts\AttachMediaContract;
 use Nvl\Media\Contracts\HasNvlMedia;
+use Nvl\Media\Contracts\MediaUploadBuilder;
 use Nvl\Media\Contracts\UploadMediaContract;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Exceptions\MediaUploadException;
@@ -33,7 +34,7 @@ use Throwable;
  *
  * @api
  */
-class MediaAdder
+class MediaAdder implements MediaUploadBuilder
 {
     public ?string $pendingSlot = null;
 

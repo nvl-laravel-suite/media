@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Actions;
 
 use Illuminate\Support\Facades\DB;
+use Nvl\Media\Contracts\AbortMultipartUploadContract;
 use Nvl\Media\Contracts\MultipartUploadGateway;
 use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Enums\MediaMultipartStatus;
@@ -18,7 +19,7 @@ use Nvl\Media\Services\MediaMultipartSessionMapper;
  *
  * @api
  */
-final readonly class AbortMultipartUploadAction
+final readonly class AbortMultipartUploadAction implements AbortMultipartUploadContract
 {
     public function __construct(
         private MultipartUploadGateway $gateway,

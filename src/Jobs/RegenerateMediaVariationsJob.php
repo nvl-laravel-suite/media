@@ -12,12 +12,12 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
 use Nvl\Media\Support\MediaQueueConfiguration;
 use Nvl\Media\Support\MediaQueueEnvelope;
+use Nvl\Support\Facades\PackageLog;
 use Nvl\Support\Tenancy\Contracts\TenantQueuedJob;
 use Nvl\Support\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
@@ -84,13 +84,13 @@ final class RegenerateMediaVariationsJob implements ShouldQueue, TenantQueuedJob
         );
 
         if (empty($presets)) {
-            Log::info('RegenerateMediaVariationsJob: no enabled presets found, skipping.', [
+            PackageLog::log('media', 'info', 'nvl.media.variation_regeneration.skipped', [
                 'type' => $this->type?->value,
                 'disk' => $this->disk,
                 'created_after' => $this->createdAfter,
                 'created_before' => $this->createdBefore,
                 'preset_names' => $this->presetNames,
-            ]);
+            ], 'normal');
 
             return;
         }
@@ -122,14 +122,14 @@ final class RegenerateMediaVariationsJob implements ShouldQueue, TenantQueuedJob
             }
         });
 
-        Log::info('RegenerateMediaVariationsJob: dispatched variations.', [
+        PackageLog::log('media', 'info', 'nvl.media.variation_regeneration.dispatched', [
             'processed_count' => $processed,
             'type' => $this->type?->value,
             'disk' => $this->disk,
             'created_after' => $this->createdAfter,
             'created_before' => $this->createdBefore,
             'preset_names' => $this->presetNames,
-        ]);
+        ], 'normal');
     }
 
     /**
@@ -188,8 +188,8 @@ final class RegenerateMediaVariationsJob implements ShouldQueue, TenantQueuedJob
 
     public function failed(?Throwable $exception): void
     {
-        Log::error('RegenerateMediaVariationsJob failed.', [
+        PackageLog::log('media', 'error', 'nvl.media.variation_regeneration.failed', [
             'exception' => $exception?->getMessage(),
-        ]);
+        ], 'normal');
     }
 }

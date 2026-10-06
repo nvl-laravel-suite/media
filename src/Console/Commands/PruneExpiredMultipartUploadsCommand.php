@@ -6,12 +6,12 @@ namespace Nvl\Media\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Log;
 use Nvl\Media\Contracts\MultipartUploadGateway;
 use Nvl\Media\Enums\MediaMultipartStatus;
 use Nvl\Media\Models\MediaMultipartUpload;
 use Nvl\Media\Services\MediaMultipartLock;
 use Nvl\Media\Services\MediaMultipartSessionMapper;
+use Nvl\Support\Facades\PackageLog;
 use Throwable;
 
 /**
@@ -90,11 +90,11 @@ final class PruneExpiredMultipartUploadsCommand extends Command
                 }
             } catch (Throwable $exception) {
                 $failed++;
-                Log::error('Expired multipart upload cleanup failed.', [
+                PackageLog::log('media', 'error', 'nvl.media.multipart_prune.failed', [
                     'session_id' => $sessionId,
                     'exception' => $exception::class,
                     'error' => $exception->getMessage(),
-                ]);
+                ], 'normal');
             }
         }
 

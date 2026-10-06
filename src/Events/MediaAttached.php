@@ -4,20 +4,17 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Events;
 
-use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
-use Illuminate\Foundation\Events\Dispatchable;
-use Illuminate\Queue\SerializesModels;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Support\MediaAssociationSnapshot;
+use Nvl\Support\Contracts\DomainEvent;
 
 /**
  * Announces that a media record was attached to a generic owning model.
+ *
+ * @api
  */
-final readonly class MediaAttached implements ShouldDispatchAfterCommit
+final readonly class MediaAttached implements DomainEvent
 {
-    use Dispatchable;
-    use SerializesModels;
-
     /**
      * Create a media attachment event.
      *
@@ -27,6 +24,7 @@ final readonly class MediaAttached implements ShouldDispatchAfterCommit
     public function __construct(
         public string $mediaId,
         public array $association,
+        public int $schemaVersion = 1,
     ) {}
 
     /**
@@ -41,5 +39,11 @@ final readonly class MediaAttached implements ShouldDispatchAfterCommit
             mediaId: $association->media_id,
             association: MediaAssociationSnapshot::fromAssociation($association),
         );
+    }
+
+    /** Return the immutable event payload schema version. */
+    public function schemaVersion(): int
+    {
+        return $this->schemaVersion;
     }
 }

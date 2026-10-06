@@ -4,17 +4,51 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Database\Factories;
 
+use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Support\MediaDiskResolver;
 
 /**
+ * Builds native package fixture rows and declared parents.
+ *
+ * @api
+ *
  * @extends Factory<Media>
  */
 class MediaFactory extends Factory
 {
     protected $model = Media::class;
+
+    /**
+     * Prepare native parent and owner facts after Laravel expands relationships.
+     *
+     * @internal
+     */
+    public function configure(): static
+    {
+        $expandRelationships = true;
+
+        return $this->state(function () use (&$expandRelationships): array {
+            $expandRelationships = $this->expandRelationships;
+
+            return [];
+        })->afterMaking(function (Media $model) use (&$expandRelationships): void {
+            if (! $expandRelationships) {
+                return;
+            }
+
+            FactoryGuard::root($model, 'media.assets');
+            if (config('nvl-tenancy.enabled') === true && $model->getAttribute('storage_path') === null) {
+                $model->forceFill([
+                    'storage_path' => Container::getInstance()->make(MediaPathResolver::class)
+                        ->mediaPathForFolder($model, $model->folder ?? ''),
+                ]);
+            }
+        });
+    }
 
     /**
      * @return array<model-property<Media>, mixed>
