@@ -43,6 +43,18 @@ The supported major 5 production profile is PHP 8.3/8.4, Laravel 13, PostgreSQL,
   `status` or `is_public` is not authoritative. Caller authorization remains
   required for user-driven operations.
 
+## Read bounded owner lists
+
+- Use `ListOwnerMediaSlotsContract` for many-owner slot display; do not loop single-owner reads or query package models in consumer services.
+- Bind an explicit query-free `MediaBatchAuthorization` SQL adapter. Existing imperative `MediaAuthorization` callbacks do not authorize batches. See `extending.md` for the four methods and unsupported-adapter failure.
+- Express complete host owner/registered-slot/association/asset View eligibility in `scopeHostAssociations`, using nested SQL predicates. Owner-dependent asset View and attribute-dependent slot declarations need a supported SQL expression or an explicit `MediaBatchReadException`; never treat an empty OwnerBatch as a wildcard or fabricate persisted owner facts.
+- Use `hasNvlMedia($slot, $actor, $policy)` on host queries; preserve host columns, global scopes, canonical connections, and base tables independently of Spatie `hasMedia()`.
+- Keep canonical collection identity, active associations, available lifecycle, soft deletion, and registered tenant boundaries mandatory. Validate each reloaded owner's registered slots; metadata.slot is not the canonical collection.
+- Preserve bounds: at most 100 owners, 20 registered slots, ten items per owner/slot capped by its declaration, 20,000 association rows, and ten requested/fallback locale rows per asset. Bound rows in SQL before hydration, with exact native morph/key pairs.
+- Return only the nine approved original-asset item fields and object maps, including requested empty slots and numeric names. Private URLs remain null; obtain Download links separately through existing explicitly authorized delivery.
+- Load no variations. Resolve localized title/alt/caption through pure `TranslationResolver` on bounded preloaded rows; full-model translated accessors and `MediaAssetService::resolve` do not preserve this batch query budget.
+- Verify fixed total query counts at 1/25/100, dense storage transfer ceilings, nested OR containment, canonical forged-owner denial, supported native drivers, and actual Spatie coexistence.
+
 ## Upload and finalize
 
 - Use `UploadMediaAction` for proxied uploads.

@@ -1,5 +1,14 @@
 # Upgrading NVL Media
 
+## Batched slot reads
+
+`ListOwnerMediaSlotsContract` and `hasNvlMedia()` require an explicitly bound `MediaBatchAuthorization` SQL adapter.
+Existing imperative authorization bindings remain intact and do not automatically authorize batches. Implement all
+four query-free methods, including complete host owner/slot/association/asset View eligibility; fail explicitly when
+owner-dependent host eligibility cannot be represented in SQL. Private batch URLs are null; existing authorized
+Download delivery remains the link source. The reader uses canonical collections, validates each reloaded owner's
+slot declarations, caps results at ten items per owner/slot, and does not load variations.
+
 ## Tenant ownership cutover
 
 Tenancy is opt-in and disabled by default. Before enabling it, register every

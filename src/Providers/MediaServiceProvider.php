@@ -14,6 +14,7 @@ use Nvl\Data\Services\TypeScriptSourceRegistry;
 use Nvl\Media\Actions\AttachMediaAction;
 use Nvl\Media\Actions\DeleteMediaAction;
 use Nvl\Media\Actions\DetachMediaAction;
+use Nvl\Media\Actions\ListOwnerMediaSlotsAction;
 use Nvl\Media\Actions\ReusePublicMediaAction;
 use Nvl\Media\Actions\UploadMediaAction;
 use Nvl\Media\Console\Commands\AdoptSpatieMediaCommand;
@@ -26,7 +27,9 @@ use Nvl\Media\Console\Commands\StorageHealthCommand;
 use Nvl\Media\Contracts\AttachMediaContract;
 use Nvl\Media\Contracts\DeleteMediaContract;
 use Nvl\Media\Contracts\DetachMediaContract;
+use Nvl\Media\Contracts\ListOwnerMediaSlotsContract;
 use Nvl\Media\Contracts\MediaAuthorization;
+use Nvl\Media\Contracts\MediaBatchAuthorization;
 use Nvl\Media\Contracts\MediaCatalogImport;
 use Nvl\Media\Contracts\MediaContentScanner;
 use Nvl\Media\Contracts\MediaHostResolver;
@@ -88,6 +91,7 @@ use Nvl\Media\Services\NullMediaContentScanner;
 use Nvl\Media\Services\PortableMediaSearchDriver;
 use Nvl\Media\Services\SvgScanner;
 use Nvl\Media\Services\SystemMediaHostResolver;
+use Nvl\Media\Services\UnsupportedMediaBatchAuthorization;
 use Nvl\Media\Services\UnsupportedMultipartUploadGateway;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Tenancy\MediaAdoptionAdapter;
@@ -283,7 +287,9 @@ final class MediaServiceProvider extends ServiceProvider
                 NullMediaContentScanner::class,
             ),
         );
-        $this->app->bind(MediaAuthorization::class, DefaultMediaAuthorization::class);
+        $this->app->bindIf(MediaAuthorization::class, DefaultMediaAuthorization::class);
+        $this->app->bindIf(MediaBatchAuthorization::class, UnsupportedMediaBatchAuthorization::class);
+        $this->app->bindIf(ListOwnerMediaSlotsContract::class, ListOwnerMediaSlotsAction::class);
         $this->app->scoped(MediaCatalogImport::class, MediaCatalogImporter::class);
         $this->app->bindIf(MediaTenantWorklist::class, ConfiguredMediaTenantWorklist::class);
         $this->app->bind(MediaHostResolver::class, SystemMediaHostResolver::class);

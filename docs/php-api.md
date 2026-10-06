@@ -661,3 +661,42 @@ Actions own their database transactions. New objects are removed on rollback; su
 ## Runtime storage identities
 
 Media models expose Laravel's `getTable()` and `getConnectionName()` methods using the effective canonical `nvl-media.tables.*`, `nvl-media.connection` and Core defaults. `MediaOwnerSlotOperation::getConnectionName()` also honors `media.connections.owner_slot_operations`; null inherits the Media/Core connection. An explicit model `setConnection()` takes precedence. Use the model's connection and table when building custom queries.
+
+## Batched owner slots
+
+`ListOwnerMediaSlotsContract::execute(array $owners, array $slots, MediaActorData $actor, ?string $locale = null): OwnerMediaSlots`
+is the public many-owner read boundary. Bind an explicit `MediaBatchAuthorization` SQL adapter before use;
+imperative `MediaAuthorization` callbacks are not converted into batch grants. Unsupported adapters throw
+`MediaBatchReadException` before Media storage reads. Empty owner input returns an object map without SQL,
+even when no adapter is configured.
+
+The reader accepts at most 100 persisted input models and 20 distinct registered slot names. It captures native
+morph/key pairs, deduplicates identical input, reloads each concrete class through canonical host scopes, and
+applies registered TenantBoundary ownership when enabled. Every canonical owner must register every requested
+slot, including attribute-dependent declarations. Slot identity is the actual association `collection`; historical
+`metadata.slot` does not determine membership.
+
+Available, nondeleted assets and active associations are authorized before `ROW_NUMBER()` ranking. Items follow
+ascending association order with association ID as the stable tie breaker. Each owner/slot transfers at most its
+declared ceiling, capped at ten; the total ceiling is 20,000 association rows. SQLite, PostgreSQL, MySQL 8.4,
+and MariaDB 12.3 window queries are supported. The requested/fallback locale chain is limited to ten rows per
+asset and validated before SQL. Projection resolves loaded fields without lazy translation or variation queries.
+
+`OwnerMediaSlots::$owners` is an object map of native morph types to string owner IDs; `$order` carries first-request
+identity order. Each `OwnerMediaSlotData::$slots` is an object map including requested empty lists, even for numeric
+slot names. `OwnerMediaSlotItemData` contains exactly `associationId`, `mediaId`, `title`, `altText`, `caption`,
+`mimeType`, `size`, `isPublic`, and nullable `url`. No storage internals, uploader, usage counts, or raw metadata are exposed.
+
+Private assets always have `url = null`, including actors granted View. Obtain private Download links separately
+through the existing explicitly authorized delivery boundary. Public originals use `MediaUrlResolver::publicUrl($media, [])`;
+an empty resolver result becomes null. This reader loads no image variations.
+
+`InteractsWithNvlMedia::scopeHasNvlMedia(Builder $query, string $slot, MediaActorData $actor, MediaBatchAuthorization $policy): Builder`
+adds a correlated existence predicate without replacing host selections or global scopes. Call it as
+`Owner::query()->hasNvlMedia($slot, $actor, $policy)`. It rejects changed actual query connections, base FROM/aliases,
+and unions, retains canonical soft deletion and tenant ownership even after caller scope removal, and uses exact
+text correlation for integer, UUID, and string keys. It is independent of Spatie's `hasMedia()` API.
+
+The normal localized read budget is one canonical query per concrete owner class plus three Media queries when
+assets exist. A cold disabled-Tenancy call adds one fixed installation safety probe. Empty associations need no
+asset/translation reads; no query scales with owner count or projected item count.

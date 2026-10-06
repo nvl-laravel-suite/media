@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Nvl\Media\Tests\MediaBatchTenancyTestCase;
 use Nvl\Media\Tests\MediaCatalogTenancyTestCase;
 use Nvl\Media\Tests\MediaPlatformTenancyTestCase;
 use Nvl\Media\Tests\MediaTenancyTestCase;
@@ -22,3 +23,5 @@ uses(MediaCatalogTenancyTestCase::class)->in('Tenancy/Integration/MediaTenantImp
 uses(MediaTenancyTestCase::class)->in('Tenancy/Integration/MediaTenantOwnerSlotDatabaseConcurrencyTest.php');
 uses(MediaPlatformTenancyTestCase::class)->in('Tenancy/Feature/MediaPlatformAdoptionTest.php');
 uses(MediaTenancyTestCase::class)->in('Integration/ProductionStackTest.php');
+
+uses(MediaBatchTenancyTestCase::class)->in('Tenancy/Feature/BatchedOwnerReadsTest.php');

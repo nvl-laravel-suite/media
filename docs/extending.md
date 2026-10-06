@@ -582,3 +582,26 @@ Extension tests should prove both success and fail-closed behavior:
 - [Configuration](configuration.md)
 - [Command reference](commands.md)
 - [S3 and object storage](s3.md)
+
+## Explicit batch View authorization
+
+Bind `MediaBatchAuthorization` to a host SQL adapter, and use `ListOwnerMediaSlotsContract` for batch reads.
+Both bindings use `bindIf`, preserving early and late host replacements. `MediaAuthorization` also retains host
+bindings; it remains the separate imperative mutation/delivery policy and is never inferred as a batch adapter.
+
+The four query-free adapter methods are:
+
+- `authorizeOwners(OwnerBatch $batch, MediaActorData $actor): void`: authorize the complete reloaded canonical owner set.
+- `scopeAssociations(Builder $query, OwnerBatch $batch, MediaActorData $actor): void`: express association visibility and any owner-dependent asset View predicate.
+- `scopeMedia(Builder $query, OwnerBatch $batch, MediaActorData $actor): void`: express asset View visibility for the actual admitted batch.
+- `scopeHostAssociations(Builder $query, Model $ownerPrototype, MediaActorData $actor, string $slot): void`: express the complete correlated owner, registered-slot, association, and associated-asset View policy in SQL.
+
+Use nested `whereHas`/`EXISTS` to express associated-asset access in the host callback. The host adapter must
+produce the same eligibility as batch reads, including attribute-dependent slot registration and owner-dependent
+private asset View. If those facts cannot be expressed in SQL, throw `MediaBatchReadException` with instructions
+to bind a supported adapter before executing the host query. The package never calls `scopeMedia` with an empty
+batch to imply a wildcard, never invents persisted prototype facts, and never loops imperative policy callbacks.
+
+SQL callbacks run inside mandatory package ownership, canonical type/key/slot, active-association, available-lifecycle,
+and nondeleted-asset predicates. OR conditions cannot reopen those boundaries. Builder access is only for expressing
+these read predicates; it grants no package write authority. Loaded-data authorization must execute no SQL.

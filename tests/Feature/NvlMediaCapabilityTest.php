@@ -91,7 +91,7 @@ it('adds only the approved namespaced model entry points', function (): void {
     $methods = array_map(static fn (ReflectionMethod $method): string => $method->name,
         (new ReflectionClass(InteractsWithNvlMedia::class))->getMethods(ReflectionMethod::IS_PUBLIC));
     sort($methods);
-    expect($methods)->toBe(['bootInteractsWithNvlMedia', 'nvlMedia', 'nvlMediaAssociations', 'registerNvlMedia']);
+    expect($methods)->toBe(['bootInteractsWithNvlMedia', 'nvlMedia', 'nvlMediaAssociations', 'registerNvlMedia', 'scopeHasNvlMedia']);
 });
 
 it('routes internal mutation and single-slot boundaries through the new capability', function (): void {

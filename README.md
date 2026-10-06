@@ -36,6 +36,12 @@ Media owns the complete lifecycle of binary assets: ingestion, validation, conte
 
 The optional Spatie permission bridge defaults to `false` through `nvl-media.authorization.spatie_permission.enabled`. Explicit grants use `nvl.media.*` names, including `nvl.media.manage`; holding only `nvl.media.manage` never automatically authorizes access to another owner's private Media. Ownership and host authorization contracts remain authoritative when the bridge is disabled.
 
+For finite host lists, use `ListOwnerMediaSlotsContract` with an explicit `MediaBatchAuthorization` SQL adapter.
+The reader returns safe localized original-asset slot DTOs for up to 100 owners and 20 slots, bounded before hydration.
+Private item URLs remain null; obtain private Download links through the separately authorized delivery API.
+The namespaced `hasNvlMedia()` host scope preserves selections and scopes independently of Spatie.
+See [batched slots](docs/php-api.md#batched-owner-slots) and [SQL authorization](docs/extending.md#explicit-batch-view-authorization).
+
 ## Requirements and installation
 
 - PHP 8.4+

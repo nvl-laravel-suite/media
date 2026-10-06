@@ -4,7 +4,14 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Add bounded authorized owner-slot DTO reads with explicit SQL View policy, canonical owner admission, exact identity correlation, bounded locale projection, and no variation queries.
+- Add the independent `hasNvlMedia()` host existence scope with canonical connection/FROM guards and complete SQL authorization.
+
 ### Changed
+
+- Preserve early host `MediaAuthorization` bindings with `bindIf`; private batch URLs remain null and use separate authorized Download delivery.
 
 - Isolate owned cache and lock keys under `nvl:media:`; preserve generic host entries and explicit store choices.
 
