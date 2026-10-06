@@ -23,7 +23,7 @@ enum MediaType: string
      */
     public function getLabel(): string
     {
-        return (string) trans("media::media/general.types.{$this->value}");
+        return (string) trans("nvl-media::media/general.types.{$this->value}");
     }
 
     /**
@@ -47,7 +47,7 @@ enum MediaType: string
             return self::OTHER;
         }
 
-        $groupTypes = config('media.group_types', []);
+        $groupTypes = config('nvl-media.group_types', []);
 
         foreach (is_array($groupTypes) ? $groupTypes : [] as $group => $extensions) {
             if (! is_string($group) || ! is_array($extensions)) {

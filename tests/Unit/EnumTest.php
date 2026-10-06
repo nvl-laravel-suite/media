@@ -17,7 +17,7 @@ describe('MediaType', function () {
     describe('fromExtension', function () {
 
         beforeEach(function () {
-            config(['media.group_types' => [
+            config(['nvl-media.group_types' => [
                 'image' => ['svg', 'bmp', 'gif', 'png', 'ico', 'jpeg', 'jpg', 'webp', 'avif'],
                 'document' => ['doc', 'docx', 'pdf', 'ppt', 'pptx', 'xls', 'xlsx', 'csv', 'txt'],
                 'video' => ['mp4', 'mpeg', 'webm', 'mov'],
@@ -103,7 +103,7 @@ describe('MediaType', function () {
         });
 
         it('returns OTHER when config has no group_types', function () {
-            config(['media.group_types' => []]);
+            config(['nvl-media.group_types' => []]);
 
             expect(MediaType::fromExtension('jpg'))->toBe(MediaType::OTHER);
         });

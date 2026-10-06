@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Actions;
 
 use Illuminate\Database\Eloquent\Model;
-use Nvl\Media\Contracts\HasMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\ReusePublicMediaContract;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
@@ -32,7 +32,7 @@ final readonly class ReusePublicMediaAction implements ReusePublicMediaContract
      */
     public function execute(
         Media|string $media,
-        Model&HasMedia $model,
+        Model&HasNvlMedia $model,
         string $collection = 'default',
         ?string $locale = null,
         ?int $order = null,

@@ -191,7 +191,7 @@ final class MediaUrlResolver
     /** Resolve the canonical tenant identity for signed capability generation. */
     private function tenantId(): ?string
     {
-        if (config('tenancy.enabled') !== true) {
+        if (config('nvl-tenancy.enabled') !== true) {
             return null;
         }
 
@@ -201,7 +201,7 @@ final class MediaUrlResolver
     /** Resolve the host-verified canonical origin for signed capability generation. */
     private function canonicalOrigin(): ?string
     {
-        if (config('tenancy.enabled') !== true) {
+        if (config('nvl-tenancy.enabled') !== true) {
             return null;
         }
 

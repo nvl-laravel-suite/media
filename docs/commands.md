@@ -41,7 +41,7 @@ php artisan nvl:media:adopt-spatie \
 
 The importer accepts UUID identifiers directly and derives stable UUIDs for integer/string legacy keys. It maps `model_type`, `model_id`, and `collection_name` into package associations; carries lifecycle, visibility, uploader, metadata, translations, and variations; computes missing digests from backing objects; and reconciles source versus matched target counts. Apply is refused when any row cannot map or any original/variation object is missing.
 
-Standard Spatie paths map to `<legacy id>/<file_name>`. If adopted rows already store complete disk-relative folders, set `MEDIA_ROOT_FOLDER=` before dry-run. If the desired target uses the default `media` prefix, move and verify the physical objects first rather than changing metadata alone.
+Standard Spatie paths map to `<legacy id>/<file_name>`. If adopted rows already store complete disk-relative folders, set `NVL_MEDIA_ROOT_FOLDER=` before dry-run. If the desired target uses the default `media` prefix, move and verify the physical objects first rather than changing metadata alone.
 
 ## `nvl:media:reconcile`
 
@@ -55,11 +55,11 @@ php artisan nvl:media:reconcile --disk=s3 --cleanup-orphans --older-than=1440
 php artisan nvl:media:reconcile --production --disk=s3 --cleanup-orphans --older-than=1440 --force
 ```
 
-- `--disk=`: disk to inspect; defaults to `media.disk`.
+- `--disk=`: disk to inspect; defaults to `nvl-media.disk`.
 - `--sample=50`: maximum media records to inspect; must be positive.
 - `--public-private-routes` / `--routes`: verify both route-backed delivery contracts.
 - `--include-trashed`: include soft-deleted media.
-- `--orphans`: inventory paginated objects below `media.root_folder` that are not referenced by live media.
+- `--orphans`: inventory paginated objects below `nvl-media.root_folder` that are not referenced by live media.
 - `--cleanup-orphans`: explicitly delete only age-eligible orphan candidates.
 - `--older-than=1440`: minimum candidate age in minutes; recent objects remain protected.
 - `--force`: required with `--cleanup-orphans` in production.
@@ -102,7 +102,7 @@ php artisan nvl:media:multipart:prune --limit=500
 
 Candidates include expired `initiated`/`completing` sessions, legacy sessions already marked `expired`, and failed initiations whose provider cleanup remains pending. Successful cleanup clears encrypted provider state and records the terminal reason. Run this on a schedule wherever multipart sessions are enabled and the configured recoverable gateway and central lock store are available. Provider cleanup failures remain retryable, are logged, and produce a non-zero exit status.
 
-The host owns that schedule. When `media.multipart.enabled=true`, use:
+The host owns that schedule. When `nvl-media.multipart.enabled=true`, use:
 
 ```php
 use Illuminate\Support\Facades\Schedule;
@@ -128,9 +128,9 @@ php artisan nvl:media:owner-slots:prune --days=7 --chunk=500
 ```
 
 - `--days=`: retention cutoff in days; defaults to
-  `media.owner_slots.idempotency.retention_days` and is bounded to 1-36,500.
+  `nvl-media.owner_slots.idempotency.retention_days` and is bounded to 1-36,500.
 - `--chunk=`: rows per delete chunk; defaults to
-  `media.owner_slots.idempotency.prune_chunk` and cannot exceed 1,000.
+  `nvl-media.owner_slots.idempotency.prune_chunk` and cannot exceed 1,000.
 - `--force`: in production only, permits `--days` shorter than configured
   retention. It is unnecessary for normal configured-retention pruning.
 

@@ -194,7 +194,7 @@ function mediaOwnerSlotConcurrencyRunWorkers(
                     $connectionConfig,
                 );
                 config()->set('database.default', $workerConnectionName);
-                config()->set('media.mutation_lock.enabled', false);
+                config()->set('nvl-media.mutation_lock.enabled', false);
                 DB::purge($workerConnectionName);
                 file_put_contents($readyFiles[$workerIndex], 'ready');
                 $deadline = microtime(true) + 10;

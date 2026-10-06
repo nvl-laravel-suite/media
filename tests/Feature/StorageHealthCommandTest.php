@@ -17,9 +17,9 @@ function configureStorageHealthR2Fake(): void
     config([
         'filesystems.disks.cloudflare-r2.driver' => 's3',
         'filesystems.disks.cloudflare-r2.url' => null,
-        'media.allowed_disks' => ['public', 'cloudflare-r2'],
-        'media.disk' => 'cloudflare-r2',
-        'media.assets.remote_public_delivery' => 'route',
+        'nvl-media.allowed_disks' => ['public', 'cloudflare-r2'],
+        'nvl-media.disk' => 'cloudflare-r2',
+        'nvl-media.assets.remote_public_delivery' => 'route',
     ]);
 }
 
@@ -222,7 +222,7 @@ it('fails route verification when public remote media is configured for direct d
 
     config([
         'filesystems.disks.cloudflare-r2.url' => 'https://cdn.example.test',
-        'media.assets.remote_public_delivery' => 'disk',
+        'nvl-media.assets.remote_public_delivery' => 'disk',
     ]);
 
     $media = createStorageHealthMedia(['hash' => 'direct-public.jpg']);

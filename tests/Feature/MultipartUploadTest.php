@@ -28,7 +28,7 @@ use Nvl\Media\Models\MediaMultipartUpload;
 use Nvl\Media\Tests\Stubs\TestMediaUser;
 
 beforeEach(function (): void {
-    config(['media.multipart.enabled' => true]);
+    config(['nvl-media.multipart.enabled' => true]);
     Storage::fake('public');
 });
 
@@ -274,7 +274,7 @@ it('deletes and aborts a completed object when verification differs from its ses
 });
 
 it('keeps required direct uploads unavailable until a scan is finalized', function () {
-    config(['media.scanner.required' => true]);
+    config(['nvl-media.scanner.required' => true]);
     $checksum = hash('sha256', 'scan-me');
     $gateway = multipartGateway(new CompletedMultipartObjectData(
         path: 'media/pending/object-id/file.txt',
@@ -375,7 +375,7 @@ it('persists expiry before refusing further part signing', function () {
 
 it('refuses persisted multipart mutations while the feature is disabled', function () {
     [$session, , $checksum] = initiateMultipartSession('disabled');
-    config(['media.multipart.enabled' => false]);
+    config(['nvl-media.multipart.enabled' => false]);
 
     expect(fn () => app(SignMultipartPartAction::class)->execute(
         new SignMultipartPartData($session->uploadId, 1, $checksum, 8),

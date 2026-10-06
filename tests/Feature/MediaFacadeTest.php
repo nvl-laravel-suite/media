@@ -92,7 +92,8 @@ test('the facade supports typed reads and convenient array filters', function ()
 });
 
 test('facade authorization uses the same optional global-role bridge as policies and queries', function (): void {
-    config()->set('media.authorization.spatie_permission.global_roles', ['admin']);
+    config()->set('nvl-media.authorization.spatie_permission.enabled', true);
+    config()->set('nvl-media.authorization.spatie_permission.global_roles', ['admin']);
 
     $admin = TestPermissionMediaUser::withoutEvents(
         static fn (): TestPermissionMediaUser => TestPermissionMediaUser::forceCreate([

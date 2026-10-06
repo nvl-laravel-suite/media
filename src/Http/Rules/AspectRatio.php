@@ -40,7 +40,7 @@ class AspectRatio implements ValidationRule
         $difference = abs($actual_ratio - $this->ratio);
 
         if ($difference > $this->tolerance) {
-            $fail((string) trans('media::media/validation.rules.aspect_ratio_mismatch', [
+            $fail((string) trans('nvl-media::media/validation.rules.aspect_ratio_mismatch', [
                 'attribute' => $attribute,
                 'actual_ratio' => number_format($actual_ratio, 4, '.', ''),
                 'required_ratio' => number_format($this->ratio, 4, '.', ''),

@@ -4,7 +4,7 @@ NVL Media generates deterministic database-backed variations using Spatie Image.
 
 ## Drivers and formats
 
-Choose a driver with `MEDIA_IMAGE_DRIVER=gd`, `imagick`, or `vips`. The corresponding runtime extension/library must be installed on every web and worker host that may process images.
+Choose a driver with `NVL_MEDIA_IMAGE_DRIVER=gd`, `imagick`, or `vips`. The corresponding runtime extension/library must be installed on every web and worker host that may process images.
 
 The package supports JPEG, PNG, GIF, WebP, and AVIF outputs. Actual encoder support depends on the installed driver build. `nvl:media:doctor` checks the configured driver and, for GD, the required encoder functions.
 
@@ -104,8 +104,8 @@ Terminal uploads may supply `withVariations()` definitions as `ConversionDefinit
 ```php
 'queue' => [
     'enabled' => true,
-    'connection' => env('MEDIA_QUEUE_CONNECTION', 'redis'),
-    'name' => env('MEDIA_QUEUE', 'media'),
+    'connection' => env('NVL_MEDIA_QUEUE_CONNECTION', 'redis'),
+    'name' => env('NVL_MEDIA_QUEUE', 'media'),
     'jobs' => [
         'generate' => [
             'tries' => 3,

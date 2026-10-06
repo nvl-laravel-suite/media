@@ -16,7 +16,7 @@ final class MediaQueueConfiguration
      */
     public static function enabled(): bool
     {
-        return config('media.queue.enabled', true) === true
+        return config('nvl-media.queue.enabled', true) === true
             && self::connection() !== 'sync';
     }
 
@@ -41,7 +41,7 @@ final class MediaQueueConfiguration
      */
     public static function jobInteger(string $job, string $key, int $default): int
     {
-        return MediaConfiguration::integer("media.queue.jobs.{$job}.{$key}", $default, 1);
+        return MediaConfiguration::integer("nvl-media.queue.jobs.{$job}.{$key}", $default, 1);
     }
 
     /**
@@ -52,7 +52,7 @@ final class MediaQueueConfiguration
      */
     public static function backoff(string $job, array $default): array
     {
-        $configured = config("media.queue.jobs.{$job}.backoff", $default);
+        $configured = config("nvl-media.queue.jobs.{$job}.backoff", $default);
 
         if (! is_array($configured)) {
             return $default;

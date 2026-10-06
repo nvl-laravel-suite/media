@@ -441,7 +441,7 @@ final readonly class AdoptSpatieMediaAction
      */
     private function configuredDisk(): string
     {
-        $disk = config('media.disk', config('filesystems.default', 'local'));
+        $disk = config('nvl-media.disk', config('filesystems.default', 'local'));
 
         return is_string($disk) && trim($disk) !== '' ? trim($disk) : 'local';
     }

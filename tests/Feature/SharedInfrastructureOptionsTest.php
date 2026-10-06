@@ -8,15 +8,15 @@ use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Support\MediaQueueConfiguration;
 
 it('inherits shared queue names in media jobs', function (): void {
-    config(['media.queue.name' => null, 'nvl-core.queue.name' => 'shared-media-work']);
+    config(['nvl-media.queue.name' => null, 'nvl-core.queue.name' => 'shared-media-work']);
     expect(MediaQueueConfiguration::name())->toBe('shared-media-work');
 });
 
 it('uses the inherited Core store for media mutation and multipart locks', function (): void {
     config([
-        'media.mutation_lock.store' => null,
-        'media.multipart.lock.store' => null,
-        'media.locks' => ['store' => null, 'mutation' => ['store' => null], 'multipart' => ['store' => null]],
+        'nvl-media.mutation_lock.store' => null,
+        'nvl-media.multipart.lock.store' => null,
+        'nvl-media.locks' => ['store' => null, 'mutation' => ['store' => null], 'multipart' => ['store' => null]],
         'nvl-core.locks.store' => 'shared-locks',
         'cache.stores.shared-locks' => ['driver' => 'array'],
     ]);

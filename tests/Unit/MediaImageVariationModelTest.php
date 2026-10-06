@@ -77,7 +77,7 @@ describe('getFilename', function () {
 describe('getPath', function () {
 
     it('builds path from parent folder, conversions folder, and filename', function () {
-        config(['media.conversions_folder' => 'conversions']);
+        config(['nvl-media.conversions_folder' => 'conversions']);
 
         $media = createParentMedia(['folder' => 'uploads/users', 'hash' => 'abc123.jpg']);
         $variation = createVariation($media, ['label' => 'thumb', 'format' => 'webp']);
@@ -86,7 +86,7 @@ describe('getPath', function () {
     });
 
     it('uses conversions folder directly when parent has no folder', function () {
-        config(['media.conversions_folder' => 'conversions']);
+        config(['nvl-media.conversions_folder' => 'conversions']);
 
         $media = createParentMedia(['folder' => null, 'hash' => 'abc123.jpg']);
         $variation = createVariation($media, ['label' => 'small', 'format' => 'webp']);
@@ -95,7 +95,7 @@ describe('getPath', function () {
     });
 
     it('respects custom conversions_folder config', function () {
-        config(['media.conversions_folder' => 'variants']);
+        config(['nvl-media.conversions_folder' => 'variants']);
 
         $media = createParentMedia(['folder' => 'photos', 'hash' => 'img.jpg']);
         $variation = createVariation($media, ['label' => 'thumb', 'format' => 'webp']);
@@ -104,7 +104,7 @@ describe('getPath', function () {
     });
 
     it('defaults to conversions folder from config', function () {
-        config(['media.conversions_folder' => 'conversions']);
+        config(['nvl-media.conversions_folder' => 'conversions']);
 
         $media = createParentMedia(['folder' => 'test', 'hash' => 'file.jpg']);
         $variation = createVariation($media, ['label' => 'thumb', 'format' => 'webp']);

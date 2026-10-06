@@ -97,7 +97,7 @@ final class MediaAssetController extends Controller
             path: $resolved['path'],
             mimeType: $resolved['mime_type'],
             cacheControl: MediaConfiguration::string(
-                'media.assets.private_cache_control',
+                'nvl-media.assets.private_cache_control',
                 'private, max-age=0, no-store',
             ),
             request: $request,
@@ -159,7 +159,7 @@ final class MediaAssetController extends Controller
     /** Reject signed capabilities issued for another tenant, revision, or canonical origin. */
     private function assertSignedTenantRevision(Request $request, Media $media): void
     {
-        if (config('tenancy.enabled') !== true) {
+        if (config('nvl-tenancy.enabled') !== true) {
             return;
         }
 
@@ -202,7 +202,7 @@ final class MediaAssetController extends Controller
         }
 
         return MediaConfiguration::string(
-            'media.assets.public_cache_control',
+            'nvl-media.assets.public_cache_control',
             'public, max-age=31536000, immutable',
         );
     }
@@ -210,7 +210,7 @@ final class MediaAssetController extends Controller
     private function ownerMatches(string $owner, Media $media): bool
     {
         $fallbackOwner = MediaConfiguration::string(
-            'media.assets.private_owner_fallback',
+            'nvl-media.assets.private_owner_fallback',
             'system',
         );
         $expectedOwner = $media->uploaded_by ?? $fallbackOwner;

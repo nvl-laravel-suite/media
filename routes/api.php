@@ -11,7 +11,7 @@ use Nvl\Media\Http\Controllers\Api\MediaVariationController;
 
 /** @var list<string> $managementMiddleware */
 $managementMiddleware = array_values(array_filter(
-    (array) config('media.routes.management_middleware', ['auth', 'throttle:60,1']),
+    (array) config('nvl-media.routes.management_middleware', ['auth', 'throttle:60,1']),
     static fn (mixed $middleware): bool => is_string($middleware) && $middleware !== '',
 ));
 

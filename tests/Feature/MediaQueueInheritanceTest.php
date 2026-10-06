@@ -9,8 +9,8 @@ use Nvl\Media\Support\MediaQueueConfiguration;
 
 it('resolves Media jobs from explicit package, Core, and effective application queue settings', function (?string $media, ?string $core, string $application, string $expected): void {
     config([
-        'media.queue.enabled' => true,
-        'media.queue.connection' => $media,
+        'nvl-media.queue.enabled' => true,
+        'nvl-media.queue.connection' => $media,
         'nvl-core.queue.connection' => $core,
         'queue.default' => $application,
     ]);
@@ -29,7 +29,7 @@ it('resolves Media jobs from explicit package, Core, and effective application q
 
 it('preserves queue inheritance after a PHP configuration cache round trip', function (): void {
     config([
-        'media.queue.connection' => null,
+        'nvl-media.queue.connection' => null,
         'nvl-core.queue.connection' => null,
         'queue.default' => 'runtime-queue',
     ]);
@@ -46,19 +46,19 @@ it('preserves queue inheritance after a PHP configuration cache round trip', fun
 });
 
 it('keeps the Media environment override as a configuration input', function (): void {
-    $previous = getenv('MEDIA_QUEUE_CONNECTION');
-    putenv('MEDIA_QUEUE_CONNECTION=media-env');
+    $previous = getenv('NVL_MEDIA_QUEUE_CONNECTION');
+    putenv('NVL_MEDIA_QUEUE_CONNECTION=media-env');
 
     try {
-        $defaults = require dirname(__DIR__, 2).'/config/media.php';
+        $defaults = require dirname(__DIR__, 2).'/config/nvl-media.php';
         expect($defaults['queue']['connection'])->toBe('media-env');
     } finally {
-        putenv($previous === false ? 'MEDIA_QUEUE_CONNECTION' : 'MEDIA_QUEUE_CONNECTION='.$previous);
+        putenv($previous === false ? 'NVL_MEDIA_QUEUE_CONNECTION' : 'NVL_MEDIA_QUEUE_CONNECTION='.$previous);
     }
 });
 
 it('rejects an empty queue override instead of silently selecting sync', function (): void {
-    config(['media.queue.connection' => '', 'queue.default' => 'redis']);
+    config(['nvl-media.queue.connection' => '', 'queue.default' => 'redis']);
 
     expect(fn (): string => MediaQueueConfiguration::connection())->toThrow(InvalidArgumentException::class, 'media.queue.connection');
 });
@@ -68,7 +68,7 @@ it('leaves the shipped queue name nullable for Core and application inheritance'
     putenv('MEDIA_QUEUE');
 
     try {
-        $defaults = require dirname(__DIR__, 2).'/config/media.php';
+        $defaults = require dirname(__DIR__, 2).'/config/nvl-media.php';
         expect($defaults['queue']['name'])->toBeNull();
     } finally {
         putenv($previous === false ? 'MEDIA_QUEUE' : 'MEDIA_QUEUE='.$previous);

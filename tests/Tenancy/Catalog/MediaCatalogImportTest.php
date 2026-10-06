@@ -68,7 +68,7 @@ it('keeps a completed catalog copy after revocation but rejects a new import', f
 it('dispatches imported image variations only after the root transaction commits', function (): void {
     $scenario = MediaTenancyScenario::install(catalogCopies: true);
     Bus::fake([GenerateImageVariationJob::class]);
-    config()->set('media.queue.connection', 'database');
+    config()->set('nvl-media.queue.connection', 'database');
     $bytes = 'catalog-image';
     $source = $scenario->platform(fn (): Media => Media::query()->forceCreate([
         ...app(TenantBoundary::class)->attributes('media.assets'),

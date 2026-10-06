@@ -120,7 +120,7 @@ final class MediaFileTypePolicy
      */
     public function configuredTypes(): array
     {
-        $configured = config('media.file_types', []);
+        $configured = config('nvl-media.file_types', []);
 
         if (! is_array($configured)) {
             throw new FileUnacceptableForCollection('Media file type configuration must be an array.');

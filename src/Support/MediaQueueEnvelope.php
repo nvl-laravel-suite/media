@@ -18,7 +18,7 @@ final class MediaQueueEnvelope
         }
 
         return new TenantJobEnvelope(new TenantContextSnapshot(
-            config('tenancy.enabled') === true
+            config('nvl-tenancy.enabled') === true
                 ? TenantContextMode::Unresolved
                 : TenantContextMode::Disabled,
         ));

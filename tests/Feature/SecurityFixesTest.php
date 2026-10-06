@@ -19,11 +19,11 @@ beforeEach(function () {
 
     config([
         'filesystems.default' => 'public',
-        'media.auto_generate_variations' => false,
-        'media.auto_generate_conversions' => false,
-        'media.allowed_disks' => ['public'],
-        'media.sources.remote.enabled' => true,
-        'media.sources.remote.verify_connected_ip' => false,
+        'nvl-media.auto_generate_variations' => false,
+        'nvl-media.auto_generate_conversions' => false,
+        'nvl-media.allowed_disks' => ['public'],
+        'nvl-media.sources.remote.enabled' => true,
+        'nvl-media.sources.remote.verify_connected_ip' => false,
     ]);
 });
 
@@ -101,7 +101,7 @@ describe('SSRF protection', function () {
     })->throws(MediaUploadException::class, 'private or reserved IP');
 
     it('rejects oversized remote files before creating media records', function () {
-        config(['media.max_file_size' => 4]);
+        config(['nvl-media.max_file_size' => 4]);
         Http::fake([
             'https://93.184.216.34/large.jpg' => Http::response('12345', 200),
         ]);
@@ -183,7 +183,7 @@ describe('AllowedMimeTypes rule', function () {
     });
 
     it('falls back to config when no types specified', function () {
-        config(['media.file_types' => ['image/jpeg']]);
+        config(['nvl-media.file_types' => ['image/jpeg']]);
         $rule = new AllowedMimeTypes;
         $file = UploadedFile::fake()->image('photo.jpg', 100, 100);
         $failed = false;
@@ -277,7 +277,7 @@ describe('duplicate detection', function () {
     });
 
     it('maps deduplication lock timeouts to media upload failures', function () {
-        config(['media.deduplication_lock.wait_seconds' => 0]);
+        config(['nvl-media.deduplication_lock.wait_seconds' => 0]);
 
         $media = Media::create([
             'filename' => 'locked.jpg',

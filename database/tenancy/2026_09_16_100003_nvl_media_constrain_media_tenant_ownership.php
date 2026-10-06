@@ -24,8 +24,8 @@ return new class extends Migration
     /** Apply verified tenant partitions, indexes, and concrete parent constraints. */
     public function up(): void
     {
-        $mixed = config('tenancy.sharing.media') === 'copy';
-        $platform = config('tenancy.resources.media') === 'platform';
+        $mixed = config('nvl-tenancy.sharing.media') === 'copy';
+        $platform = config('nvl-tenancy.resources.media') === 'platform';
         $partitioned = $mixed || $platform;
         $schema = Schema::connection(PackageStorage::connection('media'));
 

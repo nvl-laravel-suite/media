@@ -26,7 +26,7 @@ final readonly class MediaTenantOwnerResolver
     public function resolve(Model $owner, bool $lock = false): Model
     {
         $key = $owner->getKey();
-        if ($this->configuration->get('tenancy.enabled') !== true) {
+        if ($this->configuration->get('nvl-tenancy.enabled') !== true) {
             return $owner;
         }
         if (! is_int($key) && ! is_string($key)) {

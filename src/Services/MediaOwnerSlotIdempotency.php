@@ -80,7 +80,7 @@ final class MediaOwnerSlotIdempotency
                     }
 
                     $created = $this->operationQuery()->forceCreate([
-                        ...(config('tenancy.enabled') === true ? ['tenant_id' => $tenantId] : []),
+                        ...(config('nvl-tenancy.enabled') === true ? ['tenant_id' => $tenantId] : []),
                         'idempotency_key' => $key,
                         'actor_type' => $actorIdentity['type'],
                         'actor_id' => $actorIdentity['id'],
@@ -293,12 +293,12 @@ final class MediaOwnerSlotIdempotency
         ?int $chunkSize = null,
     ): int {
         $retentionDays ??= MediaConfiguration::integer(
-            'media.owner_slots.idempotency.retention_days',
+            'nvl-media.owner_slots.idempotency.retention_days',
             7,
             1,
         );
         $chunkSize ??= MediaConfiguration::integer(
-            'media.owner_slots.idempotency.prune_chunk',
+            'nvl-media.owner_slots.idempotency.prune_chunk',
             500,
             1,
         );
@@ -409,7 +409,7 @@ final class MediaOwnerSlotIdempotency
         MediaOwnerSlotOperation $operation,
     ): MediaOwnerSlotOperationClaim {
         $timeout = config(
-            'media.owner_slots.idempotency.processing_timeout_minutes',
+            'nvl-media.owner_slots.idempotency.processing_timeout_minutes',
             30,
         );
 
@@ -516,7 +516,7 @@ final class MediaOwnerSlotIdempotency
     {
         $query = MediaOwnerSlotOperation::query();
 
-        return config('tenancy.enabled') === true
+        return config('nvl-tenancy.enabled') === true
             ? $this->tenantBoundary->query($query, 'media.slot-operations')
             : $query;
     }

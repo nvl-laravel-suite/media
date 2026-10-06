@@ -178,7 +178,7 @@ final readonly class MediaPathResolver
      */
     public static function rootFolder(): string
     {
-        return trim(MediaConfiguration::string('media.root_folder', ''), '/');
+        return trim(MediaConfiguration::string('nvl-media.root_folder', ''), '/');
     }
 
     /**
@@ -199,7 +199,7 @@ final readonly class MediaPathResolver
     public function storageFolder(string $folder): string
     {
         $folder = $this->normalizeFolder($folder);
-        if (config('tenancy.enabled') !== true) {
+        if (config('nvl-tenancy.enabled') !== true) {
             return self::storagePath($folder);
         }
 
@@ -223,7 +223,7 @@ final readonly class MediaPathResolver
         $folder = dirname(trim($storagePath, '/'));
         $root = self::rootFolder();
         $prefix = $root;
-        if (config('tenancy.enabled') === true) {
+        if (config('nvl-tenancy.enabled') === true) {
             $snapshot = $this->tenantContext?->snapshot() ?? throw new TenantContextMissing;
             $partition = match ($snapshot->mode) {
                 TenantContextMode::Tenant => 'tenants/'.$snapshot->tenantId?->value,
@@ -244,7 +244,7 @@ final readonly class MediaPathResolver
      */
     public static function conversionsFolder(): string
     {
-        $folder = config('media.conversions_folder');
+        $folder = config('nvl-media.conversions_folder');
 
         return is_string($folder) && $folder !== '' ? $folder : 'conversions';
     }

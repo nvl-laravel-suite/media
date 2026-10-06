@@ -9,7 +9,10 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
+use Nvl\Media\Models\Media;
+use Nvl\Media\Services\MediaDeduplicationLock;
 use Nvl\Media\Services\MediaFileEffectScheduler;
+use Nvl\Media\Services\MediaMultipartLock;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaTransactionRollbackRegistry;
 
@@ -25,7 +28,7 @@ function mediaRollbackMutationLockIsAvailable(string $mediaId): bool
     }
 
     $lock = $lockProvider->lock(
-        'media:mutation:'.hash('sha256', $mediaId),
+        'nvl:media:mutation:'.hash('sha256', $mediaId),
         10,
     );
 
@@ -110,12 +113,48 @@ test('file rollback callbacks follow the root outcome without accumulating liste
     }
 });
 
+test('owned media locks ignore and preserve colliding foreign lock keys', function (string $purpose, string $identity): void {
+    config([
+        "nvl-media.{$purpose}_lock.store" => 'array',
+        "nvl-media.{$purpose}_lock.wait_seconds" => 0,
+        'nvl-media.multipart.lock.store' => 'array',
+        'nvl-media.multipart.lock.wait_seconds' => 0,
+    ]);
+    $foreignKey = "media:{$purpose}:".hash('sha256', $identity);
+    $ownedKey = 'nvl:'.$foreignKey;
+    $foreignLock = Cache::store('array')->lock($foreignKey, 30);
+    expect($foreignLock->get())->toBeTrue();
+    $callback = static function () use ($foreignKey, $ownedKey): Media {
+        expect(Cache::store('array')->lock($ownedKey, 30)->get())->toBeFalse()
+            ->and(Cache::store('array')->lock($foreignKey, 30)->get())->toBeFalse();
+
+        return new Media;
+    };
+
+    try {
+        $result = match ($purpose) {
+            'mutation' => app(MediaMutationLock::class)->execute($identity, $callback),
+            'multipart' => app(MediaMultipartLock::class)->execute($identity, $callback),
+            'deduplication' => app(MediaDeduplicationLock::class)->execute('digest', 'public', true, null, null, $callback),
+        };
+
+        expect($result)->toBeInstanceOf(Media::class)
+            ->and(Cache::store('array')->lock($foreignKey, 30)->get())->toBeFalse();
+    } finally {
+        $foreignLock->release();
+    }
+})->with([
+    'mutation' => ['mutation', 'namespaced-media'],
+    'multipart' => ['multipart', 'namespaced-session'],
+    'deduplication' => ['deduplication', 'digest|public|public'],
+]);
+
 test('mutation locks survive savepoint rollback and release on either root outcome', function (): void {
     config([
-        'media.mutation_lock.enabled' => true,
-        'media.mutation_lock.store' => 'array',
-        'media.mutation_lock.seconds' => 10,
-        'media.mutation_lock.wait_seconds' => 0,
+        'nvl-media.mutation_lock.enabled' => true,
+        'nvl-media.mutation_lock.store' => 'array',
+        'nvl-media.mutation_lock.seconds' => 10,
+        'nvl-media.mutation_lock.wait_seconds' => 0,
     ]);
 
     $originalConnection = DB::getDefaultConnection();

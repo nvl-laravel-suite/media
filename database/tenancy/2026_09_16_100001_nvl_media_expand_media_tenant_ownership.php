@@ -20,8 +20,8 @@ return new class extends Migration
     /** Add nullable adoption columns without changing legacy row visibility. */
     public function up(): void
     {
-        $mixed = config('tenancy.sharing.media') === 'copy';
-        $platform = config('tenancy.resources.media') === 'platform';
+        $mixed = config('nvl-tenancy.sharing.media') === 'copy';
+        $platform = config('nvl-tenancy.resources.media') === 'platform';
         $partitioned = $mixed || $platform;
         $this->expand(MediaTables::get(MediaTables::Media), function (Blueprint $table) use ($partitioned): void {
             $table->uuid('tenant_id')->nullable()->index('media_tenant_idx');

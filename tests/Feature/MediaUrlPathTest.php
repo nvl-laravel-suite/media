@@ -51,7 +51,7 @@ describe('getUrl', function () {
         ]);
 
         expect($media->getUrl())
-            ->toContain("/media/private/owner-123/{$media->id}")
+            ->toContain("/nvl/media/private/owner-123/{$media->id}")
             ->toContain('signature=')
             ->not->toContain('/storage/');
     });
@@ -61,7 +61,7 @@ describe('getUrl', function () {
             'is_public' => false,
             'uploaded_by' => 'owner-123',
         ]);
-        config(['media.assets.private_route_name' => 'media.private.missing']);
+        config(['nvl-media.assets.private_route_name' => 'nvl-media.private.missing']);
 
         MediaAssetUrl::privateUrl(
             media: $media,
@@ -76,7 +76,7 @@ describe('getUrl', function () {
         Storage::fake('public');
 
         $media = createUrlMedia(['disk' => 'public', 'folder' => 'uploads', 'hash' => 'abc.jpg']);
-        config(['media.conversions_folder' => 'conversions']);
+        config(['nvl-media.conversions_folder' => 'conversions']);
 
         MediaImageVariation::create([
             'media_id' => $media->id,
@@ -134,7 +134,7 @@ describe('getPath', function () {
         Storage::fake('public');
 
         $media = createUrlMedia(['disk' => 'public', 'folder' => 'uploads', 'hash' => 'abc.jpg']);
-        config(['media.conversions_folder' => 'conversions']);
+        config(['nvl-media.conversions_folder' => 'conversions']);
 
         MediaImageVariation::create([
             'media_id' => $media->id,
@@ -174,7 +174,7 @@ describe('getVariationUrl', function () {
 
     it('returns variation URL when variation file exists on disk', function () {
         Storage::fake('public');
-        config(['media.conversions_folder' => 'conversions']);
+        config(['nvl-media.conversions_folder' => 'conversions']);
 
         $media = createUrlMedia(['disk' => 'public', 'folder' => 'photos', 'hash' => 'img.jpg']);
 
@@ -203,7 +203,7 @@ describe('getVariationUrl', function () {
 
     it('falls back to original URL when variation file missing from disk', function () {
         Storage::fake('public');
-        config(['media.conversions_folder' => 'conversions']);
+        config(['nvl-media.conversions_folder' => 'conversions']);
 
         $media = createUrlMedia(['disk' => 'public', 'folder' => 'photos', 'hash' => 'img.jpg']);
 
@@ -247,7 +247,7 @@ describe('getVariationPath', function () {
 
     it('returns variation absolute path when variation exists', function () {
         Storage::fake('public');
-        config(['media.conversions_folder' => 'conversions']);
+        config(['nvl-media.conversions_folder' => 'conversions']);
 
         $media = createUrlMedia(['disk' => 'public', 'folder' => 'photos', 'hash' => 'img.jpg']);
 
@@ -325,7 +325,7 @@ describe('centralized URL builders', function () {
 
         $url = $media->buildPublicUrl();
 
-        expect($url)->toContain("/media/assets/{$media->id}")
+        expect($url)->toContain("/nvl/media/assets/{$media->id}")
             ->toContain('version=');
     });
 
@@ -342,7 +342,7 @@ describe('centralized URL builders', function () {
 
         $url = $media->buildPrivateUrl();
 
-        expect($url)->toContain("/media/private/{$owner->id}/{$media->id}")
+        expect($url)->toContain("/nvl/media/private/{$owner->id}/{$media->id}")
             ->and($url)->toContain('signature=');
     });
 
@@ -362,15 +362,15 @@ describe('centralized URL builders', function () {
             'hash' => 'private-url-hash.jpg',
         ]);
 
-        expect($public->buildUrl())->toContain("/media/assets/{$public->id}")
-            ->and($private->buildUrl())->toContain("/media/private/{$owner->id}/{$private->id}");
+        expect($public->buildUrl())->toContain("/nvl/media/assets/{$public->id}")
+            ->and($private->buildUrl())->toContain("/nvl/media/private/{$owner->id}/{$private->id}");
     });
 
     it('falls back to legacy storage URL when configured public route name is invalid', function () {
         Storage::fake('public');
         config([
             'filesystems.disks.public.url' => config('app.url').'/storage',
-            'media.assets.public_route_name' => 'media.assets.missing',
+            'nvl-media.assets.public_route_name' => 'media.assets.missing',
         ]);
 
         $media = createUrlMedia([
@@ -382,13 +382,13 @@ describe('centralized URL builders', function () {
         $url = $media->buildPublicUrl();
 
         expect($url)->toContain('uploads/public-route-fallback.jpg')
-            ->and($url)->not->toContain('/media/assets/');
+            ->and($url)->not->toContain('/nvl/media/assets/');
     });
 
     it('uses configurable private owner fallback and signed URL lifetime', function () {
         config([
-            'media.assets.private_owner_fallback' => 'pool-owner',
-            'media.assets.signed_url_lifetime' => 2,
+            'nvl-media.assets.private_owner_fallback' => 'pool-owner',
+            'nvl-media.assets.signed_url_lifetime' => 2,
         ]);
 
         $media = createUrlMedia([
@@ -402,7 +402,7 @@ describe('centralized URL builders', function () {
         parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
         $expires = isset($query['expires']) ? (int) $query['expires'] : 0;
 
-        expect($url)->toContain("/media/private/pool-owner/{$media->id}")
+        expect($url)->toContain("/nvl/media/private/pool-owner/{$media->id}")
             ->and($expires)->toBeGreaterThan(0)
             ->and(abs($expires - now()->addMinutes(2)->timestamp))->toBeLessThanOrEqual(5);
     });

@@ -13,6 +13,12 @@ use Nvl\Tenancy\ValueObjects\TenantResourceDefinition;
 /** Registers only the test-owned canonical Media owner resource and adapter. */
 final class MediaTenancyFixtureServiceProvider extends ServiceProvider
 {
+    /** Enable the fixture's tenant runtime before queue hooks register. */
+    public function register(): void
+    {
+        $this->app->make('config')->set('nvl-tenancy.enabled', true);
+    }
+
     /** Register fixture ownership before the final configuration validation. */
     public function boot(TenantResourceRegistry $resources, TenantAdoptionRegistry $adoptions): void
     {

@@ -43,7 +43,7 @@ final class MediaSourceResolver
      */
     public function fromUrl(string $url, string ...$allowedMimeTypes): UploadedFile
     {
-        if (! (bool) config('media.sources.remote.enabled', false)) {
+        if (! (bool) config('nvl-media.sources.remote.enabled', false)) {
             $this->logRemoteRejection($url, new MediaUploadException('Remote media sources are disabled.'));
 
             throw new MediaUploadException('Remote media sources are disabled.');
@@ -228,7 +228,7 @@ final class MediaSourceResolver
     private function downloadUrlToTempFile(string $url, string $temporaryPath): string
     {
         $currentUrl = $url;
-        $maximumRedirects = MediaConfiguration::integer('media.sources.remote.redirects', 5, 0);
+        $maximumRedirects = MediaConfiguration::integer('nvl-media.sources.remote.redirects', 5, 0);
 
         for ($redirects = 0; $redirects <= $maximumRedirects; $redirects++) {
             $target = $this->validateUrl($currentUrl);
@@ -281,9 +281,9 @@ final class MediaSourceResolver
 
             try {
                 $response = Http::connectTimeout(
-                    MediaConfiguration::integer('media.sources.remote.connect_timeout', 5, 1),
+                    MediaConfiguration::integer('nvl-media.sources.remote.connect_timeout', 5, 1),
                 )
-                    ->timeout(MediaConfiguration::integer('media.sources.remote.total_timeout', 30, 1))
+                    ->timeout(MediaConfiguration::integer('nvl-media.sources.remote.total_timeout', 30, 1))
                     ->withOptions([
                         'allow_redirects' => false,
                         'stream' => true,
@@ -309,7 +309,7 @@ final class MediaSourceResolver
             }
 
             $verifyConnectedIp = (bool) config(
-                'media.sources.remote.verify_connected_ip',
+                'nvl-media.sources.remote.verify_connected_ip',
                 true,
             );
 
@@ -365,7 +365,7 @@ final class MediaSourceResolver
             ? (int) $parsed['port']
             : ($scheme === 'https' ? 443 : 80);
         $allowedPorts = MediaConfiguration::integerList(
-            'media.sources.remote.allowed_ports',
+            'nvl-media.sources.remote.allowed_ports',
             [80, 443],
         );
 
@@ -672,7 +672,7 @@ final class MediaSourceResolver
     private function maxSourceBytes(): int
     {
         return MediaConfiguration::integer(
-            'media.max_file_size',
+            'nvl-media.max_file_size',
             10 * 1024 * 1024,
             1,
         );
@@ -683,7 +683,7 @@ final class MediaSourceResolver
         return min(
             $this->maxSourceBytes(),
             MediaConfiguration::integer(
-                'media.sources.remote.maximum_bytes',
+                'nvl-media.sources.remote.maximum_bytes',
                 $this->maxSourceBytes(),
                 1,
             ),

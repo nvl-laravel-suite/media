@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Actions;
 
 use Illuminate\Database\Eloquent\Model;
-use Nvl\Media\Contracts\HasMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Services\MediaOwnerSlotWorkflow;
 
@@ -23,7 +23,7 @@ final readonly class ClearOwnerMediaSlotAction
      */
     public function execute(
         MediaActorData $actor,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         ?string $idempotencyKey = null,
     ): void {

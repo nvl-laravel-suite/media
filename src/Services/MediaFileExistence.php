@@ -25,12 +25,12 @@ final class MediaFileExistence
      */
     public function exists(string $disk, string $path): bool
     {
-        if (! config('media.cache_file_existence', true)) {
+        if (! config('nvl-media.cache_file_existence', true)) {
             return $this->existsFresh($disk, $path);
         }
 
         $cacheKey = $this->cacheKey($disk, $path);
-        $ttlSeconds = MediaConfiguration::integer('media.cache_ttl', 60, 1);
+        $ttlSeconds = MediaConfiguration::integer('nvl-media.cache_ttl', 60, 1);
 
         return Cache::remember(
             $cacheKey,
@@ -71,6 +71,6 @@ final class MediaFileExistence
      */
     private function cacheKey(string $disk, string $path): string
     {
-        return "media_exists:{$disk}:{$path}";
+        return "nvl:media:file-existence:{$disk}:{$path}";
     }
 }

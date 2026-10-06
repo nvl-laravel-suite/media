@@ -11,6 +11,7 @@ use Nvl\Media\Enums\MediaImageDriver;
 use Nvl\Media\Services\NullMediaContentScanner;
 use Nvl\Media\Services\PortableMediaSearchDriver;
 use Nvl\Media\Services\S3MultipartUploadGateway;
+use Nvl\Support\Config\PackageEnvironment;
 
 return [
     'tenancy' => [
@@ -34,11 +35,11 @@ return [
     */
     'routes' => [
         'api_enabled' => false,
-        'api_prefix' => 'api/v1',
+        'api_prefix' => 'nvl/api/v1',
         'api_middleware' => ['api'],
         'management_middleware' => ['auth', 'throttle:60,1'],
         'assets_enabled' => true,
-        'assets_prefix' => 'media',
+        'assets_prefix' => 'nvl/media',
     ],
 
     /*
@@ -52,21 +53,21 @@ return [
     */
     'authorization' => [
         'spatie_permission' => [
-            'enabled' => env('MEDIA_SPATIE_PERMISSION_ENABLED', true),
+            'enabled' => PackageEnvironment::get('NVL_MEDIA_SPATIE_PERMISSION_ENABLED', false),
             'global_roles' => array_values(array_filter(array_map(
                 static fn (string $role): string => trim($role),
-                explode(',', (string) env('MEDIA_GLOBAL_ROLES', '')),
+                explode(',', (string) PackageEnvironment::get('NVL_MEDIA_GLOBAL_ROLES', '')),
             ))),
-            'global_permission' => 'media.manage',
+            'global_permission' => 'nvl.media.manage',
             'ability_permissions' => [
-                'list_all' => 'media.view-any',
-                'view' => 'media.view-any',
-                'download' => 'media.download-any',
-                'associate' => 'media.associate-any',
-                'mutate' => 'media.update-any',
-                'delete' => 'media.delete-any',
-                'reuse' => 'media.reuse-any',
-                'manage_staging' => 'media.manage-staging',
+                'list_all' => 'nvl.media.view-any',
+                'view' => 'nvl.media.view-any',
+                'download' => 'nvl.media.download-any',
+                'associate' => 'nvl.media.associate-any',
+                'mutate' => 'nvl.media.update-any',
+                'delete' => 'nvl.media.delete-any',
+                'reuse' => 'nvl.media.reuse-any',
+                'manage_staging' => 'nvl.media.manage-staging',
             ],
         ],
     ],
@@ -120,7 +121,7 @@ return [
     |   3. filesystems.default (application-level default)
     |   4. 'local' (hardcoded safety net — should never be reached)
     */
-    'disk' => env('MEDIA_FILESYSTEM_DISK', env('FILESYSTEM_DISK', 'local')),
+    'disk' => PackageEnvironment::get('NVL_MEDIA_FILESYSTEM_DISK', env('FILESYSTEM_DISK', 'local')),
 
     /*
     |--------------------------------------------------------------------------
@@ -132,7 +133,7 @@ return [
     | intentionally configured to accept public-read/private object ACLs.
     */
     's3' => [
-        'use_acl_visibility' => env('MEDIA_S3_USE_ACL_VISIBILITY', false),
+        'use_acl_visibility' => PackageEnvironment::get('NVL_MEDIA_S3_USE_ACL_VISIBILITY', false),
     ],
 
     /*
@@ -144,7 +145,7 @@ return [
     | During in-place adoption, set this to an empty string when persisted folder
     | values already contain the complete path below the disk root.
     */
-    'root_folder' => env('MEDIA_ROOT_FOLDER', 'media'),
+    'root_folder' => PackageEnvironment::get('NVL_MEDIA_ROOT_FOLDER', 'media'),
 
     'adoption' => [
         'path_sample_size' => 25,
@@ -179,13 +180,13 @@ return [
         'remote' => [
             // URL ingestion is an explicit capability. Ordinary request, local,
             // disk, and base64 uploads do not incur its DNS/cURL boundary.
-            'enabled' => env('MEDIA_REMOTE_SOURCES_ENABLED', false),
+            'enabled' => PackageEnvironment::get('NVL_MEDIA_REMOTE_SOURCES_ENABLED', false),
             'allowed_ports' => [80, 443],
-            'connect_timeout' => (int) env('MEDIA_REMOTE_CONNECT_TIMEOUT', 5),
-            'total_timeout' => (int) env('MEDIA_REMOTE_TOTAL_TIMEOUT', 30),
-            'redirects' => (int) env('MEDIA_REMOTE_REDIRECTS', 5),
-            'maximum_bytes' => (int) env('MEDIA_REMOTE_MAXIMUM_BYTES', 10 * 1024 * 1024),
-            'verify_connected_ip' => env('MEDIA_REMOTE_VERIFY_CONNECTED_IP', true),
+            'connect_timeout' => (int) PackageEnvironment::get('NVL_MEDIA_REMOTE_CONNECT_TIMEOUT', 5),
+            'total_timeout' => (int) PackageEnvironment::get('NVL_MEDIA_REMOTE_TOTAL_TIMEOUT', 30),
+            'redirects' => (int) PackageEnvironment::get('NVL_MEDIA_REMOTE_REDIRECTS', 5),
+            'maximum_bytes' => (int) PackageEnvironment::get('NVL_MEDIA_REMOTE_MAXIMUM_BYTES', 10 * 1024 * 1024),
+            'verify_connected_ip' => PackageEnvironment::get('NVL_MEDIA_REMOTE_VERIFY_CONNECTED_IP', true),
         ],
     ],
 
@@ -207,15 +208,15 @@ return [
     */
     'content_scanner' => NullMediaContentScanner::class,
     'scanner' => [
-        'required' => env('MEDIA_SCANNER_REQUIRED', false),
-        'allow_noop' => env('MEDIA_ALLOW_NOOP_SCANNER', false),
-        'untrusted_uploads' => env('MEDIA_UNTRUSTED_UPLOADS', true),
+        'required' => PackageEnvironment::get('NVL_MEDIA_SCANNER_REQUIRED', false),
+        'allow_noop' => PackageEnvironment::get('NVL_MEDIA_ALLOW_NOOP_SCANNER', false),
+        'untrusted_uploads' => PackageEnvironment::get('NVL_MEDIA_UNTRUSTED_UPLOADS', true),
     ],
 
     'multipart' => [
         // Direct uploads are opt-in. Production diagnostics require a
         // recoverable gateway, scanner attestation, and a central lock store.
-        'enabled' => env('MEDIA_MULTIPART_ENABLED', false),
+        'enabled' => PackageEnvironment::get('NVL_MEDIA_MULTIPART_ENABLED', false),
         'gateway' => S3MultipartUploadGateway::class,
         'required_scan' => true,
         'session_minutes' => 60,
@@ -224,9 +225,9 @@ return [
         'maximum_parts' => 10_000,
         'maximum_size' => 5 * 1024 * 1024 * 1024,
         'lock' => [
-            'store' => env('MEDIA_MULTIPART_LOCK_STORE'),
-            'seconds' => (int) env('MEDIA_MULTIPART_LOCK_SECONDS', 300),
-            'wait_seconds' => (int) env('MEDIA_MULTIPART_LOCK_WAIT_SECONDS', 30),
+            'store' => PackageEnvironment::get('NVL_MEDIA_MULTIPART_LOCK_STORE'),
+            'seconds' => (int) PackageEnvironment::get('NVL_MEDIA_MULTIPART_LOCK_SECONDS', 300),
+            'wait_seconds' => (int) PackageEnvironment::get('NVL_MEDIA_MULTIPART_LOCK_WAIT_SECONDS', 30),
         ],
     ],
 
@@ -242,7 +243,7 @@ return [
     ],
 
     'deployment' => [
-        'multi_node' => env('MEDIA_MULTI_NODE', false),
+        'multi_node' => PackageEnvironment::get('NVL_MEDIA_MULTI_NODE', false),
     ],
 
     /*
@@ -254,9 +255,9 @@ return [
     | must remain below retry_after (or SQS visibility timeout).
     */
     'queue' => [
-        'enabled' => env('MEDIA_QUEUE_ENABLED', true),
-        'connection' => env('MEDIA_QUEUE_CONNECTION'),
-        'name' => env('MEDIA_QUEUE'),
+        'enabled' => PackageEnvironment::get('NVL_MEDIA_QUEUE_ENABLED', true),
+        'connection' => PackageEnvironment::get('NVL_MEDIA_QUEUE_CONNECTION'),
+        'name' => PackageEnvironment::get('NVL_MEDIA_QUEUE'),
         'jobs' => [
             'generate' => [
                 'tries' => 3,
@@ -283,7 +284,7 @@ return [
     | Image Processing Driver
     |--------------------------------------------------------------------------
     */
-    'image_driver' => MediaImageDriver::resolve(env('MEDIA_IMAGE_DRIVER', 'gd')),
+    'image_driver' => MediaImageDriver::resolve(PackageEnvironment::get('NVL_MEDIA_IMAGE_DRIVER', 'gd')),
 
     /*
     |--------------------------------------------------------------------------
@@ -301,15 +302,15 @@ return [
     | cache headers, and named variation query parameters.
     */
     'assets' => [
-        'public_route_name' => 'media.assets.show',
-        'private_route_name' => 'media.private.show',
+        'public_route_name' => 'nvl.media.assets.show',
+        'private_route_name' => 'nvl.media.private.show',
         'public_route_middleware' => ['throttle:120,1'],
         'private_route_middleware' => [],
         'private_owner_fallback' => 'system',
-        'signed_url_lifetime' => (int) env('MEDIA_ASSET_SIGNED_URL_LIFETIME', 5),
+        'signed_url_lifetime' => (int) PackageEnvironment::get('NVL_MEDIA_ASSET_SIGNED_URL_LIFETIME', 5),
         'public_cache_control' => 'public, max-age=31536000, immutable',
         'private_cache_control' => 'private, max-age=0, no-store',
-        'remote_public_delivery' => env('MEDIA_REMOTE_PUBLIC_DELIVERY', 'route'),
+        'remote_public_delivery' => PackageEnvironment::get('NVL_MEDIA_REMOTE_PUBLIC_DELIVERY', 'route'),
         'allowed_parameters' => ['v'],
     ],
 
@@ -335,10 +336,10 @@ return [
     | cache store is the application database store unless overridden here.
     */
     'deduplication_lock' => [
-        'enabled' => env('MEDIA_DEDUPLICATION_LOCK_ENABLED', true),
-        'store' => env('MEDIA_DEDUPLICATION_LOCK_STORE'),
-        'seconds' => (int) env('MEDIA_DEDUPLICATION_LOCK_SECONDS', 30),
-        'wait_seconds' => (int) env('MEDIA_DEDUPLICATION_LOCK_WAIT_SECONDS', 30),
+        'enabled' => PackageEnvironment::get('NVL_MEDIA_DEDUPLICATION_LOCK_ENABLED', true),
+        'store' => PackageEnvironment::get('NVL_MEDIA_DEDUPLICATION_LOCK_STORE'),
+        'seconds' => (int) PackageEnvironment::get('NVL_MEDIA_DEDUPLICATION_LOCK_SECONDS', 30),
+        'wait_seconds' => (int) PackageEnvironment::get('NVL_MEDIA_DEDUPLICATION_LOCK_WAIT_SECONDS', 30),
     ],
 
     /*
@@ -349,10 +350,10 @@ return [
     | lock. Multi-node production installations must select a central store.
     */
     'mutation_lock' => [
-        'enabled' => env('MEDIA_MUTATION_LOCK_ENABLED', true),
-        'store' => env('MEDIA_MUTATION_LOCK_STORE'),
-        'seconds' => (int) env('MEDIA_MUTATION_LOCK_SECONDS', 300),
-        'wait_seconds' => (int) env('MEDIA_MUTATION_LOCK_WAIT_SECONDS', 30),
+        'enabled' => PackageEnvironment::get('NVL_MEDIA_MUTATION_LOCK_ENABLED', true),
+        'store' => PackageEnvironment::get('NVL_MEDIA_MUTATION_LOCK_STORE'),
+        'seconds' => (int) PackageEnvironment::get('NVL_MEDIA_MUTATION_LOCK_SECONDS', 300),
+        'wait_seconds' => (int) PackageEnvironment::get('NVL_MEDIA_MUTATION_LOCK_WAIT_SECONDS', 30),
     ],
 
     /*
@@ -454,15 +455,15 @@ return [
     'image_formats' => [
         ImageFormat::Webp->value => [
             'compression' => ImageCompression::Lossy,
-            'quality' => (int) env('MEDIA_WEBP_QUALITY', 82),
+            'quality' => (int) PackageEnvironment::get('NVL_MEDIA_WEBP_QUALITY', 82),
         ],
         ImageFormat::Avif->value => [
             'compression' => ImageCompression::Lossy,
-            'quality' => (int) env('MEDIA_AVIF_QUALITY', 60),
+            'quality' => (int) PackageEnvironment::get('NVL_MEDIA_AVIF_QUALITY', 60),
         ],
         ImageFormat::Jpeg->value => [
             'compression' => ImageCompression::Lossy,
-            'quality' => (int) env('MEDIA_JPEG_QUALITY', 85),
+            'quality' => (int) PackageEnvironment::get('NVL_MEDIA_JPEG_QUALITY', 85),
         ],
         ImageFormat::Png->value => [
             'compression' => ImageCompression::Lossless,
@@ -521,10 +522,10 @@ return [
     | via $media->getUrl('optimized').
     */
     'output_conversion' => [
-        'enabled' => env('MEDIA_OPTIMIZED_IMAGE_ENABLED', true),
+        'enabled' => PackageEnvironment::get('NVL_MEDIA_OPTIMIZED_IMAGE_ENABLED', true),
         'format' => ImageFormat::Webp,
         'compression' => ImageCompression::Lossy,
-        'max_size' => (int) env('MEDIA_IMAGE_MAX_SIZE', 1200),
+        'max_size' => (int) PackageEnvironment::get('NVL_MEDIA_IMAGE_MAX_SIZE', 1200),
         'fit' => ImageFit::Max,
         'skip_formats' => ['svg', 'gif'],
     ],

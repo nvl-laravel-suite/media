@@ -96,7 +96,7 @@ final class MediaMutationLock
      */
     public function executeMany(array $mediaIds, Closure $callback): mixed
     {
-        if (! (bool) config('media.mutation_lock.enabled', true)) {
+        if (! (bool) config('nvl-media.mutation_lock.enabled', true)) {
             return $callback();
         }
 
@@ -205,7 +205,7 @@ final class MediaMutationLock
      */
     private function lockKey(string $mediaId): string
     {
-        return 'media:mutation:'.hash('sha256', $this->tenantBoundary->key('media.assets', $mediaId));
+        return 'nvl:media:mutation:'.hash('sha256', $this->tenantBoundary->key('media.assets', $mediaId));
     }
 
     /**
@@ -213,7 +213,7 @@ final class MediaMutationLock
      */
     private function seconds(): int
     {
-        return MediaConfiguration::integer('media.mutation_lock.seconds', 300, 1);
+        return MediaConfiguration::integer('nvl-media.mutation_lock.seconds', 300, 1);
     }
 
     /**
@@ -221,7 +221,7 @@ final class MediaMutationLock
      */
     private function waitSeconds(): int
     {
-        return MediaConfiguration::integer('media.mutation_lock.wait_seconds', 30);
+        return MediaConfiguration::integer('nvl-media.mutation_lock.wait_seconds', 30);
     }
 
     /**

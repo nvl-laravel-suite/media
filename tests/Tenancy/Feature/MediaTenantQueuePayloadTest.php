@@ -3,18 +3,21 @@
 declare(strict_types=1);
 
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Queue\CallQueuedHandler;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Jobs\GenerateImageVariationJob;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Tests\Fixtures\MediaTenancyScenario;
+use Nvl\Support\Tenancy\Contracts\TenantQueueHandler;
 use Nvl\Tenancy\Contracts\TenantContext;
 use Nvl\Tenancy\Services\TenantBoundary;
 use Nvl\Tenancy\ValueObjects\TenantJobEnvelope;
 
 it('persists a scalar variation job with the producing tenant envelope', function (): void {
     $scenario = MediaTenancyScenario::install();
+    expect(app(CallQueuedHandler::class))->toBeInstanceOf(TenantQueueHandler::class);
     Schema::create('jobs', function (Blueprint $table): void {
         $table->bigIncrements('id');
         $table->string('queue')->index();
@@ -25,7 +28,7 @@ it('persists a scalar variation job with the producing tenant envelope', functio
         $table->unsignedInteger('created_at');
     });
     config()->set('queue.default', 'database');
-    config()->set('media.queue.connection', 'database');
+    config()->set('nvl-media.queue.connection', 'database');
     config()->set('queue.connections.database', [
         'driver' => 'database',
         'connection' => null,
@@ -93,7 +96,7 @@ it('regenerates only inside the requested tenant boundary', function (): void {
 
 it('enumerates all tenants only through the host worklist contract', function (): void {
     $scenario = MediaTenancyScenario::install();
-    config()->set('media.tenancy.active_tenant_worklist', [$scenario::B, $scenario::A]);
+    config()->set('nvl-media.tenancy.active_tenant_worklist', [$scenario::B, $scenario::A]);
     foreach ([$scenario::A, $scenario::B] as $tenant) {
         $scenario->run($tenant, fn (): Media => Media::factory()->create([
             ...app(TenantBoundary::class)->attributes('media.assets'),

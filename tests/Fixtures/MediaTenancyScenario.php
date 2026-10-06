@@ -29,8 +29,8 @@ final readonly class MediaTenancyScenario
     /** Adopt Media plus its canonical owner fixture. */
     public static function install(bool $catalogCopies = false): self
     {
-        expect(config('tenancy.enabled'))->toBeTrue()
-            ->and(config('tenancy.sharing.media'))->toBe($catalogCopies ? 'copy' : 'none');
+        expect(config('nvl-tenancy.enabled'))->toBeTrue()
+            ->and(config('nvl-tenancy.sharing.media'))->toBe($catalogCopies ? 'copy' : 'none');
 
         app(TenantResourceRegistry::class)->get('test.media-owners');
 

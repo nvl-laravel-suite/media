@@ -137,7 +137,7 @@ final class MediaLibraryController extends Controller
 
             if (! $this->existence->exists($media->disk, $path)) {
                 return response()->json([
-                    'message' => (string) trans('media::media/messages.error.file_not_found_on_disk'),
+                    'message' => (string) trans('nvl-media::media/messages.error.file_not_found_on_disk'),
                 ], 404);
             }
 
@@ -145,7 +145,7 @@ final class MediaLibraryController extends Controller
 
             if (! is_resource($stream)) {
                 return response()->json([
-                    'message' => (string) trans('media::media/messages.error.file_not_found_on_disk'),
+                    'message' => (string) trans('nvl-media::media/messages.error.file_not_found_on_disk'),
                 ], 404);
             }
 
@@ -158,7 +158,7 @@ final class MediaLibraryController extends Controller
         } catch (AuthorizationException $exception) {
             return response()->json([
                 'message' => $exception->getMessage()
-                    ?: (string) trans('media::media/messages.error.unauthorized'),
+                    ?: (string) trans('nvl-media::media/messages.error.unauthorized'),
             ], 403);
         } catch (Throwable $exception) {
             Log::error('Media download failed.', [
@@ -168,7 +168,7 @@ final class MediaLibraryController extends Controller
             ]);
 
             return response()->json([
-                'message' => (string) trans('media::media/messages.error.unexpected'),
+                'message' => (string) trans('nvl-media::media/messages.error.unexpected'),
             ], 500);
         }
     }

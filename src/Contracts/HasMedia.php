@@ -14,8 +14,8 @@ use Nvl\Media\MediaAdder;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Slots\MediaSlot;
 
-/** HasMedia: contract for models that own and manage media attachments and conversions. */
-interface HasMedia
+/** @deprecated Use HasNvlMedia and the owner-scoped API; this surface is retained through major 5. */
+interface HasMedia extends HasNvlMedia
 {
     /**
      * @return MorphToMany<Media, covariant Model>

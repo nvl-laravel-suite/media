@@ -14,8 +14,8 @@ use Nvl\Media\Services\MediaSourceResolver;
 use Nvl\Media\Services\MediaTemporaryFileRegistry;
 
 beforeEach(function () {
-    config(['media.sources.remote.enabled' => true]);
-    config(['media.sources.remote.verify_connected_ip' => false]);
+    config(['nvl-media.sources.remote.enabled' => true]);
+    config(['nvl-media.sources.remote.verify_connected_ip' => false]);
     $this->resolver = app(MediaSourceResolver::class);
 });
 
@@ -40,7 +40,7 @@ describe('fromBase64', function () {
     });
 
     it('preflights decoded base64 size before creating a temporary file', function () {
-        config(['media.max_file_size' => 4]);
+        config(['nvl-media.max_file_size' => 4]);
         $registry = app(MediaTemporaryFileRegistry::class);
 
         expect(fn () => $this->resolver->fromBase64(base64_encode('12345')))
@@ -114,7 +114,7 @@ describe('fromDisk', function () {
     it('streams disk imports through the configured byte bound and releases failures', function () {
         Storage::fake('local');
         Storage::disk('local')->put('too-large.txt', '12345');
-        config(['media.max_file_size' => 4]);
+        config(['nvl-media.max_file_size' => 4]);
 
         expect(fn () => $this->resolver->fromDisk('too-large.txt', 'local'))
             ->toThrow(MediaUploadException::class, 'exceeds the maximum allowed size');
@@ -218,7 +218,7 @@ describe('fromUrl SSRF validation', function () {
     });
 
     it('fails closed when the transport cannot attest its connected IP', function () {
-        config(['media.sources.remote.verify_connected_ip' => true]);
+        config(['nvl-media.sources.remote.verify_connected_ip' => true]);
         Http::fake([
             'https://93.184.216.34/photo.jpg' => Http::response('fake-image-content', 200),
         ]);
@@ -266,7 +266,7 @@ describe('fromUrl SSRF validation', function () {
     });
 
     it('rejects oversized downloads declared by content length', function () {
-        config(['media.max_file_size' => 4]);
+        config(['nvl-media.max_file_size' => 4]);
 
         Http::fake([
             'https://93.184.216.34/too-large.jpg' => Http::response('body', 200, [
@@ -279,7 +279,7 @@ describe('fromUrl SSRF validation', function () {
     });
 
     it('rejects streamed bodies that exceed the max file size', function () {
-        config(['media.max_file_size' => 4]);
+        config(['nvl-media.max_file_size' => 4]);
 
         Http::fake([
             'https://93.184.216.34/stream-too-large.jpg' => Http::response('12345', 200),

@@ -67,7 +67,7 @@ describe('New index filters', function () {
         explorerMedia(['folder' => 'photos', 'is_public' => true]);
         explorerMedia(['folder' => 'documents', 'is_public' => true]);
 
-        $response = $this->actingAs($user)->getJson('/api/v1/media?folder=photos');
+        $response = $this->actingAs($user)->getJson('/nvl/api/v1/media?folder=photos');
 
         $response->assertStatus(200);
         $items = extractMediaItems($response);
@@ -86,7 +86,7 @@ describe('New index filters', function () {
             'is_public' => true,
         ]);
 
-        $response = $this->actingAs($user)->getJson('/api/v1/media?mimeType=application/pdf');
+        $response = $this->actingAs($user)->getJson('/nvl/api/v1/media?mimeType=application/pdf');
 
         $response->assertStatus(200);
         $items = extractMediaItems($response);
@@ -105,7 +105,7 @@ describe('New index filters', function () {
             'is_public' => true,
         ]);
 
-        $response = $this->actingAs($user)->getJson('/api/v1/media?extension=pdf');
+        $response = $this->actingAs($user)->getJson('/nvl/api/v1/media?extension=pdf');
 
         $response->assertStatus(200);
         $items = extractMediaItems($response);
@@ -124,7 +124,7 @@ describe('New index filters', function () {
             'title' => 'English title',
         ]);
 
-        $response = $this->actingAs($user)->getJson('/api/v1/media?locale=en');
+        $response = $this->actingAs($user)->getJson('/nvl/api/v1/media?locale=en');
 
         $response->assertStatus(200);
 
@@ -148,7 +148,7 @@ describe('New index filters', function () {
             'order' => 0,
         ]);
 
-        $response = $this->actingAs($user)->getJson('/api/v1/media?associableType='.urlencode(TestMediaUser::class));
+        $response = $this->actingAs($user)->getJson('/nvl/api/v1/media?associableType='.urlencode(TestMediaUser::class));
 
         $response->assertStatus(200);
         $items = extractMediaItems($response);
@@ -180,7 +180,7 @@ describe('New index filters', function () {
         ]);
 
         $response = $this->actingAs($user)->getJson(
-            '/api/v1/media?associableType='.urlencode(TestMediaUser::class).'&collection=avatar'
+            '/nvl/api/v1/media?associableType='.urlencode(TestMediaUser::class).'&collection=avatar'
         );
 
         $response->assertStatus(200);
@@ -195,13 +195,13 @@ describe('New index filters', function () {
  * Rename
  * ================================================================= */
 
-describe('PATCH /api/v1/media/{id}/rename', function () {
+describe('PATCH /nvl/api/v1/media/{id}/rename', function () {
 
     it('renames media successfully', function () {
         $user = explorerUser();
         $media = explorerMedia(['uploaded_by' => $user->id]);
 
-        $response = $this->actingAs($user)->patchJson("/api/v1/media/{$media->id}/rename", [
+        $response = $this->actingAs($user)->patchJson("/nvl/api/v1/media/{$media->id}/rename", [
             'filename' => 'new-name.jpg',
         ]);
 
@@ -213,7 +213,7 @@ describe('PATCH /api/v1/media/{id}/rename', function () {
         $user = explorerUser();
         $media = explorerMedia(['uploaded_by' => $user->id]);
 
-        $response = $this->actingAs($user)->patchJson("/api/v1/media/{$media->id}/rename", []);
+        $response = $this->actingAs($user)->patchJson("/nvl/api/v1/media/{$media->id}/rename", []);
 
         $response->assertStatus(422);
     });
@@ -223,7 +223,7 @@ describe('PATCH /api/v1/media/{id}/rename', function () {
         $other = explorerUser();
         $media = explorerMedia(['uploaded_by' => $owner->id]);
 
-        $response = $this->actingAs($other)->patchJson("/api/v1/media/{$media->id}/rename", [
+        $response = $this->actingAs($other)->patchJson("/nvl/api/v1/media/{$media->id}/rename", [
             'filename' => 'hacked.jpg',
         ]);
 
@@ -231,7 +231,7 @@ describe('PATCH /api/v1/media/{id}/rename', function () {
     });
 
     it('requires authentication', function () {
-        $this->patchJson('/api/v1/media/00000000-0000-0000-0000-000000000000/rename')
+        $this->patchJson('/nvl/api/v1/media/00000000-0000-0000-0000-000000000000/rename')
             ->assertStatus(401);
     });
 });
@@ -240,7 +240,7 @@ describe('PATCH /api/v1/media/{id}/rename', function () {
  * Usages
  * ================================================================= */
 
-describe('GET /api/v1/media/{id}/usages', function () {
+describe('GET /nvl/api/v1/media/{id}/usages', function () {
 
     it('returns association details', function () {
         $user = explorerUser();
@@ -254,7 +254,7 @@ describe('GET /api/v1/media/{id}/usages', function () {
             'order' => 0,
         ]);
 
-        $response = $this->actingAs($user)->getJson("/api/v1/media/{$media->id}/usages");
+        $response = $this->actingAs($user)->getJson("/nvl/api/v1/media/{$media->id}/usages");
 
         $response->assertStatus(200);
 
@@ -270,14 +270,14 @@ describe('GET /api/v1/media/{id}/usages', function () {
         $user = explorerUser();
         $media = explorerMedia(['is_public' => true]);
 
-        $response = $this->actingAs($user)->getJson("/api/v1/media/{$media->id}/usages");
+        $response = $this->actingAs($user)->getJson("/nvl/api/v1/media/{$media->id}/usages");
 
         $response->assertStatus(200);
         expect($response->json('data'))->toBeEmpty();
     });
 
     it('requires authentication', function () {
-        $this->getJson('/api/v1/media/00000000-0000-0000-0000-000000000000/usages')
+        $this->getJson('/nvl/api/v1/media/00000000-0000-0000-0000-000000000000/usages')
             ->assertStatus(401);
     });
 });
@@ -286,7 +286,7 @@ describe('GET /api/v1/media/{id}/usages', function () {
  * Download
  * ================================================================= */
 
-describe('GET /api/v1/media/{id}/download', function () {
+describe('GET /nvl/api/v1/media/{id}/download', function () {
 
     it('streams file with correct headers', function () {
         Storage::fake('public');
@@ -296,7 +296,7 @@ describe('GET /api/v1/media/{id}/download', function () {
 
         Storage::disk('public')->put($media->buildPath(), 'file-content');
 
-        $response = $this->actingAs($user)->get("/api/v1/media/{$media->id}/download");
+        $response = $this->actingAs($user)->get("/nvl/api/v1/media/{$media->id}/download");
 
         $response->assertStatus(200);
         $response->assertHeader('Content-Type', 'image/jpeg');
@@ -309,13 +309,13 @@ describe('GET /api/v1/media/{id}/download', function () {
         $media = explorerMedia(['is_public' => true]);
         // Don't put any file on disk
 
-        $response = $this->actingAs($user)->getJson("/api/v1/media/{$media->id}/download");
+        $response = $this->actingAs($user)->getJson("/nvl/api/v1/media/{$media->id}/download");
 
         $response->assertStatus(404);
     });
 
     it('requires authentication', function () {
-        $this->getJson('/api/v1/media/00000000-0000-0000-0000-000000000000/download')
+        $this->getJson('/nvl/api/v1/media/00000000-0000-0000-0000-000000000000/download')
             ->assertStatus(401);
     });
 });
@@ -324,17 +324,17 @@ describe('GET /api/v1/media/{id}/download', function () {
  * Replace
  * ================================================================= */
 
-describe('POST /api/v1/media/{id}/replace', function () {
+describe('POST /nvl/api/v1/media/{id}/replace', function () {
 
     beforeEach(function () {
         Storage::fake('public');
 
         config([
             'filesystems.default' => 'public',
-            'media.delete_files_on_media_delete' => true,
-            'media.clean_empty_directories' => false,
-            'media.cache_file_existence' => false,
-            'media.group_types' => [
+            'nvl-media.delete_files_on_media_delete' => true,
+            'nvl-media.clean_empty_directories' => false,
+            'nvl-media.cache_file_existence' => false,
+            'nvl-media.group_types' => [
                 'image' => ['jpg', 'jpeg', 'png', 'gif', 'webp'],
                 'document' => ['pdf', 'doc', 'docx'],
             ],
@@ -351,7 +351,7 @@ describe('POST /api/v1/media/{id}/replace', function () {
 
         $new_file = UploadedFile::fake()->image('replacement.png', 200, 200);
 
-        $response = $this->actingAs($user)->postJson("/api/v1/media/{$media->id}/replace", [
+        $response = $this->actingAs($user)->postJson("/nvl/api/v1/media/{$media->id}/replace", [
             'file' => $new_file,
         ]);
 
@@ -367,7 +367,7 @@ describe('POST /api/v1/media/{id}/replace', function () {
         $user = explorerUser();
         $media = explorerMedia(['uploaded_by' => $user->id]);
 
-        $response = $this->actingAs($user)->postJson("/api/v1/media/{$media->id}/replace", []);
+        $response = $this->actingAs($user)->postJson("/nvl/api/v1/media/{$media->id}/replace", []);
 
         $response->assertStatus(422);
     });
@@ -379,7 +379,7 @@ describe('POST /api/v1/media/{id}/replace', function () {
 
         $file = UploadedFile::fake()->image('hack.png', 100, 100);
 
-        $response = $this->actingAs($other)->postJson("/api/v1/media/{$media->id}/replace", [
+        $response = $this->actingAs($other)->postJson("/nvl/api/v1/media/{$media->id}/replace", [
             'file' => $file,
         ]);
 
@@ -387,7 +387,7 @@ describe('POST /api/v1/media/{id}/replace', function () {
     });
 
     it('requires authentication', function () {
-        $this->postJson('/api/v1/media/00000000-0000-0000-0000-000000000000/replace')
+        $this->postJson('/nvl/api/v1/media/00000000-0000-0000-0000-000000000000/replace')
             ->assertStatus(401);
     });
 });
@@ -396,14 +396,14 @@ describe('POST /api/v1/media/{id}/replace', function () {
  * Bulk Operations
  * ================================================================= */
 
-describe('POST /api/v1/media/bulk', function () {
+describe('POST /nvl/api/v1/media/bulk', function () {
 
     beforeEach(function () {
         Storage::fake('public');
         config([
-            'media.delete_files_on_media_delete' => true,
-            'media.clean_empty_directories' => false,
-            'media.cache_file_existence' => false,
+            'nvl-media.delete_files_on_media_delete' => true,
+            'nvl-media.clean_empty_directories' => false,
+            'nvl-media.cache_file_existence' => false,
         ]);
     });
 
@@ -412,7 +412,7 @@ describe('POST /api/v1/media/bulk', function () {
         $m1 = explorerMedia(['uploaded_by' => $user->id]);
         $m2 = explorerMedia(['uploaded_by' => $user->id]);
 
-        $response = $this->actingAs($user)->postJson('/api/v1/media/bulk', [
+        $response = $this->actingAs($user)->postJson('/nvl/api/v1/media/bulk', [
             'action' => 'delete',
             'ids' => [$m1->id, $m2->id],
         ]);
@@ -428,7 +428,7 @@ describe('POST /api/v1/media/bulk', function () {
         $m1 = explorerMedia(['uploaded_by' => $user->id, 'tags' => ['existing']]);
         $m2 = explorerMedia(['uploaded_by' => $user->id, 'tags' => []]);
 
-        $response = $this->actingAs($user)->postJson('/api/v1/media/bulk', [
+        $response = $this->actingAs($user)->postJson('/nvl/api/v1/media/bulk', [
             'action' => 'tag',
             'ids' => [$m1->id, $m2->id],
             'tags' => ['new-tag', 'another'],
@@ -455,7 +455,7 @@ describe('POST /api/v1/media/bulk', function () {
         Storage::disk('public')->put($m1->buildPath(), 'content1');
         Storage::disk('public')->put($m2->buildPath(), 'content2');
 
-        $response = $this->actingAs($user)->postJson('/api/v1/media/bulk', [
+        $response = $this->actingAs($user)->postJson('/nvl/api/v1/media/bulk', [
             'action' => 'move',
             'ids' => [$m1->id, $m2->id],
             'folder' => 'new-folder',
@@ -471,7 +471,7 @@ describe('POST /api/v1/media/bulk', function () {
     it('validates action field', function () {
         $user = explorerUser();
 
-        $response = $this->actingAs($user)->postJson('/api/v1/media/bulk', [
+        $response = $this->actingAs($user)->postJson('/nvl/api/v1/media/bulk', [
             'action' => 'invalid',
             'ids' => ['00000000-0000-0000-0000-000000000000'],
         ]);
@@ -482,7 +482,7 @@ describe('POST /api/v1/media/bulk', function () {
     it('validates ids are required', function () {
         $user = explorerUser();
 
-        $response = $this->actingAs($user)->postJson('/api/v1/media/bulk', [
+        $response = $this->actingAs($user)->postJson('/nvl/api/v1/media/bulk', [
             'action' => 'delete',
         ]);
 
@@ -490,7 +490,7 @@ describe('POST /api/v1/media/bulk', function () {
     });
 
     it('requires authentication', function () {
-        $this->postJson('/api/v1/media/bulk')->assertStatus(401);
+        $this->postJson('/nvl/api/v1/media/bulk')->assertStatus(401);
     });
 });
 
@@ -516,7 +516,7 @@ describe('Show response includes usages and file_exists', function () {
             'order' => 0,
         ]);
 
-        $response = $this->actingAs($user)->getJson("/api/v1/media/{$media->id}");
+        $response = $this->actingAs($user)->getJson("/nvl/api/v1/media/{$media->id}");
 
         $response->assertStatus(200);
 
@@ -536,9 +536,9 @@ describe('Show response includes usages and file_exists', function () {
         Storage::disk('public')->put($media->buildPath(), 'content');
 
         // Disable caching for test
-        config(['media.cache_file_existence' => false]);
+        config(['nvl-media.cache_file_existence' => false]);
 
-        $response = $this->actingAs($user)->getJson("/api/v1/media/{$media->id}");
+        $response = $this->actingAs($user)->getJson("/nvl/api/v1/media/{$media->id}");
 
         $response->assertStatus(200);
         expect($response->json('data.fileExists'))->toBeTrue();
@@ -551,9 +551,9 @@ describe('Show response includes usages and file_exists', function () {
         $media = explorerMedia(['is_public' => true]);
         // Don't put file on disk
 
-        config(['media.cache_file_existence' => false]);
+        config(['nvl-media.cache_file_existence' => false]);
 
-        $response = $this->actingAs($user)->getJson("/api/v1/media/{$media->id}");
+        $response = $this->actingAs($user)->getJson("/nvl/api/v1/media/{$media->id}");
 
         $response->assertStatus(200);
         expect($response->json('data.fileExists'))->toBeFalse();

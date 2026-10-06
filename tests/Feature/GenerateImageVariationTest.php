@@ -55,7 +55,7 @@ describe('GenerateImageVariationAction', function () {
 
         config([
             'filesystems.default' => 'public',
-            'media.conversions_folder' => 'conversions',
+            'nvl-media.conversions_folder' => 'conversions',
         ]);
     });
 

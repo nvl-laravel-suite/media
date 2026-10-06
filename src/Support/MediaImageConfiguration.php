@@ -22,7 +22,7 @@ final class MediaImageConfiguration
      */
     public static function presets(?array $names = null, bool $enabledOnly = true): array
     {
-        $configuredPresets = config('media.image_variation_presets', []);
+        $configuredPresets = config('nvl-media.image_variation_presets', []);
 
         if (! is_array($configuredPresets)) {
             return [];
@@ -53,7 +53,7 @@ final class MediaImageConfiguration
      */
     public static function outputConversion(string $sourceExtension): ?array
     {
-        $configured = config('media.output_conversion', []);
+        $configured = config('nvl-media.output_conversion', []);
 
         if (! is_array($configured) || ! (bool) ($configured['enabled'] ?? false)) {
             return null;
@@ -114,7 +114,7 @@ final class MediaImageConfiguration
      */
     private static function formatProfile(ImageFormat $format): array
     {
-        $profiles = config('media.image_formats', []);
+        $profiles = config('nvl-media.image_formats', []);
 
         if (! is_array($profiles)) {
             return [];

@@ -158,7 +158,7 @@ final readonly class CompleteMultipartUploadAction
             ]);
             if (! $media->exists) {
                 $media->forceFill([
-                    ...(config('tenancy.enabled') === true ? [
+                    ...(config('nvl-tenancy.enabled') === true ? [
                         'tenant_id' => $locked->tenant_id,
                         'ownership_key' => $locked->ownership_key,
                         'storage_path' => $locked->object_key,
@@ -331,7 +331,7 @@ final readonly class CompleteMultipartUploadAction
 
     private function assertEnabled(): void
     {
-        if (! (bool) config('media.multipart.enabled', false)) {
+        if (! (bool) config('nvl-media.multipart.enabled', false)) {
             throw new MediaUploadException('Multipart uploads are disabled.');
         }
     }

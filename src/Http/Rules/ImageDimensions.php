@@ -20,7 +20,7 @@ class ImageDimensions implements ValidationRule
      */
     public function __construct(?int $maxWidth = null, ?int $maxHeight = null)
     {
-        $constraints = config('media.image_constraints', []);
+        $constraints = config('nvl-media.image_constraints', []);
         $configuredWidth = is_array($constraints) ? ($constraints['max_width'] ?? null) : null;
         $configuredHeight = is_array($constraints) ? ($constraints['max_height'] ?? null) : null;
         $this->maxWidth = $maxWidth
@@ -48,7 +48,7 @@ class ImageDimensions implements ValidationRule
         [$width, $height] = $dimensions;
 
         if ($width > $this->maxWidth) {
-            $fail((string) trans('media::media/validation.rules.image_width_exceeds', [
+            $fail((string) trans('nvl-media::media/validation.rules.image_width_exceeds', [
                 'attribute' => $attribute,
                 'width' => $width,
                 'max_width' => $this->maxWidth,
@@ -56,7 +56,7 @@ class ImageDimensions implements ValidationRule
         }
 
         if ($height > $this->maxHeight) {
-            $fail((string) trans('media::media/validation.rules.image_height_exceeds', [
+            $fail((string) trans('nvl-media::media/validation.rules.image_height_exceeds', [
                 'attribute' => $attribute,
                 'height' => $height,
                 'max_height' => $this->maxHeight,

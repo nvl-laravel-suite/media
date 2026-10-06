@@ -135,7 +135,7 @@ final class MediaQueryService
         $perPage = $filters->perPage instanceof Optional ? 25 : ($filters->perPage ?? 25);
         $perPage = min(
             max(1, $perPage),
-            MediaConfiguration::integer('media.query.maximum_page_size', 100, 1),
+            MediaConfiguration::integer('nvl-media.query.maximum_page_size', 100, 1),
         );
         $page = $filters->page instanceof Optional ? 1 : ($filters->page ?? 1);
 

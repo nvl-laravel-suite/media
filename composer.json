@@ -26,9 +26,9 @@
         "league/flysystem": "^3.25",
         "league/flysystem-aws-s3-v3": "^3.0",
         "nesbot/carbon": "^2.72 || ^3.0",
-        "nvl/core": "^2.0",
-        "nvl/filterable": "^2.0",
-        "nvl/translatable": "^2.0",
+        "nvl/core": "^5.0",
+        "nvl/filterable": "^5.0",
+        "nvl/translatable": "^5.0",
         "spatie/image": "^3.0",
         "spatie/laravel-data": "^4.23",
         "spatie/typescript-transformer": "^3.3",
@@ -41,7 +41,7 @@
         "larastan/larastan": "^3.10",
         "laravel/pint": "^1.27",
         "mockery/mockery": "^1.6",
-        "nvl/tenancy": "^2.0",
+        "nvl/tenancy": "^5.0",
         "orchestra/testbench": "^11.0",
         "pestphp/pest": "^4.0",
         "pestphp/pest-plugin-laravel": "^4.0",
@@ -57,7 +57,10 @@
     "autoload-dev": {
         "psr-4": {
             "Nvl\\Media\\Tests\\": "tests/"
-        }
+        },
+        "exclude-from-classmap": [
+            "tests/Feature/NvlMediaCapabilityTest.php"
+        ]
     },
     "scripts": {
         "analyse": "phpstan analyse --memory-limit=2G",
@@ -78,7 +81,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "2.x-dev"
+            "dev-main": "5.x-dev"
         },
         "laravel": {
             "providers": [
@@ -103,12 +106,17 @@
             "/.phpunit.result.cache",
             "/phpstan.neon.dist",
             "/phpunit.xml.dist",
-            "/tests"
+            "/tests",
+            "/.DS_Store",
+            "/**/.DS_Store"
         ]
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
     "suggest": {
         "nvl/tenancy": "Enables enforcing tenant ownership, scoped execution, adoption, and captured tenant queue contexts."
+    },
+    "conflict": {
+        "nvl/tenancy": "<5.0 || >=6.0"
     }
 }

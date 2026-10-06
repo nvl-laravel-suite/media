@@ -9,7 +9,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
-use Nvl\Media\Contracts\HasMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\MediaLibraryContract;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Data\Display\MediaUsage;
@@ -49,25 +49,25 @@ final readonly class MediaLibrary implements MediaLibraryContract
     ) {}
 
     public function add(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         UploadedFile|string $file,
         ?string $slot = null,
     ): MediaAdder {
         return $this->interactions->addMedia($owner, $file, $slot);
     }
 
-    public function copy(Model&HasMedia $owner, UploadedFile|string $file): MediaAdder
+    public function copy(Model&HasNvlMedia $owner, UploadedFile|string $file): MediaAdder
     {
         return $this->interactions->copyMedia($owner, $file);
     }
 
-    public function fromRequest(Model&HasMedia $owner, string $key): MediaAdder
+    public function fromRequest(Model&HasNvlMedia $owner, string $key): MediaAdder
     {
         return $this->interactions->addMediaFromRequest($owner, $key);
     }
 
     public function fromUrl(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $url,
         string ...$allowedMimeTypes,
     ): MediaAdder {
@@ -75,7 +75,7 @@ final readonly class MediaLibrary implements MediaLibraryContract
     }
 
     public function fromBase64(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $payload,
         string ...$allowedMimeTypes,
     ): MediaAdder {
@@ -86,7 +86,7 @@ final readonly class MediaLibrary implements MediaLibraryContract
         );
     }
 
-    public function fromString(Model&HasMedia $owner, string $contents): MediaAdder
+    public function fromString(Model&HasNvlMedia $owner, string $contents): MediaAdder
     {
         return $this->interactions->addMediaFromString($owner, $contents);
     }
@@ -95,7 +95,7 @@ final readonly class MediaLibrary implements MediaLibraryContract
      * Create an upload builder from generated binary content.
      */
     public function fromBinary(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $contents,
         string $filename,
         string ...$allowedMimeTypes,
@@ -109,7 +109,7 @@ final readonly class MediaLibrary implements MediaLibraryContract
     }
 
     public function fromDisk(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $key,
         ?string $disk = null,
     ): MediaAdder {
@@ -158,7 +158,7 @@ final readonly class MediaLibrary implements MediaLibraryContract
      */
     public function attach(
         Media $media,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $collection = 'default',
         ?string $locale = null,
         ?int $order = null,
@@ -181,7 +181,7 @@ final readonly class MediaLibrary implements MediaLibraryContract
      */
     public function reuse(
         Media|string $media,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $collection = 'default',
         ?string $locale = null,
         ?int $order = null,
@@ -201,7 +201,7 @@ final readonly class MediaLibrary implements MediaLibraryContract
 
     public function detach(
         Media|string $media,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         ?string $collection = null,
     ): int {
         return $this->interactions->detachMedia($media, $owner, $collection);

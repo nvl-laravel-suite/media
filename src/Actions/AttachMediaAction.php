@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Nvl\Media\Contracts\AttachMediaContract;
-use Nvl\Media\Contracts\HasMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Events\MediaAttached;
 use Nvl\Media\Exceptions\MediaNotReusableException;
 use Nvl\Media\Exceptions\MediaUploadException;
@@ -85,7 +85,7 @@ final class AttachMediaAction implements AttachMediaContract
                     'order' => $order ?? 0,
                     'metadata' => ! empty($metadata) ? $metadata : null,
                 ]);
-                if (config('tenancy.enabled') === true) {
+                if (config('nvl-tenancy.enabled') === true) {
                     $ownership = ['tenant_id' => $media->tenant_id];
                     if (array_key_exists('ownership_key', $media->getAttributes())) {
                         $ownership['ownership_key'] = $media->ownership_key;
@@ -99,7 +99,7 @@ final class AttachMediaAction implements AttachMediaContract
         });
 
         // Generate any model/collection conversions that don't already exist for this media.
-        if ($dispatchVariations && $model instanceof HasMedia) {
+        if ($dispatchVariations && $model instanceof HasNvlMedia) {
             $slotName = data_get($metadata, 'slot');
             $resolvedSlotName = is_string($slotName) && $slotName !== ''
                 ? $slotName

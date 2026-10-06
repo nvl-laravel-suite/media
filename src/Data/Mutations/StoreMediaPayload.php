@@ -48,7 +48,7 @@ class StoreMediaPayload extends Data
                 'required',
                 'array',
                 'min:1',
-                'max:'.MediaConfiguration::integer('media.max_files_per_upload', 10, 1),
+                'max:'.MediaConfiguration::integer('nvl-media.max_files_per_upload', 10, 1),
             ],
             'files.*' => ['required', 'file', new MaxFileSize, new AllowedMimeTypes],
             'collection' => ['nullable', 'string', 'max:50'],
@@ -64,7 +64,7 @@ class StoreMediaPayload extends Data
      */
     public static function messages(): array
     {
-        return self::translatedMessages('media::media');
+        return self::translatedMessages('nvl-media::media');
     }
 
     /**
@@ -72,6 +72,6 @@ class StoreMediaPayload extends Data
      */
     public static function attributes(): array
     {
-        return self::translatedAttributes('media::media');
+        return self::translatedAttributes('nvl-media::media');
     }
 }

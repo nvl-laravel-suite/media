@@ -22,7 +22,7 @@ final class MediaDiskResolver
             return $disk;
         }
 
-        $mediaDefault = config('media.disk');
+        $mediaDefault = config('nvl-media.disk');
         if (is_string($mediaDefault) && trim($mediaDefault) !== '') {
             return $mediaDefault;
         }

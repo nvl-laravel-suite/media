@@ -70,6 +70,7 @@ use Nvl\Media\Services\MediaMultipartSessionMapper;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaMutationService;
 use Nvl\Media\Services\MediaOwnedSourceLifecycle;
+use Nvl\Media\Services\MediaOwnerFactory;
 use Nvl\Media\Services\MediaOwnerSlotIdempotency;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\MediaPrivilegedAccess;
@@ -92,10 +93,12 @@ use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Tenancy\MediaAdoptionAdapter;
 use Nvl\Media\Tenancy\MediaTenancyResources;
 use Nvl\Support\Doctor\PackageDoctorContributor;
+use Nvl\Support\Globals\GlobalNames;
 use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Support\Traits\MergesPackageConfiguration;
+use Nvl\Support\Traits\RegistersNamespacedResources;
 use Nvl\Tenancy\Services\TenantAdoptionRegistry;
 use Nvl\Translatable\Services\TranslationResourceRegistry;
 
@@ -103,6 +106,7 @@ use Nvl\Translatable\Services\TranslationResourceRegistry;
 final class MediaServiceProvider extends ServiceProvider
 {
     use MergesPackageConfiguration;
+    use RegistersNamespacedResources;
 
     private const string OWNER_SLOT_COPY_METADATA_KEYS = 'media.owner_slots.copy.metadata_keys';
 
@@ -135,7 +139,7 @@ final class MediaServiceProvider extends ServiceProvider
         $this->publishesMigrations([
             __DIR__.'/../../database/migrations' => database_path('migrations'),
         ], 'media-migrations');
-        if ((bool) config('media.migrations.enabled', true)) {
+        if ((bool) config('nvl-media.migrations.enabled', true)) {
             $this->loadMigrationsFrom(__DIR__.'/../../database/migrations');
         }
         $translationResources->register(
@@ -175,6 +179,10 @@ final class MediaServiceProvider extends ServiceProvider
         $this->mergeConfiguration();
         $this->app->register(RouteServiceProvider::class);
         $this->app->singleton(MediaTransactionRollbackRegistry::class);
+        $this->app->bind(MediaOwnerFactory::class, fn (): MediaOwnerFactory => new MediaOwnerFactory(
+            fn (): MediaModelInteractionService => $this->app->make(MediaModelInteractionService::class),
+            fn (): MediaLifecycleService => $this->app->make(MediaLifecycleService::class),
+        ));
         $this->registerScopedServices();
     }
 
@@ -192,7 +200,7 @@ final class MediaServiceProvider extends ServiceProvider
             self::OWNER_SLOT_COPY_METADATA_KEYS,
         );
 
-        $this->mergePackageConfiguration(__DIR__.'/../../config/media.php', 'media');
+        $this->mergePackageConfiguration(__DIR__.'/../../config/nvl-media.php', 'media');
 
         if ($hasConsumerMetadataKeys) {
             $configuration->set(
@@ -271,7 +279,7 @@ final class MediaServiceProvider extends ServiceProvider
         $this->app->bind(
             MediaContentScanner::class,
             MediaConfiguration::string(
-                'media.content_scanner',
+                'nvl-media.content_scanner',
                 NullMediaContentScanner::class,
             ),
         );
@@ -282,13 +290,13 @@ final class MediaServiceProvider extends ServiceProvider
         $this->app->bind(
             MediaSearchDriver::class,
             MediaConfiguration::string(
-                'media.query.search_driver',
+                'nvl-media.query.search_driver',
                 PortableMediaSearchDriver::class,
             ),
         );
-        $multipartGateway = (bool) config('media.multipart.enabled', false)
+        $multipartGateway = (bool) config('nvl-media.multipart.enabled', false)
             ? MediaConfiguration::string(
-                'media.multipart.gateway',
+                'nvl-media.multipart.gateway',
                 UnsupportedMultipartUploadGateway::class,
             )
             : UnsupportedMultipartUploadGateway::class;
@@ -304,7 +312,7 @@ final class MediaServiceProvider extends ServiceProvider
     protected function registerConfig(): void
     {
         $config = [
-            __DIR__.'/../../config/media.php' => config_path('media.php'),
+            __DIR__.'/../../config/nvl-media.php' => config_path('nvl-media.php'),
         ];
 
         $this->publishes($config, 'media-config');
@@ -320,11 +328,10 @@ final class MediaServiceProvider extends ServiceProvider
     {
         $langPath = __DIR__.'/../../lang';
 
-        $this->loadTranslationsFrom($langPath, 'media');
-        $this->loadJsonTranslationsFrom($langPath);
+        $this->app->make(GlobalNames::class)->translations('media', $langPath, $this->app->make('translation.loader'));
 
         $this->publishes([
-            $langPath => lang_path('vendor/media'),
+            $langPath => lang_path('vendor/nvl-media'),
         ], 'media-translations');
     }
 

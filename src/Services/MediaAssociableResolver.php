@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
-use Nvl\Media\Contracts\HasMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Support\OwnerRegistry;
 
 /** MediaAssociableResolver validates and loads Media-capable associable models for API mutations. */
@@ -27,7 +27,7 @@ final class MediaAssociableResolver
      * @throws AuthorizationException
      * @throws ValidationException
      */
-    public function resolveForMutation(string $type, string $id): Model&HasMedia
+    public function resolveForMutation(string $type, string $id): Model&HasNvlMedia
     {
         $modelClass = $this->resolveModelClass($type);
         $model = $modelClass::findOrFail($id);
@@ -68,7 +68,7 @@ final class MediaAssociableResolver
             ]);
         }
 
-        $allowed = config('media.allowed_associable_types', []);
+        $allowed = config('nvl-media.allowed_associable_types', []);
 
         $allowedModels = [];
 
@@ -95,31 +95,47 @@ final class MediaAssociableResolver
      *
      * @throws ValidationException
      */
-    private function requireMediaAssociable(Model $model): Model&HasMedia
+    private function requireMediaAssociable(Model $model): Model&HasNvlMedia
     {
-        if ($model instanceof HasMedia) {
+        if ($model instanceof HasNvlMedia) {
             return $model;
         }
 
         throw ValidationException::withMessages([
-            'associableType' => [(string) trans('media::media/messages.error.associable_type_must_support_media')],
+            'associableType' => [(string) trans('nvl-media::media/messages.error.associable_type_must_support_media')],
         ]);
     }
 
     /**
      * Authorize mutation access for the resolved associable model.
      *
-     * @param  Model&HasMedia  $model
+     * @param  Model&HasNvlMedia  $model
      *
      * @throws AuthorizationException
      */
     private function authorizeMutation(Model $model): void
     {
-        $abilities = config('media.associable_mutation_abilities', []);
-        $alias = array_search($model::class, $this->identities->all(), true);
-        $ability = is_array($abilities)
-            ? ($abilities[is_string($alias) ? $alias : $model::class] ?? $abilities[$model::class] ?? 'update')
-            : 'update';
+        $abilities = config('nvl-media.associable_mutation_abilities', []);
+        $ability = null;
+        if (is_array($abilities)) {
+            $ability = $abilities[$model::class] ?? null;
+            if ($ability === null) {
+                foreach ($abilities as $reference => $configuredAbility) {
+                    if (! is_string($reference)) {
+                        continue;
+                    }
+                    try {
+                        $modelClass = $this->identities->model($reference);
+                    } catch (InvalidArgumentException) {
+                        continue;
+                    }
+                    if ($modelClass === $model::class) {
+                        $ability = $configuredAbility;
+                        break;
+                    }
+                }
+            }
+        }
 
         Gate::authorize(is_string($ability) && $ability !== '' ? $ability : 'update', $model);
     }

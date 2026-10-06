@@ -44,7 +44,8 @@ Use `bind()` for stateless implementations and `scoped()` when one instance shou
 
 | Contract | Default | Purpose |
 | --- | --- | --- |
-| `HasMedia` | Implemented by consumer models | Model capability consumed by `InteractsWithMedia` |
+| `HasNvlMedia` | Implemented by consumer models | Namespaced model capability consumed by `InteractsWithNvlMedia` |
+| `HasMedia` | Deprecated forwarding contract | NVL-only legacy model API retained through major 5 |
 | `MediaLibraryContract` | `MediaLibrary` | Complete facade/injection boundary |
 | `UploadMediaContract` | `UploadMediaAction` | Ordinary authoritative upload |
 | `AttachMediaContract` | `AttachMediaAction` | Association creation |
@@ -60,10 +61,10 @@ Use `bind()` for stateless implementations and `scoped()` when one instance shou
 | `MultipartUploadGateway` | Disabled gateway or configured implementation | Provider initiate/sign/complete/abort |
 | `RecoverableMultipartUploadGateway` | `S3MultipartUploadGateway` when enabled | Adds completed-object recovery inspection |
 
-The model `HasMedia` contract is not a service-container binding. Implement it and use the trait.
+The model `HasNvlMedia` capability is not a service-container binding. Implement it and use `InteractsWithNvlMedia`; `HasMedia` is its deprecated NVL-only forwarding interface.
 
 `MediaTenantWorklist` is the host-owned directory boundary for `--all-tenants`
-operations. Its default reads the bounded `media.tenancy.active_tenant_worklist`
+operations. Its default reads the bounded `nvl-media.tenancy.active_tenant_worklist`
 configuration; applications with a canonical tenant directory should bind the
 contract to an adapter that returns active tenant UUIDs without exposing a host
 table name to Media.
@@ -174,7 +175,7 @@ public function execute(Media|string $media, bool $force = false): bool;
 ```php
 public function execute(
     Media|string $media,
-    Model&HasMedia $model,
+    Model&HasNvlMedia $model,
     string $collection = 'default',
     ?string $locale = null,
     ?int $order = null,
@@ -256,7 +257,7 @@ final readonly class ApplicationMediaAuthorization implements MediaAuthorization
 }
 ```
 
-The optional Spatie-compatible bridge runs before `MediaAuthorization`. Disable `media.authorization.spatie_permission.enabled` if the consumer contract must be the only cross-owner authority.
+The optional Spatie-compatible bridge runs before `MediaAuthorization`. Disable `nvl-media.authorization.spatie_permission.enabled` if the consumer contract must be the only cross-owner authority.
 
 The abilities are:
 
@@ -352,7 +353,7 @@ final class PostgreSqlMediaSearchDriver implements MediaSearchDriver
 }
 ```
 
-Bind it directly or set `media.query.search_driver` to its class. The driver must add constraints only; it must not remove visibility scope, pagination order, eager loads, or soft-delete constraints.
+Bind it directly or set `nvl-media.query.search_driver` to its class. The driver must add constraints only; it must not remove visibility scope, pagination order, eager loads, or soft-delete constraints.
 
 ## Remote host resolver
 

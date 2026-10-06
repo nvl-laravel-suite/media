@@ -165,7 +165,7 @@ describe('index', function () {
 
     it('caps direct service pagination at the configured management limit', function () {
         createServiceMedia();
-        config(['media.query.maximum_page_size' => 100]);
+        config(['nvl-media.query.maximum_page_size' => 100]);
 
         $result = app(MediaQueryService::class)->index(
             new MediaFilter(perPage: 500),
@@ -431,7 +431,7 @@ describe('update', function () {
     });
 
     it('supports locale-keyed patch and replace translation mutations', function () {
-        config(['translatable.locales' => ['en', 'bg', 'fr']]);
+        config(['nvl-translatable.locales' => ['en', 'bg', 'fr']]);
 
         $media = createServiceMedia();
         $service = mediaMutationHarness();
@@ -752,9 +752,9 @@ describe('replace', function () {
 
     it('preserves variation identity and schedules regeneration after replacing an image', function () {
         config([
-            'media.auto_generate_variations' => true,
-            'media.queue.enabled' => false,
-            'media.image_variation_presets' => [
+            'nvl-media.auto_generate_variations' => true,
+            'nvl-media.queue.enabled' => false,
+            'nvl-media.image_variation_presets' => [
                 'thumb' => [
                     'width' => 150,
                     'height' => 150,
@@ -763,7 +763,7 @@ describe('replace', function () {
                     'enabled' => true,
                 ],
             ],
-            'media.output_conversion' => [
+            'nvl-media.output_conversion' => [
                 'enabled' => false,
             ],
         ]);

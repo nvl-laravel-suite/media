@@ -38,13 +38,13 @@ final class MediaMultipartLock
         }
 
         $lock = $provider->lock(
-            'media:multipart:'.hash('sha256', $this->tenantBoundary->key('media.multipart', $sessionId)),
-            MediaConfiguration::integer('media.multipart.lock.seconds', 300, 1),
+            'nvl:media:multipart:'.hash('sha256', $this->tenantBoundary->key('media.multipart', $sessionId)),
+            MediaConfiguration::integer('nvl-media.multipart.lock.seconds', 300, 1),
         );
 
         try {
             return $lock->block(
-                MediaConfiguration::integer('media.multipart.lock.wait_seconds', 30),
+                MediaConfiguration::integer('nvl-media.multipart.lock.wait_seconds', 30),
                 $callback,
             );
         } catch (LockTimeoutException $exception) {

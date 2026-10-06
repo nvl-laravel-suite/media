@@ -71,7 +71,7 @@ final class ProcessMediaVariationsJob implements ShouldBeUnique, ShouldQueue, Te
         foreach ($configuredVariationService->configuredQueuePayloadsFor(
             media: $media,
             includeOutputConversion: $this->includeOutputConversion,
-            includePresets: (bool) config('media.auto_generate_variations', true),
+            includePresets: (bool) config('nvl-media.auto_generate_variations', true),
         ) as $name => $preset) {
             GenerateImageVariationJob::dispatch(
                 $media->id,

@@ -92,7 +92,7 @@ final class MediaFileOperator
         $result = $this->disk($disk)->delete($path);
         $this->existence->forget($disk, $path);
 
-        if (config('media.clean_empty_directories', true)) {
+        if (config('nvl-media.clean_empty_directories', true)) {
             $this->cleanEmptyDirectory($disk, dirname($path));
         }
 
@@ -331,7 +331,7 @@ final class MediaFileOperator
      */
     private function writeOptions(string $disk, MediaVisibility $visibility): array
     {
-        if ($this->disks->isS3($disk) && config('media.s3.use_acl_visibility', false) !== true) {
+        if ($this->disks->isS3($disk) && config('nvl-media.s3.use_acl_visibility', false) !== true) {
             return [];
         }
 

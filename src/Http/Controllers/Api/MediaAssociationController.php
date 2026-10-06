@@ -45,7 +45,7 @@ final class MediaAssociationController extends Controller
 
         return response()->json([
             'data' => ['association' => $association->toArray()],
-            'message' => (string) trans('media::media/messages.success.attached'),
+            'message' => (string) trans('nvl-media::media/messages.success.attached'),
         ]);
     }
 
@@ -65,7 +65,7 @@ final class MediaAssociationController extends Controller
 
         return response()->json([
             'data' => ['detachedCount' => $deleted],
-            'message' => (string) trans('media::media/messages.success.detached'),
+            'message' => (string) trans('nvl-media::media/messages.success.detached'),
         ]);
     }
 }

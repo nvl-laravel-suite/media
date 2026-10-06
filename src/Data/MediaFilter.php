@@ -176,7 +176,7 @@ class MediaFilter extends Data
      */
     public static function messages(): array
     {
-        return self::translatedMessages('media::media');
+        return self::translatedMessages('nvl-media::media');
     }
 
     /**
@@ -186,6 +186,6 @@ class MediaFilter extends Data
      */
     public static function attributes(): array
     {
-        return self::translatedAttributes('media::media');
+        return self::translatedAttributes('nvl-media::media');
     }
 }

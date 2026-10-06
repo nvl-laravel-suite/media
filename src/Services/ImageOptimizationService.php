@@ -119,7 +119,7 @@ class ImageOptimizationService
         }
 
         // Check configurable skip list
-        $skipFormats = (array) config('media.optimization.skip_formats', ['svg', 'gif']);
+        $skipFormats = (array) config('nvl-media.optimization.skip_formats', ['svg', 'gif']);
 
         if (in_array($extension, $skipFormats, true)) {
             return false;

@@ -10,7 +10,7 @@ abstract class MediaPlatformTenancyTestCase extends MediaTenancyTestCase
     protected function defineEnvironment($app): void
     {
         parent::defineEnvironment($app);
-        $app['config']->set('tenancy.resources.media', 'platform');
-        $app['config']->set('media.tenancy.owner_types', []);
+        $app['config']->set('nvl-tenancy.resources.media', 'platform');
+        $app['config']->set('nvl-media.tenancy.owner_types', []);
     }
 }

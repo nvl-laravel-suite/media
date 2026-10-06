@@ -79,11 +79,11 @@ describe('persisted storage path diagnostics', function (): void {
     beforeEach(function (): void {
         Storage::fake('public');
         config([
-            'media.disk' => 'public',
-            'media.allowed_disks' => ['public'],
-            'media.root_folder' => 'media',
-            'media.adoption.path_sample_size' => 25,
-            'media.delete_files_on_media_delete' => true,
+            'nvl-media.disk' => 'public',
+            'nvl-media.allowed_disks' => ['public'],
+            'nvl-media.root_folder' => 'media',
+            'nvl-media.adoption.path_sample_size' => 25,
+            'nvl-media.delete_files_on_media_delete' => true,
         ]);
     });
 
@@ -173,7 +173,7 @@ describe('persisted storage path diagnostics', function (): void {
     });
 
     it('does not let earlier tombstones consume the live-record sample limit', function (): void {
-        config(['media.adoption.path_sample_size' => 1]);
+        config(['nvl-media.adoption.path_sample_size' => 1]);
 
         $tombstone = createMediaDoctorPathSample([
             'id' => '00000000-0000-4000-8000-000000000001',
@@ -223,7 +223,7 @@ it('registers timestamp-aware migration publishing and warns about duplicate own
 
     expect(MediaServiceProvider::pathsToPublish(
         MediaServiceProvider::class,
-        'media-migrations',
+        'nvl-media-migrations',
     ))->not->toBeEmpty()
         ->and($publishableMigrationPaths)->toContain($migrationPath);
 
@@ -255,7 +255,7 @@ it('registers timestamp-aware migration publishing and warns about duplicate own
 
 it('treats the consumer copy metadata allowlist as an exact config replacement', function () {
     config([
-        'media.owner_slots.copy.metadata_keys' => ['format'],
+        'nvl-media.owner_slots.copy.metadata_keys' => ['format'],
     ]);
 
     $mergeConfiguration = new ReflectionMethod(
@@ -264,13 +264,13 @@ it('treats the consumer copy metadata allowlist as an exact config replacement',
     );
     $mergeConfiguration->invoke(new MediaServiceProvider(app()));
 
-    expect(config('media.owner_slots.copy.metadata_keys'))->toBe(['format']);
+    expect(config('nvl-media.owner_slots.copy.metadata_keys'))->toBe(['format']);
 });
 
 it('fails closed when production scanning is required without a scanner binding', function () {
     config([
-        'media.scanner.required' => true,
-        'media.scanner.allow_noop' => false,
+        'nvl-media.scanner.required' => true,
+        'nvl-media.scanner.allow_noop' => false,
     ]);
 
     expect(fn () => app(MediaScannerPolicy::class)->assertReady())
@@ -284,8 +284,8 @@ it('fails closed when production scanning is required without a scanner binding'
 
 it('rejects an active S3 disk without a bucket', function () {
     config([
-        'media.disk' => 's3',
-        'media.allowed_disks' => ['s3'],
+        'nvl-media.disk' => 's3',
+        'nvl-media.allowed_disks' => ['s3'],
         'filesystems.disks.s3' => [
             'driver' => 's3',
             'bucket' => null,
@@ -301,9 +301,9 @@ it('rejects an active S3 disk without a bucket', function () {
 
 it('rejects queue retry windows shorter than media job timeouts', function () {
     config([
-        'media.queue.enabled' => true,
-        'media.queue.connection' => 'database',
-        'media.queue.jobs.generate.timeout' => 60,
+        'nvl-media.queue.enabled' => true,
+        'nvl-media.queue.connection' => 'database',
+        'nvl-media.queue.jobs.generate.timeout' => 60,
         'queue.connections.database' => [
             'driver' => 'database',
             'retry_after' => 30,
@@ -318,8 +318,8 @@ it('rejects queue retry windows shorter than media job timeouts', function () {
 
 it('rejects production remote sources without connected-IP attestation', function () {
     config([
-        'media.sources.remote.enabled' => true,
-        'media.sources.remote.verify_connected_ip' => false,
+        'nvl-media.sources.remote.enabled' => true,
+        'nvl-media.sources.remote.verify_connected_ip' => false,
     ]);
 
     $checks = collect(app(MediaDoctor::class)->inspect(true));
@@ -332,9 +332,9 @@ it('rejects production remote sources without connected-IP attestation', functio
 
 it('accepts the supported production multipart safety contract', function () {
     config([
-        'media.multipart.enabled' => true,
-        'media.multipart.required_scan' => true,
-        'media.multipart.lock.store' => 'media-central',
+        'nvl-media.multipart.enabled' => true,
+        'nvl-media.multipart.required_scan' => true,
+        'nvl-media.multipart.lock.store' => 'media-central',
         'cache.stores.media-central' => ['driver' => 'redis'],
     ]);
     app()->instance(
@@ -361,7 +361,7 @@ it('accepts the supported production multipart safety contract', function () {
 
 it('reports a missing configured owner-slot operation ledger', function (): void {
     config([
-        'media.owner_slots.idempotency.table' => 'missing_media_owner_slot_operations',
+        'nvl-media.owner_slots.idempotency.table' => 'missing_media_owner_slot_operations',
     ]);
 
     $check = collect(app(MediaDoctor::class)->inspect())
@@ -377,7 +377,7 @@ it('reports a missing configured owner-slot operation ledger', function (): void
 
 it('reports invalid owner-slot operation storage configuration', function (): void {
     config([
-        'media.owner_slots.idempotency.table' => 'unsafe-name',
+        'nvl-media.owner_slots.idempotency.table' => 'unsafe-name',
     ]);
 
     $check = collect(app(MediaDoctor::class)->inspect())
@@ -391,7 +391,7 @@ it('reports invalid owner-slot operation storage configuration', function (): vo
 
 it('rejects a non-string owner-slot operation connection', function (): void {
     config([
-        'media.owner_slots.idempotency.connection' => ['sqlite'],
+        'nvl-media.owner_slots.idempotency.connection' => ['sqlite'],
     ]);
 
     expect(fn (): ?string => MediaConfiguration::ownerSlotOperationConnection())
@@ -400,9 +400,9 @@ it('rejects a non-string owner-slot operation connection', function (): void {
 
 it('reports invalid owner-slot idempotency lifecycle bounds', function (): void {
     config([
-        'media.owner_slots.idempotency.processing_timeout_minutes' => 0,
-        'media.owner_slots.idempotency.retention_days' => 0,
-        'media.owner_slots.idempotency.prune_chunk' => 1_001,
+        'nvl-media.owner_slots.idempotency.processing_timeout_minutes' => 0,
+        'nvl-media.owner_slots.idempotency.retention_days' => 0,
+        'nvl-media.owner_slots.idempotency.prune_chunk' => 1_001,
     ]);
 
     $check = collect(app(MediaDoctor::class)->inspect())
@@ -485,7 +485,7 @@ it('reports a mutation store without atomic locks', function (): void {
     );
     config([
         'cache.stores.media-non-locking' => ['driver' => 'media-non-locking'],
-        'media.mutation_lock.store' => 'media-non-locking',
+        'nvl-media.mutation_lock.store' => 'media-non-locking',
     ]);
 
     $check = collect(app(MediaDoctor::class)->inspect())
@@ -571,7 +571,7 @@ it('falls back to the default mutation cache and fails closed for an unknown sto
         'cache.stores.media-default-non-locking' => [
             'driver' => 'media-default-non-locking',
         ],
-        'media.mutation_lock.store' => null,
+        'nvl-media.mutation_lock.store' => null,
     ]);
 
     $fallbackCheck = collect(app(MediaDoctor::class)->inspect())
@@ -582,7 +582,7 @@ it('falls back to the default mutation cache and fails closed for an unknown sto
 
     config([
         'cache.default' => [],
-        'media.mutation_lock.store' => null,
+        'nvl-media.mutation_lock.store' => null,
     ]);
 
     $malformedDefaultCheck = collect(app(MediaDoctor::class)->inspect())
@@ -591,11 +591,24 @@ it('falls back to the default mutation cache and fails closed for an unknown sto
     expect($malformedDefaultCheck)->not->toBeNull()
         ->and($malformedDefaultCheck->passed)->toBeFalse();
 
-    config(['media.mutation_lock.store' => 'missing-media-cache-store']);
+    config(['nvl-media.mutation_lock.store' => 'missing-media-cache-store']);
 
     $missingStoreCheck = collect(app(MediaDoctor::class)->inspect())
         ->firstWhere('key', 'locks.mutation.atomic');
 
     expect($missingStoreCheck)->not->toBeNull()
         ->and($missingStoreCheck->passed)->toBeFalse();
+});
+
+it('validates the explicit Spatie permission bridge without activating generic grants', function (): void {
+    config(['nvl-media.authorization.spatie_permission.enabled' => 'true']);
+    $check = collect(app(MediaDoctor::class)->inspect())->firstWhere('key', 'adoption.spatie_permission');
+    expect($check->severity)->toBe('error')->and($check->passed)->toBeFalse();
+    config(['nvl-media.authorization.spatie_permission.enabled' => true, 'nvl-media.authorization.spatie_permission.global_permission' => ['invalid']]);
+    $check = collect(app(MediaDoctor::class)->inspect())->firstWhere('key', 'adoption.spatie_permission');
+    expect($check->severity)->toBe('error')->and($check->passed)->toBeFalse();
+    config(['nvl-media.authorization.spatie_permission.global_permission' => 'host.deliberate-media-grant']);
+    $check = collect(app(MediaDoctor::class)->inspect())->firstWhere('key', 'adoption.spatie_permission');
+    expect($check->severity)->toBe('info')->and($check->passed)->toBeTrue()
+        ->and($check->message)->toContain('host.deliberate-media-grant', 'deliberately configured');
 });

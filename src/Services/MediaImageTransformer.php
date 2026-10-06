@@ -41,7 +41,7 @@ class MediaImageTransformer
             $this->ensureOutputDirectory($outputPath);
             $startTime = microtime(true);
 
-            $driver = MediaImageDriver::resolve(config('media.image_driver', MediaImageDriver::Gd));
+            $driver = MediaImageDriver::resolve(config('nvl-media.image_driver', MediaImageDriver::Gd));
             $image = Image::useImageDriver($driver->spatieDriver())->loadFile($sourcePath);
             $image = $this->applyManipulations($image, $definition);
             $this->applyOutputSettings($image, $definition);

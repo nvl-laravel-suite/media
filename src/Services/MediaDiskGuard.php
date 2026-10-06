@@ -68,7 +68,7 @@ final class MediaDiskGuard
      */
     public function allowedDisks(): array
     {
-        $configured = config('media.allowed_disks', []);
+        $configured = config('nvl-media.allowed_disks', []);
         $allowed = is_array($configured)
             ? array_values(array_filter($configured, static fn (mixed $disk): bool => is_string($disk) && $disk !== ''))
             : [];

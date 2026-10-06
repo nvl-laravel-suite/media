@@ -25,7 +25,8 @@ it('keeps a globally privileged actor inside the active tenant library', functio
     $scenario = MediaTenancyScenario::install();
     $assetA = $scenario->upload($scenario::A, 'privileged tenant A');
     $scenario->upload($scenario::B, 'privileged tenant B');
-    config()->set('media.authorization.spatie_permission.global_roles', ['media-admin']);
+    config()->set('nvl-media.authorization.spatie_permission.enabled', true);
+    config()->set('nvl-media.authorization.spatie_permission.global_roles', ['media-admin']);
 
     $ids = $scenario->run($scenario::A, fn () => array_map(
         static fn (Media $media): string => $media->id,

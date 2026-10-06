@@ -88,7 +88,7 @@ final class UploadMediaAction implements UploadMediaContract
         ?string $uploadedByType = null,
         array $variationDefinitions = [],
     ): Media {
-        if (config('tenancy.enabled') === true) {
+        if (config('nvl-tenancy.enabled') === true) {
             $model = $this->owners->resolve($model);
         }
         $this->diskGuard->assertAllowed($disk);
@@ -109,10 +109,10 @@ final class UploadMediaAction implements UploadMediaContract
             ? $this->pathResolver->normalizeFolder($folderOverride)
             : $this->pathResolver->resolve($model, $slot);
 
-        $duplicates_allowed = (bool) ($allowDuplicates ?? config('media.allow_duplicates', false));
+        $duplicates_allowed = (bool) ($allowDuplicates ?? config('nvl-media.allow_duplicates', false));
         $should_deduplicate = $deduplicateExisting ?? ! $duplicates_allowed;
 
-        if (! $isPublic && $uploaderId === null && ! config('media.deduplication.allow_anonymous_private', false)) {
+        if (! $isPublic && $uploaderId === null && ! config('nvl-media.deduplication.allow_anonymous_private', false)) {
             $should_deduplicate = false;
         }
 
@@ -276,7 +276,7 @@ final class UploadMediaAction implements UploadMediaContract
                 );
 
                 $ownership = $this->tenantBoundary->attributes('media.assets');
-                $pathIdentity = config('tenancy.enabled') === true ? ['storage_path' => $stored_path] : [];
+                $pathIdentity = config('nvl-tenancy.enabled') === true ? ['storage_path' => $stored_path] : [];
 
                 return Media::query()->forceCreate([
                     ...$ownership,

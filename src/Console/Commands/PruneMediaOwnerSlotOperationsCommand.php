@@ -32,12 +32,12 @@ final class PruneMediaOwnerSlotOperationsCommand extends Command
     public function handle(): int
     {
         $configuredDays = MediaConfiguration::integer(
-            'media.owner_slots.idempotency.retention_days',
+            'nvl-media.owner_slots.idempotency.retention_days',
             7,
             1,
         );
         $configuredChunk = MediaConfiguration::integer(
-            'media.owner_slots.idempotency.prune_chunk',
+            'nvl-media.owner_slots.idempotency.prune_chunk',
             500,
             1,
         );

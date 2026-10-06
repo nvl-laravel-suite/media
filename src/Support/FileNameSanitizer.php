@@ -22,7 +22,7 @@ final class FileNameSanitizer
      */
     public static function sanitize(string $filename): string
     {
-        if (! Str::isAscii($filename) && config('media.transliterate', false)) {
+        if (! Str::isAscii($filename) && config('nvl-media.transliterate', false)) {
             $filename = Str::transliterate($filename);
         }
 

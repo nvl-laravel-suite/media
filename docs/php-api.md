@@ -1,12 +1,13 @@
 # PHP API reference
 
-This reference documents the supported PHP integration surface of NVL Media 2.x. The shortest path is the `HasMedia` contract plus `InteractsWithMedia`; application services may use `MediaLibraryContract` or the `Nvl\Media\Facades\Media` facade; advanced integrations may inject a focused Action or contract.
+This reference documents the supported PHP integration surface of NVL Media. The shortest path is the `HasNvlMedia` contract plus `InteractsWithNvlMedia`; application services may use `MediaLibraryContract` or the `Nvl\Media\Facades\Media` facade; advanced integrations may inject a focused Action or contract.
 
 ## Choosing an entry point
 
 | Entry point | Best for | Authorization boundary |
 | --- | --- | --- |
-| `InteractsWithMedia` | Model-centric upload, retrieval, and lifecycle calls | Authorize in the calling controller, job, or service |
+| `InteractsWithNvlMedia` | Namespaced model entry point and independent lifecycle | Authorize in the calling controller, job, or service |
+| `InteractsWithMedia` | Deprecated NVL-only forwarding surface through major 5 | Same NVL owner implementation |
 | `Media` facade | Concise application orchestration | Authorize before mutations with a policy or `Media::allows()` |
 | `MediaLibraryContract` | Constructor injection and boundary replacement | Same behavior as the facade |
 | Focused contracts and Actions | Advanced integration or replacing one operation | Caller-owned |
@@ -14,7 +15,61 @@ This reference documents the supported PHP integration surface of NVL Media 2.x.
 
 Facade and direct PHP mutation calls are trusted application-service calls. They enforce ingestion, scanning, storage, integrity, locking, and transaction policy, but they do not infer an ambient actor for authorization.
 
-## Media-enabled model
+## Namespaced owner capability
+
+Implement `HasNvlMedia` and use `InteractsWithNvlMedia`. The trait adds only `nvlMedia()`, `nvlMediaAssociations()`, `registerNvlMedia()` and `bootInteractsWithNvlMedia()` to the model. Its private state has the `nvl` prefix. The boot hook runs only NVL deletion; it preserves soft-deleted owners and does not call a third-party library's methods.
+
+```php
+use Nvl\Media\Contracts\HasNvlMedia;
+use Nvl\Media\MediaRegistration;
+use Nvl\Media\Models\Media;
+use Nvl\Media\Traits\InteractsWithNvlMedia;
+
+final class Article extends Model implements HasNvlMedia
+{
+    use InteractsWithNvlMedia;
+
+    public function registerNvlMedia(MediaRegistration $media, ?Media $asset = null): void
+    {
+        $media->slot('cover')->oneToOne();
+        $media->conversion('card')->width(640)->performOnSlots('cover');
+    }
+}
+
+$asset = $article->nvlMedia()->add($upload)->slot('cover');
+$cover = $article->nvlMedia()->first('cover');
+$articles = Article::with('nvlMediaAssociations')->get();
+```
+
+`nvlMedia()` returns one `MediaOwner` for the actual model instance, keeping registration independent of upload collaborators. It never wraps the owner in a different Eloquent model. `nvlMediaAssociations()` eager-loads its own NVL assets and leaves a host or Spatie `media` relation untouched.
+
+| Owner API method | Contract |
+| --- | --- |
+| `add()`, `copy()` | Build an upload from a file; copy preserves an explicit local original |
+| `fromRequest()`, `fromUrl()`, `fromBase64()`, `fromString()`, `fromBinary()`, `fromDisk()` | Use the same bounded source and ingestion pipeline as the legacy methods |
+| `attach()`, `detach()` | Add/remove an NVL association through the replaceable Actions; detach retains the asset |
+| `sync()` | Atomically reconcile one collection's associations and order under its owner lock; retained assets are not deleted |
+| `reuse()` | Associate an existing public reusable asset |
+| `all()`, `first()`, `last()`, `has()` | Read one collection with optional attribute/callback filters; honor eager NVL associations |
+| `firstUrl()`, `lastUrl()`, `firstPath()`, `lastPath()` | Return one asset URL/path or the registered fallback |
+| `buildUrl()`, `buildPublicUrl()`, `firstTemporaryUrl()` | Use the existing centralized signed/private/public URL behavior |
+| `fallbackUrl()`, `fallbackPath()` | Resolve one slot's fallback |
+| `slot()`, `slots()`, `conversions()`, `registration()` | Inspect registered NVL definitions; conversions may depend on the supplied NVL asset |
+| `clear()`, `clearExcept()`, `deleteAll()` | Remove owner associations and delete an asset only when it is no longer shared |
+| `delete()` | Delete a specified NVL asset through the global delete Action |
+| `order()`, `modelClass()` | Set collection order or return the NVL Media class |
+| `query()`, `associations()` | Inspect the NVL relation/query independently of the host model's relation names |
+| `deleteOwnerPreservingMedia()` | Delete the owner while preserving its NVL references; other libraries retain their own deletion policy |
+
+The registration object exposes `slot()`, `conversion()`, `getSlot()`, `slots()` and `conversions()`. Definitions are local to one owner. NVL internal lifecycle/cache seams use `ownerDeleted()`, `owns()` and `invalidate()`; application mutations should use the methods above.
+
+For Spatie coexistence, implement Spatie's distinct `HasMedia` plus NVL's `HasNvlMedia`, and use Spatie's `InteractsWithMedia` plus NVL's `InteractsWithNvlMedia`. Each retains independent conversion hooks and deletion listeners. The standalone fixture installs the real third-party package only in test tooling.
+
+## Deprecated NVL-only model surface
+
+`HasMedia` extends the new capability and the supplied `InteractsWithMedia` trait forwards the methods below to the same owner API. Both remain through major 5, with removal in major 6. Legacy `registerMediaSlots()` and `registerMediaConversions()` overrides feed `registerNvlMedia()`; no separate implementation or duplicate lifecycle listener is installed.
+
+## Legacy NVL-only media-enabled model
 
 Implement `Nvl\Media\Contracts\HasMedia` and use `Nvl\Media\Traits\InteractsWithMedia`:
 
@@ -242,7 +297,7 @@ $page = Media::paginate(
 );
 ```
 
-Allowed sort columns are `created_at`, `updated_at`, `filename`, `size`, `type`, `extension`, and `mime_type`. Sort direction is `asc` or `desc`; `perPage` is capped at `media.query.maximum_page_size`, never above 100 in the shipped configuration.
+Allowed sort columns are `created_at`, `updated_at`, `filename`, `size`, `type`, `extension`, and `mime_type`. Sort direction is `asc` or `desc`; `perPage` is capped at `nvl-media.query.maximum_page_size`, never above 100 in the shipped configuration.
 
 ### Metadata mutation
 
@@ -272,13 +327,13 @@ $updated = Media::updateMetadata(
 
 `Patch` preserves omitted locale rows and fields. `Replace` removes omitted locale rows. Technical fields such as disk, folder, digest, MIME, extension, and storage hash are not localized and cannot be mutated through this DTO.
 
-## Model trait reference
+## Deprecated model trait reference
 
 ### Registration and relationships
 
 | Method | Contract |
 | --- | --- |
-| `bootInteractsWithMedia()` | Registers owner deletion behavior; invoked by Eloquent |
+| `bootInteractsWithMedia()` | Deprecated no-op; nested `bootInteractsWithNvlMedia()` registers the single NVL deletion listener |
 | `media()` | Ordered `MorphToMany<Media>` relationship with collection, locale, order, and metadata pivot fields |
 | `mediaAssociations()` | Direct `MorphMany<MediaAssociation>` relationship |
 | `registerMediaSlots()` | Consumer hook for slot definitions |
@@ -336,7 +391,7 @@ Array retrieval filters compare canonical model attributes strictly. The special
 | `deletePreservingMedia()` | Delete the owner without invoking package media cleanup for that delete |
 | `updateMediaOrder(array $ordered_ids, string $collection = 'default')` | Set zero-based association order for supplied UUIDs |
 
-Soft-deleting an owner preserves associations for restoration. Force deletion follows `media.delete_media_on_model_delete` unless `deletePreservingMedia()` is used deliberately.
+Soft-deleting an owner preserves associations for restoration. Force deletion follows `nvl-media.delete_media_on_model_delete` unless `deletePreservingMedia()` is used deliberately.
 
 ## `MediaSlot`
 
@@ -372,7 +427,7 @@ Soft-deleting an owner preserves associations for restoration. Force deletion fo
 | `shouldConvertOriginal()` | Test whether original conversion is configured |
 | `getConversionDefinitions()` | Return named slot conversions |
 
-Path templates support `{model_type}`, `{model_id}`, `{id}`, `{collection}`, `{slug}`, `{date}`, `{year}`, `{month}`, `{day}`, and model attributes. The resolved folder remains constrained beneath `media.root_folder`.
+Path templates support `{model_type}`, `{model_id}`, `{id}`, `{collection}`, `{slug}`, `{date}`, `{year}`, `{month}`, `{day}`, and model attributes. The resolved folder remains constrained beneath `nvl-media.root_folder`.
 
 ## `ConversionDefinition`
 
@@ -548,7 +603,7 @@ Upload, attach, detach, delete, and reuse also have focused contracts. Applicati
 ### Owner-slot workflows and operation identity
 
 The four owner-slot Actions accept `MediaActorData`, a persisted
-`Model&HasMedia`, and a registered single-file slot name. Get returns
+`Model&HasNvlMedia`, and a registered single-file slot name. Get returns
 `?MediaLibraryItem`; replace and copy return `MediaLibraryItem`; clear returns
 `void`. Mutation Actions accept an optional UUID idempotency key. They own
 authorization, compatibility/staging checks, owner and Media locks,
@@ -605,4 +660,4 @@ Actions own their database transactions. New objects are removed on rollback; su
 
 ## Runtime storage identities
 
-Media models expose Laravel's `getTable()` and `getConnectionName()` methods using the effective canonical `media.tables.*`, `media.connection` and Core defaults. `MediaOwnerSlotOperation::getConnectionName()` also honors `media.connections.owner_slot_operations`; null inherits the Media/Core connection. An explicit model `setConnection()` takes precedence. Use the model's connection and table when building custom queries.
+Media models expose Laravel's `getTable()` and `getConnectionName()` methods using the effective canonical `nvl-media.tables.*`, `nvl-media.connection` and Core defaults. `MediaOwnerSlotOperation::getConnectionName()` also honors `media.connections.owner_slot_operations`; null inherits the Media/Core connection. An explicit model `setConnection()` takes precedence. Use the model's connection and table when building custom queries.

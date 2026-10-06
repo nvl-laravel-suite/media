@@ -26,8 +26,8 @@ final readonly class MediaTenancyResources
     /** Register every stateful Media root and inherited child. */
     public function register(TenantResourceRegistry $resources): void
     {
-        $sharing = $this->configuration->get('tenancy.sharing.media', 'none');
-        $mode = $this->configuration->get('tenancy.resources.media', 'tenant');
+        $sharing = $this->configuration->get('nvl-tenancy.sharing.media', 'none');
+        $mode = $this->configuration->get('nvl-tenancy.resources.media', 'tenant');
         if (! in_array($sharing, ['none', 'copy'], true) || ! in_array($mode, ['tenant', 'platform'], true)) {
             throw new TenantConfigurationInvalid('Media tenancy configuration is invalid.');
         }
@@ -44,7 +44,7 @@ final readonly class MediaTenancyResources
             new TenantResourceDefinition('media.multipart', 'media', MediaMultipartUpload::class, allowsPlatformRows: $platform),
             new TenantResourceDefinition('media.catalog-grants', 'media.catalog-grants', MediaTenantGrant::class),
         ];
-        $ownerTypes = $this->configuration->get('media.tenancy.owner_types', []);
+        $ownerTypes = $this->configuration->get('nvl-media.tenancy.owner_types', []);
         if (! is_array($ownerTypes)) {
             throw new TenantConfigurationInvalid('Media tenant owner types must be an array.');
         }

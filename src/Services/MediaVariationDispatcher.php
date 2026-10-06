@@ -7,7 +7,7 @@ namespace Nvl\Media\Services;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
 use Nvl\Media\Actions\GenerateImageVariationAction;
-use Nvl\Media\Contracts\HasMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Jobs\GenerateImageVariationJob;
 use Nvl\Media\Models\Media;
@@ -59,7 +59,7 @@ final class MediaVariationDispatcher
     /**
      * Dispatch only the variations that are missing for a specific associable collection.
      */
-    public function dispatchMissingForAssociation(Media $media, Model&HasMedia $model, string $slotName): void
+    public function dispatchMissingForAssociation(Media $media, Model&HasNvlMedia $model, string $slotName): void
     {
         $definitions = array_replace(
             $this->collectConfiguredDefinitions($media),
@@ -87,7 +87,7 @@ final class MediaVariationDispatcher
         foreach ($media->associations as $association) {
             $associable = $association->associable;
 
-            if (! $associable instanceof HasMedia) {
+            if (! $associable instanceof HasNvlMedia) {
                 continue;
             }
 
@@ -111,12 +111,12 @@ final class MediaVariationDispatcher
      *
      * @return array<string, ConversionDefinition>
      */
-    public function collectDefinitionsForAssociation(Media $media, Model&HasMedia $model, string $slotName): array
+    public function collectDefinitionsForAssociation(Media $media, Model&HasNvlMedia $model, string $slotName): array
     {
         /** @var array<string, ConversionDefinition> $definitions */
         $definitions = [];
 
-        $slotConfig = $model->getMediaSlot($slotName);
+        $slotConfig = $model->nvlMedia()->slot($slotName);
 
         if ($slotConfig instanceof MediaSlot) {
             foreach ($slotConfig->getConversionDefinitions() as $name => $definition) {
@@ -124,9 +124,7 @@ final class MediaVariationDispatcher
             }
         }
 
-        $model->registerMediaConversions($media);
-
-        foreach ($model->getModelConversions() as $conversion) {
+        foreach ($model->nvlMedia()->conversions($media) as $conversion) {
             if ($conversion->shouldBePerformedOn($slotName)) {
                 $definitions[$conversion->name] = $conversion;
             }
@@ -144,7 +142,7 @@ final class MediaVariationDispatcher
     {
         return $this->configuredVariationService->configuredDefinitionsFor(
             media: $media,
-            includePresets: (bool) config('media.auto_generate_variations', true),
+            includePresets: (bool) config('nvl-media.auto_generate_variations', true),
         );
     }
 

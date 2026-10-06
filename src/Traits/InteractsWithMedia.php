@@ -8,122 +8,48 @@ use DateTimeInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
-use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Nvl\Media\Conversions\ConversionDefinition;
-use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\MediaAdder;
+use Nvl\Media\MediaRegistration;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
-use Nvl\Media\Relations\StringMorphMany;
-use Nvl\Media\Relations\StringMorphToMany;
-use Nvl\Media\Services\MediaLifecycleService;
-use Nvl\Media\Services\MediaModelInteractionService;
 use Nvl\Media\Slots\MediaSlot;
 
-/** InteractsWithMedia: provides media attachment, retrieval, and lifecycle management for models. */
+/** @deprecated Use InteractsWithNvlMedia; this forwarding surface remains through major 5. */
 trait InteractsWithMedia
 {
-    /** @var array<string, MediaSlot> */
-    protected array $mediaSlots = [];
+    use InteractsWithNvlMedia;
 
-    /** @var array<string, ConversionDefinition> */
-    protected array $mediaConversions = [];
-
-    protected bool $deletePreservingMediaFlag = false;
-
-    private ?MediaModelInteractionService $mediaInteractionServiceInstance = null;
-
-    private ?MediaLifecycleService $mediaLifecycleServiceInstance = null;
-
-    protected function mediaInteractionService(): MediaModelInteractionService
+    /** Populate NVL definitions from the retained registration hooks. */
+    public function registerNvlMedia(MediaRegistration $media, ?Media $asset = null): void
     {
-        return $this->mediaInteractionServiceInstance ??= app(MediaModelInteractionService::class);
+        $this->registerMediaSlots();
+        $this->registerMediaConversions($asset);
     }
 
-    protected function mediaLifecycleService(): MediaLifecycleService
-    {
-        return $this->mediaLifecycleServiceInstance ??= app(MediaLifecycleService::class);
-    }
+    /** Register legacy slots when the owner overrides this hook. */
+    public function registerMediaSlots(): void {}
 
-    /* ---------------------------------------------------------------
-     * Boot & Lifecycle Hooks
-     * ------------------------------------------------------------- */
+    /** Register legacy conversions when the owner overrides this hook. */
+    public function registerMediaConversions(?Media $media = null): void {}
 
-    /**
-     * Boot lifecycle hooks for media management.
-     *
-     * - **Force-delete**: all media records and files are permanently deleted.
-     * - **Soft-delete**: media associations are preserved (not detached) so that restoring the
-     *   model also restores its media references.
-     */
-    public static function bootInteractsWithMedia(): void
-    {
-        static::deleted(function (self $model) {
-            if ($model->shouldDeletePreservingMedia()) {
-                return;
-            }
+    /** Retain the explicitly callable old hook; Laravel boots the nested namespaced trait. */
+    public static function bootInteractsWithMedia(): void {}
 
-            if (! config('media.delete_media_on_model_delete', true)) {
-                return;
-            }
-
-            if ($model->mediaOwnerIsSoftDeleting()) {
-                return;
-            }
-
-            $model->deleteAllMedia();
-        });
-    }
-
-    protected function shouldDeletePreservingMedia(): bool
-    {
-        return $this->deletePreservingMediaFlag;
-    }
-
-    /**
-     * Determine whether the current delete event is a soft delete.
-     *
-     * @return bool True when the model uses SoftDeletes and is not force deleting
-     */
-    protected function mediaOwnerIsSoftDeleting(): bool
-    {
-        return $this->mediaInteractionService()->ownerIsSoftDeleting($this);
-    }
-
+    /** Forward the retained deletePreservingMedia operation to the NVL owner API. */
     public function deletePreservingMedia(): ?bool
     {
-        $this->deletePreservingMediaFlag = true;
-
-        return $this->delete();
+        return $this->nvlMedia()->deleteOwnerPreservingMedia();
     }
-
-    /* ---------------------------------------------------------------
-     * Relationships
-     * ------------------------------------------------------------- */
 
     /**
      * @return MorphToMany<Media, covariant Model>
      */
     public function media(): MorphToMany
     {
-        $related = new Media;
-
-        return (new StringMorphToMany(
-            $related->newQuery(),
-            $this,
-            'associable',
-            MediaTables::get(MediaTables::Associations),
-            'associable_id',
-            'media_id',
-            $this->getKeyName(),
-            $related->getKeyName(),
-            'media',
-        ))
-            ->withPivot('collection', 'locale', 'order', 'metadata')
-            ->withTimestamps()
-            ->orderBy(MediaTables::get(MediaTables::Associations).'.order');
+        return $this->nvlMedia()->query();
     }
 
     /**
@@ -131,45 +57,19 @@ trait InteractsWithMedia
      */
     public function mediaAssociations(): MorphMany
     {
-        $related = new MediaAssociation;
-
-        return new StringMorphMany(
-            $related->newQuery(),
-            $this,
-            $related->qualifyColumn('associable_type'),
-            $related->qualifyColumn('associable_id'),
-            $this->getKeyName(),
-        );
+        return $this->nvlMediaAssociations();
     }
 
-    /* ---------------------------------------------------------------
-     * Slot & Conversion Registration
-     * ------------------------------------------------------------- */
-
-    public function registerMediaSlots(): void
-    {
-        // Override in model
-    }
-
-    public function registerMediaConversions(?Media $media = null): void
-    {
-        // Override in model
-    }
-
+    /** Forward the retained addMediaSlot operation to the NVL owner API. */
     public function addMediaSlot(string $name): MediaSlot
     {
-        $slot = new MediaSlot($name);
-        $this->mediaSlots[$name] = $slot;
-
-        return $slot;
+        return $this->nvlMedia()->registration()->slot($name);
     }
 
+    /** Forward the retained addMediaConversion operation to the NVL owner API. */
     public function addMediaConversion(string $name): ConversionDefinition
     {
-        $definition = new ConversionDefinition($name);
-        $this->mediaConversions[$name] = $definition;
-
-        return $definition;
+        return $this->nvlMedia()->registration()->conversion($name);
     }
 
     /**
@@ -177,14 +77,13 @@ trait InteractsWithMedia
      */
     public function getModelConversions(): array
     {
-        return $this->mediaConversions;
+        return $this->nvlMedia()->conversions();
     }
 
+    /** Forward the retained getMediaSlot operation to the NVL owner API. */
     public function getMediaSlot(string $name = 'default'): ?MediaSlot
     {
-        $this->ensureSlotsRegistered();
-
-        return $this->mediaSlots[$name] ?? null;
+        return $this->nvlMedia()->slot($name);
     }
 
     /**
@@ -192,50 +91,43 @@ trait InteractsWithMedia
      */
     public function getRegisteredMediaSlots(): Collection
     {
-        $this->ensureSlotsRegistered();
-
-        return collect($this->mediaSlots);
+        return $this->nvlMedia()->slots();
     }
 
-    protected function ensureSlotsRegistered(): void
-    {
-        if (empty($this->mediaSlots)) {
-            $this->registerMediaSlots();
-        }
-    }
-
-    /* ---------------------------------------------------------------
-     * Upload Source Methods (delegate to MediaSourceResolver)
-     * ------------------------------------------------------------- */
-
+    /** Forward the retained addMedia operation to the NVL owner API. */
     public function addMedia(string|UploadedFile $file, ?string $slot = null): MediaAdder
     {
-        return $this->mediaInteractionService()->addMedia($this, $file, $slot);
+        return $this->nvlMedia()->add($file, $slot);
     }
 
+    /** Forward the retained copyMedia operation to the NVL owner API. */
     public function copyMedia(string|UploadedFile $file): MediaAdder
     {
-        return $this->mediaInteractionService()->copyMedia($this, $file);
+        return $this->nvlMedia()->copy($file);
     }
 
+    /** Forward the retained addMediaFromRequest operation to the NVL owner API. */
     public function addMediaFromRequest(string $key): MediaAdder
     {
-        return $this->mediaInteractionService()->addMediaFromRequest($this, $key);
+        return $this->nvlMedia()->fromRequest($key);
     }
 
+    /** Forward the retained addMediaFromUrl operation to the NVL owner API. */
     public function addMediaFromUrl(string $url, string ...$allowedMimeTypes): MediaAdder
     {
-        return $this->mediaInteractionService()->addMediaFromUrl($this, $url, ...$allowedMimeTypes);
+        return $this->nvlMedia()->fromUrl($url, ...$allowedMimeTypes);
     }
 
+    /** Forward the retained addMediaFromBase64 operation to the NVL owner API. */
     public function addMediaFromBase64(string $base64data, string ...$allowedMimeTypes): MediaAdder
     {
-        return $this->mediaInteractionService()->addMediaFromBase64($this, $base64data, ...$allowedMimeTypes);
+        return $this->nvlMedia()->fromBase64($base64data, ...$allowedMimeTypes);
     }
 
+    /** Forward the retained addMediaFromString operation to the NVL owner API. */
     public function addMediaFromString(string $text): MediaAdder
     {
-        return $this->mediaInteractionService()->addMediaFromString($this, $text);
+        return $this->nvlMedia()->fromString($text);
     }
 
     /**
@@ -246,17 +138,13 @@ trait InteractsWithMedia
         string $filename,
         string ...$allowedMimeTypes,
     ): MediaAdder {
-        return $this->mediaInteractionService()->addMediaFromBinary(
-            $this,
-            $contents,
-            $filename,
-            ...$allowedMimeTypes,
-        );
+        return $this->nvlMedia()->fromBinary($contents, $filename, ...$allowedMimeTypes);
     }
 
+    /** Forward the retained addMediaFromDisk operation to the NVL owner API. */
     public function addMediaFromDisk(string $key, ?string $disk = null): MediaAdder
     {
-        return $this->mediaInteractionService()->addMediaFromDisk($this, $key, $disk);
+        return $this->nvlMedia()->fromDisk($key, $disk);
     }
 
     /**
@@ -272,20 +160,8 @@ trait InteractsWithMedia
         array $metadata = [],
         bool $dispatchVariations = true,
     ): Media {
-        return $this->mediaInteractionService()->reusePublicMedia(
-            model: $this,
-            media: $media,
-            collection: $collection,
-            locale: $locale,
-            order: $order,
-            metadata: $metadata,
-            dispatchVariations: $dispatchVariations,
-        );
+        return $this->nvlMedia()->reuse($media, $collection, $locale, $order, $metadata, $dispatchVariations);
     }
-
-    /* ---------------------------------------------------------------
-     * Retrieval Methods
-     * ------------------------------------------------------------- */
 
     /**
      * @param  array<string, mixed>|callable  $filters
@@ -293,45 +169,7 @@ trait InteractsWithMedia
      */
     public function getMedia(string $collection = 'default', array|callable $filters = []): Collection
     {
-        $interactions = $this->mediaInteractionService();
-        $interactions->assertTenantAccess($this);
-
-        // Use already-loaded relation when available to avoid N+1 queries.
-        if ($this->relationLoaded('media')) {
-            $media = $this->mediaCollectionFromRelation($this->getRelation('media'))
-                ->filter(static fn (Media $media): bool => self::mediaBelongsToCollection($media, $collection))
-                ->values();
-        } else {
-            $media = $this->mediaCollectionFromRelation($this->media()
-                ->wherePivot('collection', $collection)
-                ->get());
-        }
-
-        foreach ($media as $item) {
-            $interactions->assertTenantAccess($this, $item);
-        }
-
-        if (empty($filters)) {
-            return $media;
-        }
-
-        if (is_callable($filters)) {
-            return $media->filter($filters)->values();
-        }
-
-        return $media->filter(function (Media $item) use ($filters) {
-            foreach ($filters as $key => $value) {
-                if ($key === 'tags' && is_string($value) && $item->hasTag($value)) {
-                    continue;
-                }
-
-                if ($item->getAttribute($key) !== $value) {
-                    return false;
-                }
-            }
-
-            return true;
-        })->values();
+        return $this->nvlMedia()->all($collection, $filters);
     }
 
     /**
@@ -339,7 +177,7 @@ trait InteractsWithMedia
      */
     public function getFirstMedia(string $collection = 'default', array|callable $filters = []): ?Media
     {
-        return $this->getMedia($collection, $filters)->first();
+        return $this->nvlMedia()->first($collection, $filters);
     }
 
     /**
@@ -347,7 +185,7 @@ trait InteractsWithMedia
      */
     public function getLastMedia(string $collection = 'default', array|callable $filters = []): ?Media
     {
-        return $this->getMedia($collection, $filters)->last();
+        return $this->nvlMedia()->last($collection, $filters);
     }
 
     /**
@@ -355,98 +193,31 @@ trait InteractsWithMedia
      */
     public function hasMedia(string $collection = 'default', array|callable $filters = []): bool
     {
-        $this->mediaInteractionService()->assertTenantAccess($this);
-
-        if (empty($filters) && $this->relationLoaded('media')) {
-            return $this->getMedia($collection)->isNotEmpty();
-        }
-
-        if (empty($filters)) {
-            return $this->media()
-                ->wherePivot('collection', $collection)
-                ->exists();
-        }
-
-        return $this->getMedia($collection, $filters)->isNotEmpty();
+        return $this->nvlMedia()->has($collection, $filters);
     }
 
-    /**
-     * @return Collection<int, Media>
-     */
-    private function mediaCollectionFromRelation(mixed $relation): Collection
-    {
-        if (! $relation instanceof Collection) {
-            return new Collection;
-        }
-
-        $mediaItems = [];
-
-        foreach ($relation as $media) {
-            if ($media instanceof Media) {
-                $mediaItems[] = $media;
-            }
-        }
-
-        return new Collection($mediaItems);
-    }
-
-    private static function mediaBelongsToCollection(Media $media, string $collection): bool
-    {
-        $pivot = $media->getAttribute('pivot');
-
-        if (! $pivot instanceof Pivot) {
-            return false;
-        }
-
-        return $pivot->getAttribute('collection') === $collection;
-    }
-
-    /* ---------------------------------------------------------------
-     * URL Convenience Methods
-     * ------------------------------------------------------------- */
-
+    /** Forward the retained getFirstMediaUrl operation to the NVL owner API. */
     public function getFirstMediaUrl(string $collection = 'default', string $conversion = ''): string
     {
-        $media = $this->getFirstMedia($collection);
-
-        if ($media === null) {
-            return $this->getFallbackMediaUrl($collection, $conversion);
-        }
-
-        return $media->buildUrl(['v' => $conversion !== '' ? $conversion : null]);
+        return $this->nvlMedia()->firstUrl($collection, $conversion);
     }
 
+    /** Forward the retained getLastMediaUrl operation to the NVL owner API. */
     public function getLastMediaUrl(string $collection = 'default', string $conversion = ''): string
     {
-        $media = $this->getLastMedia($collection);
-
-        if ($media === null) {
-            return $this->getFallbackMediaUrl($collection, $conversion);
-        }
-
-        return $media->buildUrl(['v' => $conversion !== '' ? $conversion : null]);
+        return $this->nvlMedia()->lastUrl($collection, $conversion);
     }
 
+    /** Forward the retained getFirstMediaPath operation to the NVL owner API. */
     public function getFirstMediaPath(string $collection = 'default', string $conversion = ''): string
     {
-        $media = $this->getFirstMedia($collection);
-
-        if ($media === null) {
-            return $this->getFallbackMediaPath($collection, $conversion);
-        }
-
-        return $media->getPath($conversion);
+        return $this->nvlMedia()->firstPath($collection, $conversion);
     }
 
+    /** Forward the retained getLastMediaPath operation to the NVL owner API. */
     public function getLastMediaPath(string $collection = 'default', string $conversion = ''): string
     {
-        $media = $this->getLastMedia($collection);
-
-        if ($media === null) {
-            return $this->getFallbackMediaPath($collection, $conversion);
-        }
-
-        return $media->getPath($conversion);
+        return $this->nvlMedia()->lastPath($collection, $conversion);
     }
 
     /**
@@ -459,13 +230,7 @@ trait InteractsWithMedia
         array $parameters = [],
         ?DateTimeInterface $expiration = null,
     ): string {
-        $media = $this->getFirstMedia($collection);
-
-        if ($media === null) {
-            return $this->getFallbackMediaUrl($collection, (string) ($parameters['v'] ?? ''));
-        }
-
-        return $media->buildUrl($parameters, $expiration);
+        return $this->nvlMedia()->buildUrl($collection, $parameters, $expiration);
     }
 
     /**
@@ -475,50 +240,34 @@ trait InteractsWithMedia
      */
     public function buildPublicUrl(string $collection = 'default', array $parameters = []): string
     {
-        $media = $this->getFirstMedia($collection);
-
-        if ($media === null) {
-            return $this->getFallbackMediaUrl($collection, (string) ($parameters['v'] ?? ''));
-        }
-
-        return $media->buildPublicUrl($parameters);
+        return $this->nvlMedia()->buildPublicUrl($collection, $parameters);
     }
 
+    /** Forward the retained getFirstTemporaryUrl operation to the NVL owner API. */
     public function getFirstTemporaryUrl(
         DateTimeInterface $expiration,
         string $collection = 'default',
         string $conversion = '',
     ): string {
-        $media = $this->getFirstMedia($collection);
-
-        if ($media === null) {
-            return '';
-        }
-
-        return $media->getTemporaryUrl($expiration, $conversion);
+        return $this->nvlMedia()->firstTemporaryUrl($expiration, $collection, $conversion);
     }
 
+    /** Forward the retained getFallbackMediaUrl operation to the NVL owner API. */
     public function getFallbackMediaUrl(string $collection = 'default', string $conversion = ''): string
     {
-        $config = $this->getMediaSlot($collection);
-
-        return $config?->getFallbackUrl($conversion) ?? '';
+        return $this->nvlMedia()->fallbackUrl($collection, $conversion);
     }
 
+    /** Forward the retained getFallbackMediaPath operation to the NVL owner API. */
     public function getFallbackMediaPath(string $collection = 'default', string $conversion = ''): string
     {
-        $config = $this->getMediaSlot($collection);
-
-        return $config?->getFallbackPath($conversion) ?? '';
+        return $this->nvlMedia()->fallbackPath($collection, $conversion);
     }
 
-    /* ---------------------------------------------------------------
-     * Lifecycle Methods (delegate to MediaLifecycleService)
-     * ------------------------------------------------------------- */
-
+    /** Forward the retained clearMediaCollection operation to the NVL owner API. */
     public function clearMediaCollection(string $collection = 'default'): static
     {
-        $this->mediaLifecycleService()->clearCollection($this, $collection);
+        $this->nvlMedia()->clear($collection);
 
         return $this;
     }
@@ -528,31 +277,30 @@ trait InteractsWithMedia
      */
     public function clearMediaCollectionExcept(string $collection = 'default', array|Collection $except = []): static
     {
-        $this->mediaLifecycleService()->clearCollectionExcept($this, $collection, $except);
+        $this->nvlMedia()->clearExcept($collection, $except);
 
         return $this;
     }
 
+    /** Forward the retained deleteMedia operation to the NVL owner API. */
     public function deleteMedia(string|Media $media): void
     {
-        $this->mediaLifecycleService()->deleteMedia($media);
+        $this->nvlMedia()->delete($media);
     }
 
+    /** Forward the retained deleteAllMedia operation to the NVL owner API. */
     public function deleteAllMedia(): static
     {
-        $this->mediaLifecycleService()->deleteAll($this);
+        $this->nvlMedia()->deleteAll();
 
         return $this;
     }
 
+    /** Forward the retained detachMedia operation to the NVL owner API. */
     public function detachMedia(string|Media $media, ?string $collection = null): void
     {
-        $this->mediaLifecycleService()->detach($media, $this, $collection);
+        $this->nvlMedia()->detach($media, $collection);
     }
-
-    /* ---------------------------------------------------------------
-     * Order & Utility
-     * ------------------------------------------------------------- */
 
     /**
      * Batch-update media ordering for a collection using a single query.
@@ -561,40 +309,12 @@ trait InteractsWithMedia
      */
     public function updateMediaOrder(array $ordered_ids, string $collection = 'default'): void
     {
-        if (empty($ordered_ids)) {
-            return;
-        }
-
-        $cases = [];
-        $bindings = [];
-        $association = new MediaAssociation;
-        $connection = $association->getConnection();
-        $grammar = $connection->getQueryGrammar();
-        $table = $grammar->wrapTable($association->getTable());
-        $mediaId = $grammar->wrap('media_id');
-        $orderColumn = $grammar->wrap('order');
-
-        foreach ($ordered_ids as $order => $media_id) {
-            $cases[] = "WHEN {$mediaId} = ? THEN ?";
-            $bindings[] = $media_id;
-            $bindings[] = (int) $order;
-        }
-
-        $caseStatement = implode(' ', $cases);
-
-        $connection->update(
-            "UPDATE {$table}"
-            ." SET {$orderColumn} = CASE {$caseStatement} ELSE {$orderColumn} END"
-            .' WHERE '.$grammar->wrap('associable_type').' = ?'
-            .' AND '.$grammar->wrap('associable_id').' = ?'
-            .' AND '.$grammar->wrap('collection').' = ?'
-            .' AND '.$mediaId.' IN ('.implode(',', array_fill(0, count($ordered_ids), '?')).')',
-            array_merge($bindings, [$this->getMorphClass(), $this->getKey(), $collection], $ordered_ids),
-        );
+        $this->nvlMedia()->order($ordered_ids, $collection);
     }
 
+    /** Forward the retained getMediaModel operation to the NVL owner API. */
     public function getMediaModel(): string
     {
-        return Media::class;
+        return $this->nvlMedia()->modelClass();
     }
 }

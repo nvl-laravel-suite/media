@@ -14,7 +14,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Nvl\Media\Contracts\AttachMediaContract;
-use Nvl\Media\Contracts\HasMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\UploadMediaContract;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Exceptions\MediaUploadException;
@@ -75,7 +75,7 @@ class MediaAdder
      * @return void
      */
     public function __construct(
-        protected Model&HasMedia $model,
+        protected Model&HasNvlMedia $model,
         protected UploadedFile|string $file,
         protected ImageOptimizationService $imageOptimizationService,
         protected UploadMediaContract $uploadMediaAction,
@@ -371,11 +371,12 @@ class MediaAdder
             metadata: $associationMeta,
             dispatchVariations: ! $this->skipVariations,
         );
+        $this->model->nvlMedia()->invalidate();
     }
 
     protected function resolveSlotConfig(string $slotName): MediaSlot
     {
-        $config = $this->model->getMediaSlot($slotName);
+        $config = $this->model->nvlMedia()->slot($slotName);
 
         if ($config === null) {
             $config = new MediaSlot($slotName);
@@ -437,8 +438,8 @@ class MediaAdder
         }
 
         $collection = $this->collectionName($slotName);
-        $this->model->unsetRelation('media');
-        $existing = $this->model->getMedia($collection);
+        $this->model->nvlMedia()->invalidate();
+        $existing = $this->model->nvlMedia()->all($collection);
         $excess_count = $existing->count() - $slot->slotSizeLimit;
 
         if ($excess_count > 0) {
@@ -455,7 +456,7 @@ class MediaAdder
                 );
             }
 
-            $this->model->unsetRelation('media');
+            $this->model->nvlMedia()->invalidate();
         }
     }
 

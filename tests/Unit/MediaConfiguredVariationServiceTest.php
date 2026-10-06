@@ -25,11 +25,11 @@ function createConfiguredVariationMedia(array $overrides = []): Media
 
 beforeEach(function (): void {
     config([
-        'media.image_variation_presets' => [
+        'nvl-media.image_variation_presets' => [
             'thumb' => ['width' => 150, 'height' => 150, 'quality' => 80, 'format' => 'webp', 'enabled' => true],
             'small' => ['width' => 320, 'height' => 320, 'quality' => 80, 'format' => 'webp', 'enabled' => false],
         ],
-        'media.output_conversion' => [
+        'nvl-media.output_conversion' => [
             'enabled' => true,
             'format' => 'webp',
             'quality' => 82,
@@ -72,7 +72,7 @@ test('configured variation service prefers thumb for preview labels and falls ba
     expect($service->preferredPreviewVariationLabel())->toBe('thumb');
 
     config([
-        'media.image_variation_presets' => [
+        'nvl-media.image_variation_presets' => [
             'thumb' => ['width' => 150, 'height' => 150, 'enabled' => false],
             'medium' => ['width' => 640, 'height' => 640, 'enabled' => true],
         ],

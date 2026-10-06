@@ -57,7 +57,7 @@ final readonly class InitiateMultipartUploadAction
         $this->diskGuard->assertAllowed($data->disk);
         $this->disks->ensureDefined($data->disk);
         $maximumSize = MediaConfiguration::integer(
-            'media.multipart.maximum_size',
+            'nvl-media.multipart.maximum_size',
             5 * 1024 * 1024 * 1024,
             1,
         );
@@ -72,17 +72,17 @@ final readonly class InitiateMultipartUploadAction
 
         $fileType = $this->fileTypes->resolve($data->filename, $data->mimeType);
         $minimumPartSize = MediaConfiguration::integer(
-            'media.multipart.minimum_part_size',
+            'nvl-media.multipart.minimum_part_size',
             5 * 1024 * 1024,
             1,
         );
         $maximumPartSize = MediaConfiguration::integer(
-            'media.multipart.maximum_part_size',
+            'nvl-media.multipart.maximum_part_size',
             5 * 1024 * 1024 * 1024,
             $minimumPartSize,
         );
         $maximumParts = MediaConfiguration::integer(
-            'media.multipart.maximum_parts',
+            'nvl-media.multipart.maximum_parts',
             10_000,
             1,
         );
@@ -113,7 +113,7 @@ final readonly class InitiateMultipartUploadAction
             'uploader_id' => (string) $actor->id,
             'uploader_type' => $actor->type,
             'expires_at' => now()->addMinutes(
-                MediaConfiguration::integer('media.multipart.session_minutes', 60, 1),
+                MediaConfiguration::integer('nvl-media.multipart.session_minutes', 60, 1),
             ),
             'part_size' => $partSize,
             'expected_parts' => $expectedParts,
@@ -207,7 +207,7 @@ final readonly class InitiateMultipartUploadAction
 
     private function assertEnabled(): void
     {
-        if (! (bool) config('media.multipart.enabled', false)) {
+        if (! (bool) config('nvl-media.multipart.enabled', false)) {
             throw new MediaUploadException('Multipart uploads are disabled.');
         }
     }

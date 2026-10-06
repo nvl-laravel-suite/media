@@ -2,12 +2,16 @@
 
 declare(strict_types=1);
 
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\MediaLibraryContract;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\MediaAdder;
+use Nvl\Media\MediaOwner;
+use Nvl\Media\MediaRegistration;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Traits\InteractsWithMedia;
+use Nvl\Media\Traits\InteractsWithNvlMedia;
 
 test('canonical documentation files exist and are linked from the readme', function (): void {
     $root = dirname(__DIR__, 2);
@@ -34,6 +38,10 @@ test('the PHP reference covers every public integration method', function (): vo
     $root = dirname(__DIR__, 2);
     $reference = file_get_contents($root.'/docs/php-api.md');
     $surfaces = [
+        HasNvlMedia::class,
+        MediaOwner::class,
+        MediaRegistration::class,
+        InteractsWithNvlMedia::class,
         MediaLibraryContract::class,
         InteractsWithMedia::class,
         MediaAdder::class,
@@ -83,9 +91,12 @@ test('the HTTP reference covers every package route name', function (): void {
     }
 
     foreach ($assetNames[1] as $name) {
-        $qualifiedName = str_starts_with($name, 'media.')
+        if (str_ends_with($name, '.')) {
+            continue;
+        }
+        $qualifiedName = str_starts_with($name, 'nvl.media.')
             ? $name
-            : 'media.'.$name;
+            : 'nvl.media.'.$name;
 
         expect($reference)
             ->toContain($qualifiedName);
@@ -112,17 +123,17 @@ test('the extension reference covers every contract and lifecycle event', functi
 test('the configuration reference covers every top-level key and environment variable', function (): void {
     $root = dirname(__DIR__, 2);
     $reference = file_get_contents($root.'/docs/configuration.md');
-    $configurationSource = file_get_contents($root.'/config/media.php');
+    $configurationSource = file_get_contents($root.'/config/nvl-media.php');
 
     /** @var array<string, mixed> $configuration */
-    $configuration = require $root.'/config/media.php';
+    $configuration = require $root.'/config/nvl-media.php';
 
     expect($reference)->toBeString()
         ->and($configurationSource)->toBeString();
 
     foreach (array_keys($configuration) as $key) {
         expect($reference)
-            ->toContain('media.'.$key);
+            ->toContain('nvl-media.'.$key);
     }
 
     preg_match_all("/env\\('([A-Z0-9_]+)'/", $configurationSource, $environmentVariables);

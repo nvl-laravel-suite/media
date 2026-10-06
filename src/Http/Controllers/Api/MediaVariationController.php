@@ -49,7 +49,7 @@ final class MediaVariationController extends Controller
 
         if (! $media->type->supportsConversions()) {
             return response()->json([
-                'message' => (string) trans('media::media/messages.error.variations_unsupported'),
+                'message' => (string) trans('nvl-media::media/messages.error.variations_unsupported'),
                 'code' => 'variations_unsupported',
             ], HttpResponse::HTTP_UNPROCESSABLE_ENTITY);
         }
@@ -81,7 +81,7 @@ final class MediaVariationController extends Controller
         return response()->json([
             'data' => ['regenerated' => $results],
             'message' => (string) trans(
-                'media::media/messages.success.variations_regenerated',
+                'nvl-media::media/messages.success.variations_regenerated',
             ),
         ]);
     }

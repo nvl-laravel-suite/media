@@ -27,9 +27,9 @@ beforeEach(function () {
 
     config([
         'filesystems.default' => 'public',
-        'media.auto_generate_variations' => false,
-        'media.auto_generate_conversions' => false,
-        'media.output_conversion.enabled' => false,
+        'nvl-media.auto_generate_variations' => false,
+        'nvl-media.auto_generate_conversions' => false,
+        'nvl-media.output_conversion.enabled' => false,
     ]);
 });
 
@@ -48,12 +48,12 @@ function adderOwnerCollectionLockKey(TestMediaModel $model, string $collection):
         $collection,
     ]));
 
-    return 'media:mutation:'.hash('sha256', "owner-collection:{$scope}");
+    return 'nvl:media:mutation:'.hash('sha256', "owner-collection:{$scope}");
 }
 
 function adderMutationLockKey(string $identity): string
 {
-    return 'media:mutation:'.hash('sha256', $identity);
+    return 'nvl:media:mutation:'.hash('sha256', $identity);
 }
 
 function canAcquireAdderMutationLock(string $identity): bool
@@ -202,7 +202,7 @@ describe('slot', function () {
 
     it('applies disk override', function () {
         Storage::fake('s3');
-        config(['media.allowed_disks' => ['public', 's3']]);
+        config(['nvl-media.allowed_disks' => ['public', 's3']]);
 
         $model = adderTestModel();
         $file = UploadedFile::fake()->image('photo.jpg', 100, 100);
@@ -847,10 +847,10 @@ describe('slot size limit', function () {
 
     it('serializes size-limited uploads by owner and collection', function () {
         config([
-            'media.mutation_lock.enabled' => true,
-            'media.mutation_lock.store' => 'array',
-            'media.mutation_lock.seconds' => 10,
-            'media.mutation_lock.wait_seconds' => 0,
+            'nvl-media.mutation_lock.enabled' => true,
+            'nvl-media.mutation_lock.store' => 'array',
+            'nvl-media.mutation_lock.seconds' => 10,
+            'nvl-media.mutation_lock.wait_seconds' => 0,
         ]);
         $model = adderTestModel();
         $otherModel = adderTestModel(['name' => 'Other lock owner']);
@@ -895,10 +895,10 @@ describe('slot size limit', function () {
 
     it('acquires only missing identities when media mutation locks are nested', function () {
         config([
-            'media.mutation_lock.enabled' => true,
-            'media.mutation_lock.store' => 'array',
-            'media.mutation_lock.seconds' => 10,
-            'media.mutation_lock.wait_seconds' => 0,
+            'nvl-media.mutation_lock.enabled' => true,
+            'nvl-media.mutation_lock.store' => 'array',
+            'nvl-media.mutation_lock.seconds' => 10,
+            'nvl-media.mutation_lock.wait_seconds' => 0,
         ]);
         $lock = app(MediaMutationLock::class);
         $availabilityDuringInner = [];
@@ -942,10 +942,10 @@ describe('slot size limit', function () {
 
     it('releases partially acquired mutation locks when a later identity times out', function () {
         config([
-            'media.mutation_lock.enabled' => true,
-            'media.mutation_lock.store' => 'array',
-            'media.mutation_lock.seconds' => 10,
-            'media.mutation_lock.wait_seconds' => 0,
+            'nvl-media.mutation_lock.enabled' => true,
+            'nvl-media.mutation_lock.store' => 'array',
+            'nvl-media.mutation_lock.seconds' => 10,
+            'nvl-media.mutation_lock.wait_seconds' => 0,
         ]);
         $blocked = Cache::store('array')->lock(
             adderMutationLockKey('z-blocked'),
@@ -968,10 +968,10 @@ describe('slot size limit', function () {
 
     it('holds mutation locks until the real database transaction completes', function () {
         config([
-            'media.mutation_lock.enabled' => true,
-            'media.mutation_lock.store' => 'array',
-            'media.mutation_lock.seconds' => 10,
-            'media.mutation_lock.wait_seconds' => 0,
+            'nvl-media.mutation_lock.enabled' => true,
+            'nvl-media.mutation_lock.store' => 'array',
+            'nvl-media.mutation_lock.seconds' => 10,
+            'nvl-media.mutation_lock.wait_seconds' => 0,
         ]);
         $lock = app(MediaMutationLock::class);
         $originalConnection = DB::getDefaultConnection();
@@ -1086,7 +1086,7 @@ describe('slotOnCloudDisk', function () {
         Storage::fake('s3');
         config([
             'filesystems.cloud' => 's3',
-            'media.allowed_disks' => ['public', 's3'],
+            'nvl-media.allowed_disks' => ['public', 's3'],
         ]);
 
         $model = adderTestModel();

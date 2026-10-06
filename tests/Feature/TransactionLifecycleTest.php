@@ -23,9 +23,9 @@ use Nvl\Media\Slots\MediaSlot;
 beforeEach(function (): void {
     Storage::fake('public');
     config([
-        'media.root_folder' => 'media',
-        'media.auto_generate_variations' => false,
-        'media.output_conversion.enabled' => false,
+        'nvl-media.root_folder' => 'media',
+        'nvl-media.auto_generate_variations' => false,
+        'nvl-media.output_conversion.enabled' => false,
     ]);
 });
 

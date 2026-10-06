@@ -49,7 +49,7 @@ final class MediaUploadController extends Controller
 
         if (! $owner instanceof Model) {
             throw ValidationException::withMessages([
-                'user' => [(string) trans('media::media/messages.error.unauthorized')],
+                'user' => [(string) trans('nvl-media::media/messages.error.unauthorized')],
             ]);
         }
 
@@ -73,7 +73,7 @@ final class MediaUploadController extends Controller
 
         return response()->json([
             'data' => ['items' => $uploaded],
-            'message' => (string) trans('media::media/messages.success.uploaded'),
+            'message' => (string) trans('nvl-media::media/messages.success.uploaded'),
         ], HttpResponse::HTTP_CREATED);
     }
 
@@ -93,7 +93,7 @@ final class MediaUploadController extends Controller
 
         return response()->json([
             'data' => $this->resources->fromModel($updated),
-            'message' => (string) trans('media::media/messages.success.replaced'),
+            'message' => (string) trans('nvl-media::media/messages.success.replaced'),
         ]);
     }
 }

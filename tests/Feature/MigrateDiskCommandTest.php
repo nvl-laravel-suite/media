@@ -175,7 +175,7 @@ it('moves objects to an R2-style destination disk without requiring a local dest
 
     config([
         'filesystems.disks.cloudflare-r2.driver' => 's3',
-        'media.allowed_disks' => ['public', 'cloudflare-r2'],
+        'nvl-media.allowed_disks' => ['public', 'cloudflare-r2'],
     ]);
 
     $media = createMigratableMedia([
@@ -203,7 +203,7 @@ it('verifies a matching pre-existing destination before removing the source', fu
 
     config([
         'filesystems.disks.cloudflare-r2.driver' => 's3',
-        'media.allowed_disks' => ['public', 'cloudflare-r2'],
+        'nvl-media.allowed_disks' => ['public', 'cloudflare-r2'],
     ]);
 
     $media = createMigratableMedia([
@@ -235,7 +235,7 @@ it('rejects a same-size pre-existing destination with a different checksum', fun
 
     config([
         'filesystems.disks.cloudflare-r2.driver' => 's3',
-        'media.allowed_disks' => ['public', 'cloudflare-r2'],
+        'nvl-media.allowed_disks' => ['public', 'cloudflare-r2'],
     ]);
 
     $media = createMigratableMedia([
@@ -267,7 +267,7 @@ it('removes a newly copied destination when source deletion returns false', func
 
     config([
         'filesystems.disks.cloudflare-r2.driver' => 's3',
-        'media.allowed_disks' => ['public', 'cloudflare-r2'],
+        'nvl-media.allowed_disks' => ['public', 'cloudflare-r2'],
     ]);
 
     $media = createMigratableMedia([
@@ -297,7 +297,7 @@ it('preserves a pre-existing destination when source deletion throws', function 
 
     config([
         'filesystems.disks.cloudflare-r2.driver' => 's3',
-        'media.allowed_disks' => ['public', 'cloudflare-r2'],
+        'nvl-media.allowed_disks' => ['public', 'cloudflare-r2'],
     ]);
 
     $media = createMigratableMedia([
@@ -327,7 +327,7 @@ it('keeps the source and database unchanged when a copied destination fails chec
     installCorruptingMigrationDisk('corrupting-destination');
 
     config([
-        'media.allowed_disks' => ['public', 'corrupting-destination'],
+        'nvl-media.allowed_disks' => ['public', 'corrupting-destination'],
     ]);
 
     $media = createMigratableMedia([
@@ -358,7 +358,7 @@ it('restores a removed source without deleting a pre-existing destination when a
 
     config([
         'filesystems.disks.cloudflare-r2.driver' => 's3',
-        'media.allowed_disks' => ['public', 'cloudflare-r2'],
+        'nvl-media.allowed_disks' => ['public', 'cloudflare-r2'],
     ]);
 
     $media = createMigratableMedia([
@@ -400,7 +400,7 @@ it('restores the source and removes a newly created destination when a later obj
 
     config([
         'filesystems.disks.cloudflare-r2.driver' => 's3',
-        'media.allowed_disks' => ['public', 'cloudflare-r2'],
+        'nvl-media.allowed_disks' => ['public', 'cloudflare-r2'],
     ]);
 
     $media = createMigratableMedia([
@@ -445,7 +445,7 @@ it('rolls back every filesystem move when the final database update fails', func
 
     config([
         'filesystems.disks.cloudflare-r2.driver' => 's3',
-        'media.allowed_disks' => ['public', 'cloudflare-r2'],
+        'nvl-media.allowed_disks' => ['public', 'cloudflare-r2'],
     ]);
 
     $newDestination = createMigratableMedia([
@@ -500,7 +500,7 @@ it('scopes disk migration by associable type and collection and moves variations
 
     config([
         'filesystems.disks.cloudflare-r2.driver' => 's3',
-        'media.allowed_disks' => ['public', 'cloudflare-r2'],
+        'nvl-media.allowed_disks' => ['public', 'cloudflare-r2'],
     ]);
 
     $productMedia = createMigratableMedia([

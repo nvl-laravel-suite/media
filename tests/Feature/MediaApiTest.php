@@ -23,8 +23,8 @@ use Nvl\Media\Tests\Stubs\TestPermissionMediaUser;
 
 beforeEach(function () {
     Gate::define('update', fn ($u, $m) => (string) $u->id === (string) $m->id);
-    config()->set('media.associable_mutation_abilities', []);
-    config()->set('media.allowed_associable_types', [TestMediaUser::class]);
+    config()->set('nvl-media.associable_mutation_abilities', []);
+    config()->set('nvl-media.allowed_associable_types', [TestMediaUser::class]);
 });
 
 function createApiUser(array $overrides = []): TestMediaUser
@@ -47,6 +47,7 @@ function createPermissionApiUser(
     array $roles = [],
     array $permissions = [],
 ): TestPermissionMediaUser {
+    config()->set('nvl-media.authorization.spatie_permission.enabled', true);
     $user = TestPermissionMediaUser::withoutEvents(
         static fn (): TestPermissionMediaUser => TestPermissionMediaUser::forceCreate([
             'name' => 'Privileged Media User',
@@ -124,16 +125,16 @@ function createUnsupportedApiAssociable(): Model
 describe('Authentication', function () {
 
     it('requires authentication for all endpoints', function () {
-        $this->getJson('/api/v1/media')->assertStatus(401);
-        $this->postJson('/api/v1/media')->assertStatus(401);
-        $this->getJson('/api/v1/media/00000000-0000-0000-0000-000000000000')->assertStatus(401);
-        $this->putJson('/api/v1/media/00000000-0000-0000-0000-000000000000')->assertStatus(401);
-        $this->deleteJson('/api/v1/media/00000000-0000-0000-0000-000000000000')->assertStatus(401);
-        $this->postJson('/api/v1/media/00000000-0000-0000-0000-000000000000/attach')->assertStatus(401);
-        $this->postJson('/api/v1/media/00000000-0000-0000-0000-000000000000/detach')->assertStatus(401);
-        $this->getJson('/api/v1/media/00000000-0000-0000-0000-000000000000/variations')->assertStatus(401);
-        $this->postJson('/api/v1/media/00000000-0000-0000-0000-000000000000/regenerate')->assertStatus(401);
-        $this->postJson('/api/v1/media/reorder')->assertStatus(401);
+        $this->getJson('/nvl/api/v1/media')->assertStatus(401);
+        $this->postJson('/nvl/api/v1/media')->assertStatus(401);
+        $this->getJson('/nvl/api/v1/media/00000000-0000-0000-0000-000000000000')->assertStatus(401);
+        $this->putJson('/nvl/api/v1/media/00000000-0000-0000-0000-000000000000')->assertStatus(401);
+        $this->deleteJson('/nvl/api/v1/media/00000000-0000-0000-0000-000000000000')->assertStatus(401);
+        $this->postJson('/nvl/api/v1/media/00000000-0000-0000-0000-000000000000/attach')->assertStatus(401);
+        $this->postJson('/nvl/api/v1/media/00000000-0000-0000-0000-000000000000/detach')->assertStatus(401);
+        $this->getJson('/nvl/api/v1/media/00000000-0000-0000-0000-000000000000/variations')->assertStatus(401);
+        $this->postJson('/nvl/api/v1/media/00000000-0000-0000-0000-000000000000/regenerate')->assertStatus(401);
+        $this->postJson('/nvl/api/v1/media/reorder')->assertStatus(401);
     });
 
     it('requires an exact morph identity for private ownership', function () {
@@ -172,10 +173,10 @@ describe('Authentication', function () {
 });
 
 /* =================================================================
- * GET /api/v1/media (index)
+ * GET /nvl/api/v1/media (index)
  * ================================================================= */
 
-describe('GET /api/v1/media (index)', function () {
+describe('GET /nvl/api/v1/media (index)', function () {
 
     it('lists media with pagination', function () {
         $user = createApiUser();
@@ -184,7 +185,7 @@ describe('GET /api/v1/media (index)', function () {
         createApiMedia(['filename' => 'file-2.jpg', 'is_public' => true]);
         createApiMedia(['filename' => 'file-3.jpg', 'is_public' => true]);
 
-        $response = $this->actingAs($user)->getJson('/api/v1/media');
+        $response = $this->actingAs($user)->getJson('/nvl/api/v1/media');
 
         $response->assertStatus(200)
             ->assertJsonStructure([
@@ -202,7 +203,7 @@ describe('GET /api/v1/media (index)', function () {
         createApiMedia(['filename' => 'sunset-photo.jpg', 'is_public' => true]);
         createApiMedia(['filename' => 'mountain-view.jpg', 'is_public' => true]);
 
-        $response = $this->actingAs($user)->getJson('/api/v1/media?search=sunset');
+        $response = $this->actingAs($user)->getJson('/nvl/api/v1/media?search=sunset');
 
         $response->assertStatus(200);
 
@@ -226,7 +227,7 @@ describe('GET /api/v1/media (index)', function () {
             'is_public' => true,
         ]);
 
-        $response = $this->actingAs($user)->getJson('/api/v1/media?type=document');
+        $response = $this->actingAs($user)->getJson('/nvl/api/v1/media?type=document');
 
         $response->assertStatus(200);
     });
@@ -235,7 +236,7 @@ describe('GET /api/v1/media (index)', function () {
         $user = createApiUser();
 
         $this->actingAs($user)
-            ->getJson('/api/v1/media?'.$query)
+            ->getJson('/nvl/api/v1/media?'.$query)
             ->assertUnprocessable();
     })->with([
         'oversized search' => ['search='.str_repeat('a', 256)],
@@ -276,7 +277,7 @@ describe('GET /api/v1/media (index)', function () {
             Storage::disk('public')->put($m->folder.'/'.$m->hash, 'content');
         }
 
-        $response = $this->actingAs($owner)->getJson('/api/v1/media');
+        $response = $this->actingAs($owner)->getJson('/nvl/api/v1/media');
         $response->assertStatus(200);
 
         $items = $response->json('data.media.items');
@@ -336,7 +337,7 @@ describe('GET /api/v1/media (index)', function () {
 
         $deletedPrivate->delete();
 
-        $response = $this->actingAs($manager)->getJson('/api/v1/media');
+        $response = $this->actingAs($manager)->getJson('/nvl/api/v1/media');
         $response->assertStatus(200);
 
         $items = $response->json('data.media.items');
@@ -349,7 +350,7 @@ describe('GET /api/v1/media (index)', function () {
     it('lets a configured global role list and delete media across ownership boundaries', function () {
         Storage::fake('public');
         config()->set(
-            'media.authorization.spatie_permission.global_roles',
+            'nvl-media.authorization.spatie_permission.global_roles',
             ['media-admin'],
         );
 
@@ -364,12 +365,12 @@ describe('GET /api/v1/media (index)', function () {
         Storage::disk('public')->put($media->folder.'/'.$media->hash, 'content');
 
         $this->actingAs($administrator)
-            ->getJson('/api/v1/media')
+            ->getJson('/nvl/api/v1/media')
             ->assertOk()
             ->assertJsonFragment(['filename' => 'owner-private.jpg']);
 
         $this->actingAs($administrator)
-            ->deleteJson("/api/v1/media/{$media->id}")
+            ->deleteJson("/nvl/api/v1/media/{$media->id}")
             ->assertOk();
 
         expect(Media::withTrashed()->findOrFail($media->id)->trashed())->toBeTrue();
@@ -380,7 +381,7 @@ describe('GET /api/v1/media (index)', function () {
 
         $administrator = createPermissionApiUser(
             roles: ['admin'],
-            permissions: ['media.delete-any'],
+            permissions: ['nvl.media.delete-any'],
         );
         $owner = createApiUser();
         $media = createApiMedia([
@@ -390,7 +391,7 @@ describe('GET /api/v1/media (index)', function () {
         ]);
 
         $this->actingAs($administrator)
-            ->deleteJson("/api/v1/media/{$media->id}")
+            ->deleteJson("/nvl/api/v1/media/{$media->id}")
             ->assertOk();
 
         expect(Media::withTrashed()->findOrFail($media->id)->trashed())->toBeTrue();
@@ -410,8 +411,8 @@ describe('GET /api/v1/media (index)', function () {
             'quality' => 80,
         ]);
 
-        $without = $this->actingAs($user)->getJson('/api/v1/media?include_variations=0');
-        $with = $this->actingAs($user)->getJson('/api/v1/media?include_variations=1');
+        $without = $this->actingAs($user)->getJson('/nvl/api/v1/media?include_variations=0');
+        $with = $this->actingAs($user)->getJson('/nvl/api/v1/media?include_variations=1');
 
         $without->assertStatus(200);
         $with->assertStatus(200);
@@ -430,16 +431,16 @@ describe('GET /api/v1/media (index)', function () {
 });
 
 /* =================================================================
- * GET /api/v1/media/{id} (show)
+ * GET /nvl/api/v1/media/{id} (show)
  * ================================================================= */
 
-describe('GET /api/v1/media/{id} (show)', function () {
+describe('GET /nvl/api/v1/media/{id} (show)', function () {
 
     it('returns a single media item', function () {
         $user = createApiUser();
         $media = createApiMedia(['is_public' => true]);
 
-        $response = $this->actingAs($user)->getJson("/api/v1/media/{$media->id}");
+        $response = $this->actingAs($user)->getJson("/nvl/api/v1/media/{$media->id}");
 
         $response->assertStatus(200)
             ->assertJsonPath('data.id', $media->id)
@@ -458,7 +459,7 @@ describe('GET /api/v1/media/{id} (show)', function () {
         ]);
 
         $this->actingAs($user)
-            ->getJson("/api/v1/media/{$media->id}")
+            ->getJson("/nvl/api/v1/media/{$media->id}")
             ->assertOk()
             ->assertJsonPath('data.translations.en.title', 'Campaign')
             ->assertJsonPath('data.translations.en.alt', 'Campaign photograph')
@@ -469,7 +470,7 @@ describe('GET /api/v1/media/{id} (show)', function () {
     it('returns 404 for non-existent media', function () {
         $user = createApiUser();
 
-        $response = $this->actingAs($user)->getJson('/api/v1/media/00000000-0000-0000-0000-000000000000');
+        $response = $this->actingAs($user)->getJson('/nvl/api/v1/media/00000000-0000-0000-0000-000000000000');
 
         $response->assertStatus(404);
     });
@@ -482,7 +483,7 @@ describe('GET /api/v1/media/{id} (show)', function () {
         // Put a file so getUrl() won't fail
         Storage::disk('public')->put($media->folder.'/'.$media->hash, 'content');
 
-        $response = $this->actingAs($user)->getJson("/api/v1/media/{$media->id}");
+        $response = $this->actingAs($user)->getJson("/nvl/api/v1/media/{$media->id}");
 
         $response->assertStatus(200);
     });
@@ -492,7 +493,7 @@ describe('GET /api/v1/media/{id} (show)', function () {
         $other = createApiUser();
         $media = createApiMedia(['is_public' => false, 'uploaded_by' => $owner->id]);
 
-        $response = $this->actingAs($other)->getJson("/api/v1/media/{$media->id}");
+        $response = $this->actingAs($other)->getJson("/nvl/api/v1/media/{$media->id}");
 
         $response->assertStatus(403);
     });
@@ -511,8 +512,8 @@ describe('GET /api/v1/media/{id} (show)', function () {
             'quality' => 80,
         ]);
 
-        $without = $this->actingAs($user)->getJson("/api/v1/media/{$media->id}?include_variations=0");
-        $with = $this->actingAs($user)->getJson("/api/v1/media/{$media->id}?include_variations=1");
+        $without = $this->actingAs($user)->getJson("/nvl/api/v1/media/{$media->id}?include_variations=0");
+        $with = $this->actingAs($user)->getJson("/nvl/api/v1/media/{$media->id}?include_variations=1");
 
         $without->assertStatus(200);
         $with->assertStatus(200);
@@ -533,7 +534,7 @@ describe('GET /api/v1/media/{id} (show)', function () {
             'order' => 0,
         ]);
 
-        $response = $this->actingAs($user)->getJson("/api/v1/media/{$media->id}");
+        $response = $this->actingAs($user)->getJson("/nvl/api/v1/media/{$media->id}");
 
         $response->assertStatus(200)
             ->assertJsonPath('data.usages.0.modelId', (string) $user->id);
@@ -543,19 +544,19 @@ describe('GET /api/v1/media/{id} (show)', function () {
 });
 
 /* =================================================================
- * POST /api/v1/media (store)
+ * POST /nvl/api/v1/media (store)
  * ================================================================= */
 
-describe('POST /api/v1/media (store)', function () {
+describe('POST /nvl/api/v1/media (store)', function () {
 
     beforeEach(function () {
         Storage::fake('public');
 
         config([
             'filesystems.default' => 'public',
-            'media.default_path' => '{model_type}/{model_id}',
-            'media.auto_generate_variations' => false,
-            'media.group_types' => [
+            'nvl-media.default_path' => '{model_type}/{model_id}',
+            'nvl-media.auto_generate_variations' => false,
+            'nvl-media.group_types' => [
                 'image' => ['jpg', 'jpeg', 'png', 'gif', 'webp'],
                 'document' => ['pdf', 'doc', 'docx'],
             ],
@@ -566,7 +567,7 @@ describe('POST /api/v1/media (store)', function () {
         $user = createApiUser();
         $file = UploadedFile::fake()->image('photo.jpg', 100, 100);
 
-        $response = $this->actingAs($user)->postJson('/api/v1/media', [
+        $response = $this->actingAs($user)->postJson('/nvl/api/v1/media', [
             'files' => [$file],
             'collection' => 'gallery',
             'is_public' => true,
@@ -581,7 +582,7 @@ describe('POST /api/v1/media (store)', function () {
         $user = createApiUser();
         $file = UploadedFile::fake()->image('photo.jpg', 100, 100);
 
-        $this->actingAs($user)->postJson('/api/v1/media', [
+        $this->actingAs($user)->postJson('/nvl/api/v1/media', [
             'files' => [$file],
             'collection' => 'gallery',
             'is_public' => true,
@@ -597,23 +598,23 @@ describe('POST /api/v1/media (store)', function () {
     it('validates required files', function () {
         $user = createApiUser();
 
-        $response = $this->actingAs($user)->postJson('/api/v1/media', []);
+        $response = $this->actingAs($user)->postJson('/nvl/api/v1/media', []);
 
         $response->assertStatus(422);
     });
 });
 
 /* =================================================================
- * PUT /api/v1/media/{id} (update)
+ * PUT /nvl/api/v1/media/{id} (update)
  * ================================================================= */
 
-describe('PUT /api/v1/media/{id} (update)', function () {
+describe('PUT /nvl/api/v1/media/{id} (update)', function () {
 
     it('updates media metadata as owner', function () {
         $user = createApiUser();
         $media = createApiMedia(['tags' => ['old'], 'uploaded_by' => $user->id]);
 
-        $response = $this->actingAs($user)->putJson("/api/v1/media/{$media->id}", [
+        $response = $this->actingAs($user)->putJson("/nvl/api/v1/media/{$media->id}", [
             'tags' => ['new', 'updated'],
         ]);
 
@@ -628,7 +629,7 @@ describe('PUT /api/v1/media/{id} (update)', function () {
         $user = createApiUser();
         $media = createApiMedia(['is_public' => false, 'uploaded_by' => $user->id]);
 
-        $response = $this->actingAs($user)->putJson("/api/v1/media/{$media->id}", [
+        $response = $this->actingAs($user)->putJson("/nvl/api/v1/media/{$media->id}", [
             'is_public' => true,
         ]);
 
@@ -644,7 +645,7 @@ describe('PUT /api/v1/media/{id} (update)', function () {
         $other = createApiUser();
         $media = createApiMedia(['tags' => ['old'], 'uploaded_by' => $owner->id]);
 
-        $response = $this->actingAs($other)->putJson("/api/v1/media/{$media->id}", [
+        $response = $this->actingAs($other)->putJson("/nvl/api/v1/media/{$media->id}", [
             'tags' => ['hacked'],
         ]);
 
@@ -653,10 +654,10 @@ describe('PUT /api/v1/media/{id} (update)', function () {
 });
 
 /* =================================================================
- * DELETE /api/v1/media/{id} (destroy)
+ * DELETE /nvl/api/v1/media/{id} (destroy)
  * ================================================================= */
 
-describe('DELETE /api/v1/media/{id} (destroy)', function () {
+describe('DELETE /nvl/api/v1/media/{id} (destroy)', function () {
 
     it('deletes media as owner', function () {
         Storage::fake('public');
@@ -665,7 +666,7 @@ describe('DELETE /api/v1/media/{id} (destroy)', function () {
         $media = createApiMedia(['uploaded_by' => $user->id]);
         $media_id = $media->id;
 
-        $response = $this->actingAs($user)->deleteJson("/api/v1/media/{$media_id}");
+        $response = $this->actingAs($user)->deleteJson("/nvl/api/v1/media/{$media_id}");
 
         $response->assertStatus(200);
 
@@ -678,23 +679,23 @@ describe('DELETE /api/v1/media/{id} (destroy)', function () {
         $other = createApiUser();
         $media = createApiMedia(['uploaded_by' => $owner->id]);
 
-        $response = $this->actingAs($other)->deleteJson("/api/v1/media/{$media->id}");
+        $response = $this->actingAs($other)->deleteJson("/nvl/api/v1/media/{$media->id}");
 
         $response->assertStatus(403);
     });
 });
 
 /* =================================================================
- * POST /api/v1/media/{id}/attach
+ * POST /nvl/api/v1/media/{id}/attach
  * ================================================================= */
 
-describe('POST /api/v1/media/{id}/attach', function () {
+describe('POST /nvl/api/v1/media/{id}/attach', function () {
 
     it('attaches media to a model as owner', function () {
         $user = createApiUser();
         $media = createApiMedia(['uploaded_by' => $user->id]);
 
-        $response = $this->actingAs($user)->postJson("/api/v1/media/{$media->id}/attach", [
+        $response = $this->actingAs($user)->postJson("/nvl/api/v1/media/{$media->id}/attach", [
             'associableType' => TestMediaUser::class,
             'associableId' => (string) $user->id,
             'collection' => 'avatar',
@@ -713,9 +714,9 @@ describe('POST /api/v1/media/{id}/attach', function () {
     it('fails closed when no associable model types are allowlisted', function () {
         $user = createApiUser();
         $media = createApiMedia(['uploaded_by' => $user->id]);
-        config()->set('media.allowed_associable_types', []);
+        config()->set('nvl-media.allowed_associable_types', []);
 
-        $this->actingAs($user)->postJson("/api/v1/media/{$media->id}/attach", [
+        $this->actingAs($user)->postJson("/nvl/api/v1/media/{$media->id}/attach", [
             'associableType' => TestMediaUser::class,
             'associableId' => (string) $user->id,
             'collection' => 'avatar',
@@ -733,7 +734,7 @@ describe('POST /api/v1/media/{id}/attach', function () {
         $other = createApiUser();
         $media = createApiMedia(['uploaded_by' => $owner->id]);
 
-        $response = $this->actingAs($other)->postJson("/api/v1/media/{$media->id}/attach", [
+        $response = $this->actingAs($other)->postJson("/nvl/api/v1/media/{$media->id}/attach", [
             'associableType' => TestMediaUser::class,
             'associableId' => (string) $other->id,
             'collection' => 'avatar',
@@ -747,7 +748,7 @@ describe('POST /api/v1/media/{id}/attach', function () {
         $target = createApiUser();
         $media = createApiMedia(['uploaded_by' => $owner->id]);
 
-        $response = $this->actingAs($owner)->postJson("/api/v1/media/{$media->id}/attach", [
+        $response = $this->actingAs($owner)->postJson("/nvl/api/v1/media/{$media->id}/attach", [
             'associableType' => TestMediaUser::class,
             'associableId' => (string) $target->id,
             'collection' => 'avatar',
@@ -769,9 +770,9 @@ describe('POST /api/v1/media/{id}/attach', function () {
         $unsupportedAssociable = createUnsupportedApiAssociable();
         $unsupportedAssociableClass = $unsupportedAssociable::class;
 
-        config()->set('media.allowed_associable_types', [$unsupportedAssociableClass]);
+        config()->set('nvl-media.allowed_associable_types', [$unsupportedAssociableClass]);
 
-        $response = $this->actingAs($owner)->postJson("/api/v1/media/{$media->id}/attach", [
+        $response = $this->actingAs($owner)->postJson("/nvl/api/v1/media/{$media->id}/attach", [
             'associableType' => $unsupportedAssociableClass,
             'associableId' => (string) $unsupportedAssociable->getKey(),
             'collection' => 'default',
@@ -781,16 +782,16 @@ describe('POST /api/v1/media/{id}/attach', function () {
             ->assertInvalid(['associableType'])
             ->assertJsonPath(
                 'errors.associableType.0',
-                trans('media::media/messages.error.associable_type_must_support_media'),
+                trans('nvl-media::media/messages.error.associable_type_must_support_media'),
             );
     });
 });
 
 /* =================================================================
- * POST /api/v1/media/{id}/detach
+ * POST /nvl/api/v1/media/{id}/detach
  * ================================================================= */
 
-describe('POST /api/v1/media/{id}/detach', function () {
+describe('POST /nvl/api/v1/media/{id}/detach', function () {
 
     it('detaches media from a model as owner', function () {
         $user = createApiUser();
@@ -804,7 +805,7 @@ describe('POST /api/v1/media/{id}/detach', function () {
             'order' => 0,
         ]);
 
-        $response = $this->actingAs($user)->postJson("/api/v1/media/{$media->id}/detach", [
+        $response = $this->actingAs($user)->postJson("/nvl/api/v1/media/{$media->id}/detach", [
             'associableType' => TestMediaUser::class,
             'associableId' => (string) $user->id,
             'collection' => 'avatar',
@@ -831,7 +832,7 @@ describe('POST /api/v1/media/{id}/detach', function () {
             'order' => 0,
         ]);
 
-        $response = $this->actingAs($owner)->postJson("/api/v1/media/{$media->id}/detach", [
+        $response = $this->actingAs($owner)->postJson("/nvl/api/v1/media/{$media->id}/detach", [
             'associableType' => TestMediaUser::class,
             'associableId' => (string) $target->id,
             'collection' => 'avatar',
@@ -853,9 +854,9 @@ describe('POST /api/v1/media/{id}/detach', function () {
         $unsupportedAssociable = createUnsupportedApiAssociable();
         $unsupportedAssociableClass = $unsupportedAssociable::class;
 
-        config()->set('media.allowed_associable_types', [$unsupportedAssociableClass]);
+        config()->set('nvl-media.allowed_associable_types', [$unsupportedAssociableClass]);
 
-        $response = $this->actingAs($owner)->postJson("/api/v1/media/{$media->id}/detach", [
+        $response = $this->actingAs($owner)->postJson("/nvl/api/v1/media/{$media->id}/detach", [
             'associableType' => $unsupportedAssociableClass,
             'associableId' => (string) $unsupportedAssociable->getKey(),
             'collection' => 'default',
@@ -865,16 +866,16 @@ describe('POST /api/v1/media/{id}/detach', function () {
             ->assertInvalid(['associableType'])
             ->assertJsonPath(
                 'errors.associableType.0',
-                trans('media::media/messages.error.associable_type_must_support_media'),
+                trans('nvl-media::media/messages.error.associable_type_must_support_media'),
             );
     });
 });
 
 /* =================================================================
- * POST /api/v1/media/reorder
+ * POST /nvl/api/v1/media/reorder
  * ================================================================= */
 
-describe('POST /api/v1/media/reorder', function () {
+describe('POST /nvl/api/v1/media/reorder', function () {
 
     it('denies reordering media on another user when the actor cannot update that target user', function () {
         $owner = createApiUser();
@@ -898,7 +899,7 @@ describe('POST /api/v1/media/reorder', function () {
             'order' => 1,
         ]);
 
-        $response = $this->actingAs($owner)->postJson('/api/v1/media/reorder', [
+        $response = $this->actingAs($owner)->postJson('/nvl/api/v1/media/reorder', [
             'mediaIds' => [$secondMedia->id, $firstMedia->id],
             'associableType' => TestMediaUser::class,
             'associableId' => (string) $target->id,
@@ -934,9 +935,9 @@ describe('POST /api/v1/media/reorder', function () {
         $unsupportedAssociable = createUnsupportedApiAssociable();
         $unsupportedAssociableClass = $unsupportedAssociable::class;
 
-        config()->set('media.allowed_associable_types', [$unsupportedAssociableClass]);
+        config()->set('nvl-media.allowed_associable_types', [$unsupportedAssociableClass]);
 
-        $response = $this->actingAs($owner)->postJson('/api/v1/media/reorder', [
+        $response = $this->actingAs($owner)->postJson('/nvl/api/v1/media/reorder', [
             'mediaIds' => [$media->id],
             'associableType' => $unsupportedAssociableClass,
             'associableId' => (string) $unsupportedAssociable->getKey(),
@@ -947,16 +948,16 @@ describe('POST /api/v1/media/reorder', function () {
             ->assertInvalid(['associableType'])
             ->assertJsonPath(
                 'errors.associableType.0',
-                trans('media::media/messages.error.associable_type_must_support_media'),
+                trans('nvl-media::media/messages.error.associable_type_must_support_media'),
             );
     });
 });
 
 /* =================================================================
- * GET /api/v1/media/{id}/variations
+ * GET /nvl/api/v1/media/{id}/variations
  * ================================================================= */
 
-describe('GET /api/v1/media/{id}/variations', function () {
+describe('GET /nvl/api/v1/media/{id}/variations', function () {
 
     it('lists variations for media', function () {
         $user = createApiUser();
@@ -972,7 +973,7 @@ describe('GET /api/v1/media/{id}/variations', function () {
             'quality' => 80,
         ]);
 
-        $response = $this->actingAs($user)->getJson("/api/v1/media/{$media->id}/variations");
+        $response = $this->actingAs($user)->getJson("/nvl/api/v1/media/{$media->id}/variations");
 
         $response->assertStatus(200)
             ->assertJsonStructure([
@@ -982,10 +983,10 @@ describe('GET /api/v1/media/{id}/variations', function () {
 });
 
 /* =================================================================
- * POST /api/v1/media/{id}/regenerate
+ * POST /nvl/api/v1/media/{id}/regenerate
  * ================================================================= */
 
-describe('POST /api/v1/media/{id}/regenerate', function () {
+describe('POST /nvl/api/v1/media/{id}/regenerate', function () {
 
     it('returns the stable API error contract for media that does not support variations', function () {
         $user = createApiUser();
@@ -998,10 +999,10 @@ describe('POST /api/v1/media/{id}/regenerate', function () {
         ]);
 
         $this->actingAs($user)
-            ->postJson("/api/v1/media/{$media->id}/regenerate")
+            ->postJson("/nvl/api/v1/media/{$media->id}/regenerate")
             ->assertStatus(422)
             ->assertJson([
-                'message' => (string) trans('media::media/messages.error.variations_unsupported'),
+                'message' => (string) trans('nvl-media::media/messages.error.variations_unsupported'),
                 'code' => 'variations_unsupported',
             ]);
     });

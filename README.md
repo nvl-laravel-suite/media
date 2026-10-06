@@ -11,11 +11,11 @@ See the [installation and publishing guide](https://github.com/nvl-laravel-suite
 
 | Item | Value |
 |---|---|
-| Installed through | `composer require nvl/media:^2.0` |
+| Installed through | `composer require nvl/media:^5.0` |
 | Module identifier | `nvl/media` |
 | PHP namespace | `Nvl\Media` |
 | Service provider | `Nvl\Media\Providers\MediaServiceProvider` |
-| Configuration | `config/media.php` |
+| Configuration | `config/nvl-media.php` |
 
 The suite's Laravel media module for secure uploads, private one-to-one files, reusable public assets, polymorphic ownership, image variations, localized metadata, centralized delivery, and safe lifecycle operations.
 
@@ -34,6 +34,8 @@ Media owns the complete lifecycle of binary assets: ingestion, validation, conte
 - [Command reference](docs/commands.md): doctor, reconciliation, pruning, regeneration, migration, flags, safety, and exit behavior.
 - [Upgrading](UPGRADING.md), [security policy](SECURITY.md), [contributing](CONTRIBUTING.md), and [changelog](CHANGELOG.md).
 
+The optional Spatie permission bridge defaults to `false` through `nvl-media.authorization.spatie_permission.enabled`. Explicit grants use `nvl.media.*` names, including `nvl.media.manage`; holding only `nvl.media.manage` never automatically authorizes access to another owner's private Media. Ownership and host authorization contracts remain authoritative when the bridge is disabled.
+
 ## Requirements and installation
 
 - PHP 8.4+
@@ -45,7 +47,7 @@ Media owns the complete lifecycle of binary assets: ingestion, validation, conte
 - `league/flysystem-aws-s3-v3` is included for S3-compatible disks
 
 ```bash
-composer require nvl/media:^2.0
+composer require nvl/media:^5.0
 php artisan migrate
 ```
 
@@ -55,24 +57,24 @@ configuration, publish and edit config before migration. Agent skills are
 optional:
 
 ```bash
-php artisan vendor:publish --tag=media-config
-php artisan vendor:publish --tag=media-skills
+php artisan vendor:publish --tag=nvl-media-config
+php artisan vendor:publish --tag=nvl-media-skills
 ```
 
 The package does not assume an application user model, UUID owner keys, storage provider, authorization package, or application middleware.
 
 Choose exactly one migration owner:
 
-1. **Automatic vendor loading (default):** leave `media.migrations.enabled=true`, do not publish `media-migrations`, and run `php artisan migrate`.
-2. **Host-owned published migrations:** publish `media-migrations`, set `media.migrations.enabled=false` before migrating, and maintain the published files as application migrations.
+1. **Automatic vendor loading (default):** leave `nvl-media.migrations.enabled=true`, do not publish `nvl-media-migrations`, and run `php artisan migrate`.
+2. **Host-owned published migrations:** publish `nvl-media-migrations`, set `nvl-media.migrations.enabled=false` before migrating, and maintain the published files as application migrations.
 
    ```bash
-   php artisan vendor:publish --tag=media-migrations
+   php artisan vendor:publish --tag=nvl-media-migrations
    ```
 
 Never run both sources. Laravel retimestamps files published through the migration tag. `php artisan nvl:media:doctor` reports a warning when automatic loading remains enabled and `database/migrations` contains a timestamp-independent name matching a package migration; `--strict` promotes that warning to failure.
 
-English and Bulgarian media copy ships with the package. Publish conventional Laravel overrides with `php artisan vendor:publish --tag=media-translations`. Localized asset metadata remains database-backed through `nvl/translatable`.
+English and Bulgarian media copy ships with the package. Publish conventional Laravel overrides with `php artisan vendor:publish --tag=nvl-media-translations`. Localized asset metadata remains database-backed through `nvl/translatable`.
 
 ### Production support boundary
 
@@ -83,16 +85,18 @@ SQLite, local disks, array locks, and synchronous queues remain supported for de
 ## Add media to a model
 
 ```php
-use Nvl\Media\Contracts\HasMedia;
-use Nvl\Media\Traits\InteractsWithMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
+use Nvl\Media\Traits\InteractsWithNvlMedia;
+use Nvl\Media\MediaRegistration;
+use Nvl\Media\Models\Media;
 
-final class Article extends Model implements HasMedia
+final class Article extends Model implements HasNvlMedia
 {
-    use InteractsWithMedia;
+    use InteractsWithNvlMedia;
 
-    public function registerMediaSlots(): void
+    public function registerNvlMedia(MediaRegistration $media, ?Media $asset = null): void
     {
-        $this->addMediaSlot('gallery')
+        $media->slot('gallery')
             ->publicReusable()
             ->useDisk('public')
             ->path('articles/{model_id}/gallery')
@@ -100,7 +104,7 @@ final class Article extends Model implements HasMedia
             ->maxFileSize(8 * 1024 * 1024)
             ->onlyKeepLatest(20);
 
-        $this->addMediaSlot('datasheet')
+        $media->slot('datasheet')
             ->oneToOne()
             ->useDisk('local')
             ->acceptsMimeTypes(['application/pdf']);
@@ -114,7 +118,7 @@ final class Article extends Model implements HasMedia
 
 ```php
 $image = $article
-    ->addMedia($request->file('image'), 'gallery')
+    ->nvlMedia()->add($request->file('image'), 'gallery')
     ->usingFileName('front.webp')
     ->withTags(['catalog', 'front'])
     ->withCustomProperties(['source' => 'admin'])
@@ -130,13 +134,17 @@ For one-to-one slots, the previous association/file is removed only after the re
 Additional sources:
 
 ```php
-$model->addMediaFromRequest('file')->slot('documents');
-$model->addMediaFromUrl($url, 'image/jpeg')->slot('gallery');
-$model->addMediaFromBase64($payload, 'image/png')->slot('gallery');
-$model->addMediaFromString($text)->slot('documents');
-$model->addMediaFromBinary($pdfBytes, 'report.pdf', 'application/pdf')->slot('documents');
-$model->addMediaFromDisk($key, 'imports')->slot('documents');
+$model->nvlMedia()->fromRequest('file')->slot('documents');
+$model->nvlMedia()->fromUrl($url, 'image/jpeg')->slot('gallery');
+$model->nvlMedia()->fromBase64($payload, 'image/png')->slot('gallery');
+$model->nvlMedia()->fromString($text)->slot('documents');
+$model->nvlMedia()->fromBinary($pdfBytes, 'report.pdf', 'application/pdf')->slot('documents');
+$model->nvlMedia()->fromDisk($key, 'imports')->slot('documents');
 ```
+
+Use `$owner->nvlMedia()->all()`, `first()`, `firstUrl()`, `attach()`, `detach()`, `sync()` and `slot()` for owner-scoped operations. Eager-load `nvlMediaAssociations`; its related NVL assets load with it. These names coexist with a host's `media()` relation and with Spatie Media's upload and conversion hooks.
+
+`HasMedia` and `InteractsWithMedia` are deprecated forwarding adapters retained through major 5. NVL-only owners may keep their existing calls during that window. A model using both libraries implements `HasNvlMedia` and uses `InteractsWithNvlMedia` for NVL, alongside Spatie's unchanged contract and trait; no trait aliases are required. `tools/run-media-spatie-consumer.sh` proves this with the real Spatie dependency in isolated test tooling.
 
 ## Facade and injectable service API
 
@@ -173,13 +181,13 @@ Facade mutation calls are trusted application-service calls, like invoking an Ac
 
 The package intentionally does not register a global `Media` class alias because it would collide easily with application and Eloquent model names. Import the facade explicitly.
 
-Remote URL ingestion is disabled by default. Enable it explicitly with `MEDIA_REMOTE_SOURCES_ENABLED=true` only in applications that accept remote sources. Ordinary request, local, disk, string, and base64 uploads do not enter the DNS/cURL path.
+Remote URL ingestion is disabled by default. Enable it explicitly with `NVL_MEDIA_REMOTE_SOURCES_ENABLED=true` only in applications that accept remote sources. Ordinary request, local, disk, string, and base64 uploads do not enter the DNS/cURL path.
 
 When enabled, remote and encoded sources are streamed into bounded package-owned temporary files and released in terminal `finally` paths. Remote requests allow only HTTP/HTTPS and configured ports, reject credentials and private/reserved A/AAAA results, pin cURL to the validated IP set, preserve TLS hostname verification, disable automatic redirects, revalidate every redirect, verify the connected IP, and enforce connect, total, redirect, and byte limits.
 
-`media.sources.remote.verify_connected_ip` defaults to `true`. Disabling it is available for test fakes or a deliberately controlled custom transport; production doctor rejects that setting only when remote URL ingestion is enabled.
+`nvl-media.sources.remote.verify_connected_ip` defaults to `true`. Disabling it is available for test fakes or a deliberately controlled custom transport; production doctor rejects that setting only when remote URL ingestion is enabled.
 
-`addMedia($explicitLocalPath)` owns that explicit source and removes it only after the real root transaction commits. `copyMedia()` and `preservingOriginal()` retain it. Request uploads, package-created temporary files, and files not explicitly owned by the adder are never treated as caller-owned deletion targets; failures and rollbacks retain explicit local sources.
+`nvlMedia()->add($explicitLocalPath)` owns that explicit source and removes it only after the real root transaction commits. `nvlMedia()->copy()` and `preservingOriginal()` retain it. Request uploads, package-created temporary files, and files not explicitly owned by the adder are never treated as caller-owned deletion targets; failures and rollbacks retain explicit local sources.
 
 ## Direct multipart object-storage uploads
 
@@ -286,16 +294,18 @@ Application document concerns should declare policy and delegate lifecycle work
 to the four actor-aware owner-slot Actions. A KPO-style private PDF slot becomes:
 
 ```php
-use Nvl\Media\Contracts\HasMedia;
-use Nvl\Media\Traits\InteractsWithMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
+use Nvl\Media\Models\Media;
+use Nvl\Media\MediaRegistration;
+use Nvl\Media\Traits\InteractsWithNvlMedia;
 
-final class Report extends Model implements HasMedia
+final class Report extends Model implements HasNvlMedia
 {
-    use InteractsWithMedia;
+    use InteractsWithNvlMedia;
 
-    public function registerMediaSlots(): void
+    public function registerNvlMedia(MediaRegistration $media, ?Media $asset = null): void
     {
-        $this->addMediaSlot('document')
+        $media->slot('document')
             ->oneToOne()
             ->acceptsMimeTypes(['application/pdf'])
             ->maxFileSize(4 * 1024 * 1024);
@@ -347,7 +357,7 @@ Orphaned exclusive assets are deleted through the package lifecycle after the
 real root transaction commits. Copy always creates a new Media identity, applies
 the destination disk/visibility, preserves normalized tags, attributes the new
 row to the actor, and copies only scalar keys allowlisted by
-`media.owner_slots.copy.metadata_keys`. Add domain presentation/provenance keys
+`nvl-media.owner_slots.copy.metadata_keys`. Add domain presentation/provenance keys
 such as `format` explicitly; never allowlist credentials, provider payloads,
 storage identity, redaction state, or association metadata.
 
@@ -397,7 +407,7 @@ Construct mutation DTOs through Laravel Data validation or another trusted bound
 Slots can define conversion presets:
 
 ```php
-$this->addMediaSlot('gallery')
+$media->slot('gallery')
     ->publicReusable()
     ->addConversion('thumb', fn (ConversionDefinition $conversion) => $conversion
         ->fit('crop', 300, 300)
@@ -408,7 +418,7 @@ $this->addMediaSlot('gallery')
 One upload may add or override named definitions:
 
 ```php
-$article->addMedia($file, 'gallery')
+$article->nvlMedia()->add($file, 'gallery')
     ->withVariations([
         'card' => ['width' => 640, 'height' => 360, 'fit' => 'crop', 'format' => 'webp'],
         'zoom' => (new ConversionDefinition('zoom'))->width(1600)->format('webp'),
@@ -435,9 +445,9 @@ See [Image variations and queues](docs/images-and-queues.md) for the complete co
 
 ## S3-compatible storage
 
-Set `MEDIA_FILESYSTEM_DISK=s3`, configure Laravel's `filesystems.disks.s3`, add `s3` to `media.allowed_disks`, and leave the package asset routes enabled. The package streams remote sources into bounded temporary local files for image processing, writes results back through Flysystem, verifies source checksums, avoids S3 folder-marker objects, and preserves visibility during cross-disk copies.
+Set `NVL_MEDIA_FILESYSTEM_DISK=s3`, configure Laravel's `filesystems.disks.s3`, add `s3` to `nvl-media.allowed_disks`, and leave the package asset routes enabled. The package streams remote sources into bounded temporary local files for image processing, writes results back through Flysystem, verifies source checksums, avoids S3 folder-marker objects, and preserves visibility during cross-disk copies.
 
-S3 objects are private at rest by default—even when the Media record is public and reusable. Public means the record may be shared and served through the package's public delivery policy; it does not mean `public-read` ACL. This works with modern Bucket Owner Enforced buckets. Set `MEDIA_S3_USE_ACL_VISIBILITY=true` only when the bucket intentionally supports object ACLs.
+S3 objects are private at rest by default—even when the Media record is public and reusable. Public means the record may be shared and served through the package's public delivery policy; it does not mean `public-read` ACL. This works with modern Bucket Owner Enforced buckets. Set `NVL_MEDIA_S3_USE_ACL_VISIBILITY=true` only when the bucket intentionally supports object ACLs.
 
 See [S3 and object storage](docs/s3.md) for IAM, bucket, endpoint, URL, cache/CDN, checksum, multipart, and operational guidance.
 
@@ -461,11 +471,11 @@ Route controls:
 ```php
 'routes' => [
     'api_enabled' => false,
-    'api_prefix' => 'api/v1',
+    'api_prefix' => 'nvl/api/v1',
     'api_middleware' => ['api'],
     'management_middleware' => ['auth', 'throttle:60,1'],
     'assets_enabled' => true,
-    'assets_prefix' => 'media',
+    'assets_prefix' => 'nvl/media',
 ],
 ```
 
@@ -480,32 +490,32 @@ The default `MediaAuthorization` grants cross-owner mutations only to the owning
     'spatie_permission' => [
         'enabled' => true,
         'global_roles' => ['admin', 'super-admin'],
-        'global_permission' => 'media.manage',
+        'global_permission' => 'nvl.media.manage',
         'ability_permissions' => [
-            'list_all' => 'media.view-any',
-            'view' => 'media.view-any',
-            'download' => 'media.download-any',
-            'associate' => 'media.associate-any',
-            'mutate' => 'media.update-any',
-            'delete' => 'media.delete-any',
-            'reuse' => 'media.reuse-any',
-            'manage_staging' => 'media.manage-staging',
+            'list_all' => 'nvl.media.view-any',
+            'view' => 'nvl.media.view-any',
+            'download' => 'nvl.media.download-any',
+            'associate' => 'nvl.media.associate-any',
+            'mutate' => 'nvl.media.update-any',
+            'delete' => 'nvl.media.delete-any',
+            'reuse' => 'nvl.media.reuse-any',
+            'manage_staging' => 'nvl.media.manage-staging',
         ],
     ],
 ],
 ```
 
-`MEDIA_GLOBAL_ROLES=admin,super-admin` is the environment shortcut for the role list. Role names are empty by default, so installing an authorization package cannot silently elevate a pre-existing role during an upgrade. The `media.manage` permission grants every Media ability; the `*-any` permissions are granular. `media.manage-staging` is the narrow cross-owner grant used when an owner-slot workflow adopts another actor's staged asset. Missing roles, permissions, guard mismatches, or an absent Spatie package fail closed and normal ownership policy continues.
+`NVL_MEDIA_GLOBAL_ROLES=admin,super-admin` is the environment shortcut for the role list. Role names are empty by default, so installing an authorization package cannot silently elevate a pre-existing role during an upgrade. The `nvl.media.manage` permission grants every Media ability; the `*-any` permissions are granular. `nvl.media.manage-staging` is the narrow cross-owner grant used when an owner-slot workflow adopts another actor's staged asset. Missing roles, permissions, guard mismatches, or an absent Spatie package fail closed and normal ownership policy continues.
 
 Global access bypasses uploader ownership, including list scoping and private delivery, but does not bypass shared-asset reference integrity, scanner quarantine, mutation locks, or storage verification. Applications may disable the bridge or replace `MediaAuthorization` for a fully custom policy.
 
 ## Retrieval and lifecycle
 
 ```php
-$gallery = $article->getMedia('gallery');
-$first = $article->getFirstMedia('gallery');
-$article->detachMedia($media, 'gallery');
-$article->clearMediaCollection('gallery');
+$gallery = $article->nvlMedia()->all('gallery');
+$first = $article->nvlMedia()->first('gallery');
+$article->nvlMedia()->detach($media, 'gallery');
+$article->nvlMedia()->clear('gallery');
 ```
 
 Shared media is detached while another owner still uses it and physically deleted only after its last association disappears. Soft-deleting an owner preserves media associations for restoration; force deletion follows configured cleanup behavior.
@@ -526,7 +536,7 @@ php artisan nvl:media:owner-slots:prune --days=7 --chunk=500
 
 Run storage health before and after a disk migration. Back up metadata and verify target-disk credentials before production moves.
 
-`nvl:media:reconcile` is read-only by default. `--orphans` inventories paginated unreferenced objects below `media.root_folder`; `--cleanup-orphans` is the explicit deletion switch, `--older-than` protects recent work, and production cleanup additionally requires `--force`. Objects with unreliable age remain report-only. Files referenced only by soft-deleted media are candidates while their database tombstones remain. Disk migration supports dry run, association scopes, records-only moves, and copy verification.
+`nvl:media:reconcile` is read-only by default. `--orphans` inventories paginated unreferenced objects below `nvl-media.root_folder`; `--cleanup-orphans` is the explicit deletion switch, `--older-than` protects recent work, and production cleanup additionally requires `--force`. Objects with unreliable age remain report-only. Files referenced only by soft-deleted media are candidates while their database tombstones remain. Disk migration supports dry run, association scopes, records-only moves, and copy verification.
 
 Every option, safety rule, exit status, and production sequence is documented in [Command reference](docs/commands.md).
 
@@ -550,11 +560,11 @@ Do not treat dropping ownership columns as rollback once duplicate names or
 copied assets exist. Cleanup is package-owned and bounded; verify physical paths
 before deleting any source or imported object.
 
-Package-owned media, association, variation, multipart-session, owner-slot-operation, and translation rows use UUID primary keys. Uploader and owner morph identifiers are strings so integer, UUID, ULID, and string application keys remain compatible. The clean create migrations include composite indexes for visibility, uploader, disk, type and status listings by creation time; multipart indexes cover actor history, status/expiry, and completed media. The owner-slot ledger uniquely indexes UUID idempotency keys and indexes owner/slot and creation-time lookups. Its connection, table, processing lease, retention, and pruning chunk are configured under `media.owner_slots.idempotency`; Doctor checks its schema, lifecycle bounds, atomic lock store, and observed model/slot registrations. Expired processing attempts recover under a new operation UUID so stale workers cannot complete the replacement claim. A custom ledger connection is a recoverable saga boundary rather than a cross-database atomic transaction. Schedule `nvl:media:owner-slots:prune` to remove only expired terminal claims in bounded chunks.
+Package-owned media, association, variation, multipart-session, owner-slot-operation, and translation rows use UUID primary keys. Uploader and owner morph identifiers are strings so integer, UUID, ULID, and string application keys remain compatible. The clean create migrations include composite indexes for visibility, uploader, disk, type and status listings by creation time; multipart indexes cover actor history, status/expiry, and completed media. The owner-slot ledger uniquely indexes UUID idempotency keys and indexes owner/slot and creation-time lookups. Its connection, table, processing lease, retention, and pruning chunk are configured under `nvl-media.owner_slots.idempotency`; Doctor checks its schema, lifecycle bounds, atomic lock store, and observed model/slot registrations. Expired processing attempts recover under a new operation UUID so stale workers cannot complete the replacement claim. A custom ledger connection is a recoverable saga boundary rather than a cross-database atomic transaction. Schedule `nvl:media:owner-slots:prune` to remove only expired terminal claims in bounded chunks.
 
-Set `media.migrations.enabled=false` only while staging a legacy table whose canonical name would collide with the package migration. Rename that source, create the package schema, then run `nvl:media:adopt-spatie` without `--apply`. The command maps standard Spatie ownership columns into associations, preserves UUIDs or derives stable UUIDs from integer identifiers, accepts optional translation and variation tables, verifies every backing path, and reports source/matched counts. `--apply` is refused until the dry run has no mapping or path errors; it never drops the staged source tables and is idempotent by deterministic identifiers.
+Set `nvl-media.migrations.enabled=false` only while staging a legacy table whose canonical name would collide with the package migration. Rename that source, create the package schema, then run `nvl:media:adopt-spatie` without `--apply`. The command maps standard Spatie ownership columns into associations, preserves UUIDs or derives stable UUIDs from integer identifiers, accepts optional translation and variation tables, verifies every backing path, and reports source/matched counts. `--apply` is refused until the dry run has no mapping or path errors; it never drops the staged source tables and is idempotent by deterministic identifiers.
 
-For in-place adoption, `media.root_folder` must describe the physical object layout, not the desired future layout. When persisted `folder` values already contain the complete path below the disk root, set `MEDIA_ROOT_FOLDER=` (empty) before dry-run and cutover. Otherwise physically move objects through `nvl:media:migrate-disk` and reconcile them. Doctor samples live Media rows against storage and reports root-folder drift before URLs are enabled. Soft-deleted diagnostic tombstones are excluded because canonical deletion may intentionally remove their objects.
+For in-place adoption, `nvl-media.root_folder` must describe the physical object layout, not the desired future layout. When persisted `folder` values already contain the complete path below the disk root, set `NVL_MEDIA_ROOT_FOLDER=` (empty) before dry-run and cutover. Otherwise physically move objects through `nvl:media:migrate-disk` and reconcile them. Doctor samples live Media rows against storage and reports root-folder drift before URLs are enabled. Soft-deleted diagnostic tombstones are excluded because canonical deletion may intentionally remove their objects.
 
 A strict `storage.persisted_paths` failure for a live Media row is a data incident. Run read-only
 Doctor and `nvl:media:reconcile --production --orphans`, verify disk/root/path,
@@ -581,7 +591,7 @@ Authorized management APIs use privileged Data projections such as `MediaLibrary
 - Run `nvl:media:doctor --production --strict` after changing disks, encoders, presets, sources, locks, scanner, multipart, or queue settings.
 - Keep SVG scanning and public-asset deletion protection enabled.
 - Keep `file_types` to the smallest `extension => string|list<string>` server-detected MIME allowlist the application needs.
-- Configure `media.content_scanner` with a real `MediaContentScanner` for untrusted uploads. The explicit default is a development-only no-op scanner.
+- Configure `nvl-media.content_scanner` with a real `MediaContentScanner` for untrusted uploads. The explicit default is a development-only no-op scanner.
 - Keep S3-compatible disks private at rest with `throw=true`.
 - Keep multipart disabled unless the application needs direct uploads; when enabled, require the recoverable gateway, central locks, scanner attestation, pruning schedule, production doctor, and provider integration test.
 - Disable package API routes if the application owns its own controllers.
@@ -596,7 +606,7 @@ php artisan nvl:data:types:generate
 php artisan nvl:data:types:check
 ```
 
-`media-skills` publishes current agent guidance into `.agents/skills/nvl-media`.
+`nvl-media-skills` publishes current agent guidance into `.agents/skills/nvl-media`.
 
 ```bash
 composer install
@@ -616,36 +626,36 @@ Released under the [MIT License](LICENSE).
 Declare a model once in `config/nvl-core.php`:
 
 ```php
-'owners' => ['article' => Article::class],
+'owners' => [Article::class],
 ```
 
-Enable this package capability separately in `config/media.php`:
+Enable this package capability separately in `config/nvl-media.php`:
 
 ```php
-'allowed_associable_types' => ['article'],
-'associable_mutation_abilities' => ['article' => 'update'],
+'allowed_associable_types' => [Article::class],
+'associable_mutation_abilities' => [Article::class => 'update'],
 ```
 
-Owners still implement HasMedia and use InteractsWithMedia. Preserve collection/slot declarations and authorize the configured mutation ability. Core registration does not add the model to this package's allowlist.
+Owners implement HasNvlMedia and use InteractsWithNvlMedia; declare slots through registerNvlMedia() and access them through nvlMedia(). Preserve collection/slot declarations and authorize the configured mutation ability. Core registration does not add the model to this package's allowlist.
 
-Existing package class/resolver/handler registrations remain accepted for one major cycle. Run `php artisan nvl:doctor --strict --format=json` to inspect compatibility diagnostics. See [UPGRADING.md](UPGRADING.md) before changing a persisted morph type.
+Laravel's `getMorphClass()` determines stored identity. These class declarations do not install host morph maps. Keep resolvers, handlers and authorization independent; use `nvl:doctor --strict --format=json` to review legacy alias mismatches or stored identity drift. See [UPGRADING.md](UPGRADING.md) before changing the host's morph map.
 
 ## Queue inheritance and shared diagnostics
 
-`media.queue.connection` defaults to `null`. Media jobs use an explicit Media value first, then `nvl-core.queue.connection`, then Laravel's effective `queue.default`. `MEDIA_QUEUE_CONNECTION` remains an explicit configuration input. An explicit `sync` at the selected layer keeps synchronous processing; an empty string is invalid. Runtime configuration and cached configuration use the same resolution.
+`nvl-media.queue.connection` defaults to `null`. Media jobs use an explicit Media value first, then `nvl-core.queue.connection`, then Laravel's effective `queue.default`. `NVL_MEDIA_QUEUE_CONNECTION` remains an explicit configuration input. An explicit `sync` at the selected layer keeps synchronous processing; an empty string is invalid. Runtime configuration and cached configuration use the same resolution.
 
 Run `php artisan nvl:doctor --strict --format=json` to aggregate the checks from loaded package providers, or `php artisan nvl:media:doctor --strict --format=json` for the Media-specific report. Production workers still require an appropriate host deployment and queue configuration.
 
 
 ## Shared infrastructure options
 
-`media.queue.name` also defaults to null: it inherits `nvl-core.queue.name`, then the queue name configured for the selected Laravel connection. Set `MEDIA_QUEUE=media` or `media.queue.name = 'media'` when workers intentionally consume a dedicated Media queue. Existing explicit published names remain overrides.
+`nvl-media.queue.name` also defaults to null: it inherits `nvl-core.queue.name`, then the queue name configured for the selected Laravel connection. Set `NVL_MEDIA_QUEUE=media` or `nvl-media.queue.name = 'media'` when workers intentionally consume a dedicated Media queue. Existing explicit published names remain overrides.
 
-Media locks use `media.locks.store`, then `nvl-core.locks.store`, then `cache.default`. Independent `locks.mutation.store`, `locks.deduplication.store`, and `locks.multipart.store` overrides preserve operation-specific stores. Historical `mutation_lock.store`, `deduplication_lock.store`, and `multipart.lock.store` remain supported for one major cycle and are reported by Doctor. Their duration/wait settings remain operation-specific.
+Media locks use `nvl-media.locks.store`, then `nvl-core.locks.store`, then `cache.default`. Independent `locks.mutation.store`, `locks.deduplication.store`, and `locks.multipart.store` overrides preserve operation-specific stores. Historical `mutation_lock.store`, `deduplication_lock.store`, and `multipart.lock.store` remain supported for one major cycle and are reported by Doctor. Their duration/wait settings remain operation-specific.
 
 ## Next major: isolated schema identities
 
-Use `media.tables.<logical-key>` for every table and `media.connection` for its database connection. Null connection inherits `nvl-core.connection`, then Laravel's default. Tables are resolved at runtime by the package table definition helper.
+Use `nvl-media.tables.<logical-key>` for every table and `nvl-media.connection` for its database connection. Null connection inherits `nvl-core.connection`, then Laravel's default. Tables are resolved at runtime by the package table definition helper.
 
 | Logical key | New default | Previous name |
 | --- | --- | --- |
@@ -659,4 +669,10 @@ Use `media.tables.<logical-key>` for every table and `media.connection` for its 
 | `tenant_grant_locks` | `nvl_media_tenant_grant_locks` | `px_media_tenant_grant_locks` |
 | `tenant_adoption_copies` | `nvl_media_tenant_adoption_copies` | `px_media_tenant_adoption_copies` |
 
-Migration filenames contain `nvl_media_`. Existing installations must complete the upgrade in `UPGRADING.md` before running new migrations. A pending creator rejects an existing target before any migration in the batch runs; legacy storage with old history needs an ownership decision.
+Migration filenames contain `nvl_media_`. Existing installations must complete the upgrade in `UPGRADING.md` before running new migrations. A pending creator rejects an existing target before that owned migration runs; use `nvl:schema:preflight` for an explicit whole-batch check; legacy storage with old history needs an ownership decision.
+
+Owned cache and lock identities follow `nvl:<package>:<purpose>:…`. Mutation, deduplication, and multipart locks use `nvl:media:mutation:`, `nvl:media:deduplication:`, and `nvl:media:multipart:`. File existence entries use `nvl:media:file-existence:` instead of `media_exists:`. Invalidation touches only the owned entry; generic host keys are never read, copied, or removed. See [UPGRADING](UPGRADING.md) for coordinated worker and lock lease cutover.
+
+## Canonical configuration ownership
+
+Use `nvl-media` settings in `config/nvl-media.php` and canonical package environment names. Old generic roots are foreign unless an upgrading NVL host explicitly selects them in Core's default-off compatibility. Canonical false/null/empty values win; no old roots are populated or written back. Keep logical package/resource IDs unchanged. Review [Core's rename inventory and cache/worker cutover](https://github.com/nvl-laravel-suite/core/blob/main/UPGRADING.md#major-5-canonical-configuration-and-environment).

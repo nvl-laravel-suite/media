@@ -105,8 +105,8 @@ describe('UploadMediaAction', function () {
 
         config([
             'filesystems.default' => 'public',
-            'media.default_path' => '{model_type}/{model_id}',
-            'media.group_types' => [
+            'nvl-media.default_path' => '{model_type}/{model_id}',
+            'nvl-media.group_types' => [
                 'image' => ['jpg', 'jpeg', 'png', 'gif', 'webp'],
                 'document' => ['pdf', 'doc', 'docx'],
                 'video' => ['mp4', 'mpeg', 'webm', 'mov'],
@@ -213,8 +213,8 @@ describe('UploadMediaAction', function () {
 
     it('skips deduplication candidates whose authoritative object is missing', function () {
         config([
-            'media.cache_file_existence' => true,
-            'media.cache_ttl' => 60,
+            'nvl-media.cache_file_existence' => true,
+            'nvl-media.cache_ttl' => 60,
         ]);
 
         $user = createTestUser();
@@ -323,7 +323,7 @@ describe('UploadMediaAction', function () {
                 'driver' => 'local',
                 'root' => storage_path('framework/testing/disks/untrusted'),
             ],
-            'media.allowed_disks' => ['public'],
+            'nvl-media.allowed_disks' => ['public'],
         ]);
 
         app(UploadMediaAction::class)->execute(
@@ -390,7 +390,7 @@ describe('UploadMediaAction', function () {
     })->throws(FileUnacceptableForCollection::class);
 
     it('accepts configured MIME aliases for a canonical extension', function () {
-        config(['media.file_types.csv' => ['text/csv', 'text/plain']]);
+        config(['nvl-media.file_types.csv' => ['text/csv', 'text/plain']]);
 
         $media = app(UploadMediaAction::class)->execute(
             file: UploadedFile::fake()->createWithContent('records.csv', "name\nAda\n"),
@@ -439,7 +439,7 @@ describe('UploadMediaAction', function () {
         Storage::fake('s3');
         config([
             'filesystems.disks.s3' => ['driver' => 'local', 'root' => storage_path('framework/testing/disks/s3')],
-            'media.allowed_disks' => ['public', 's3'],
+            'nvl-media.allowed_disks' => ['public', 's3'],
         ]);
 
         $file = UploadedFile::fake()->image('photo.jpg', 100, 100);
@@ -464,7 +464,7 @@ describe('UploadMediaAction', function () {
         Storage::fake('cloudflare-r2');
         config([
             'filesystems.disks.cloudflare-r2.driver' => 's3',
-            'media.allowed_disks' => ['public', 'cloudflare-r2'],
+            'nvl-media.allowed_disks' => ['public', 'cloudflare-r2'],
         ]);
 
         $file = UploadedFile::fake()->image('r2-photo.jpg', 100, 100);
@@ -502,7 +502,7 @@ describe('UploadMediaAction', function () {
                 'driver' => 'local',
                 'root' => $brokenRoot,
             ],
-            'media.allowed_disks' => ['public', 'broken-upload'],
+            'nvl-media.allowed_disks' => ['public', 'broken-upload'],
         ]);
 
         try {
@@ -673,8 +673,8 @@ describe('ReplaceMediaFileAction', function () {
                 'driver' => 'local',
                 'root' => storage_path('framework/testing/disks/s3'),
             ],
-            'media.allowed_disks' => ['public', 's3'],
-            'media.auto_generate_variations' => false,
+            'nvl-media.allowed_disks' => ['public', 's3'],
+            'nvl-media.auto_generate_variations' => false,
         ]);
     });
 
@@ -1051,7 +1051,7 @@ describe('DeleteMediaAction', function () {
         Storage::disk('public')->put($media->buildPath(), 'file contents');
         Storage::disk('public')->assertExists($media->buildPath());
 
-        config(['media.delete_files_on_media_delete' => true]);
+        config(['nvl-media.delete_files_on_media_delete' => true]);
 
         $action = app(DeleteMediaAction::class);
         $action->execute($media);
@@ -1077,7 +1077,7 @@ describe('DeleteMediaAction', function () {
             'quality' => 80,
         ]);
 
-        config(['media.delete_files_on_media_delete' => true]);
+        config(['nvl-media.delete_files_on_media_delete' => true]);
 
         $action = app(DeleteMediaAction::class);
         $action->execute($media);
@@ -1093,7 +1093,7 @@ describe('DeleteMediaAction', function () {
 
         Storage::disk('public')->put($media->buildPath(), 'keep this file');
 
-        config(['media.delete_files_on_media_delete' => false]);
+        config(['nvl-media.delete_files_on_media_delete' => false]);
 
         $action = app(DeleteMediaAction::class);
         $action->execute($media);

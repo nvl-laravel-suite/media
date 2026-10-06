@@ -9,8 +9,8 @@ use Nvl\Media\Enums\ImageFormat;
 
 beforeEach(function () {
     config([
-        'media.queue.enabled' => true,
-        'media.queue.connection' => 'database',
+        'nvl-media.queue.enabled' => true,
+        'nvl-media.queue.connection' => 'database',
     ]);
 });
 
@@ -33,7 +33,7 @@ describe('constructor', function () {
     });
 
     it('defaults shouldBeQueued to false when config is false', function () {
-        config(['media.queue.enabled' => false]);
+        config(['nvl-media.queue.enabled' => false]);
 
         $def = new ConversionDefinition('sync-conversion');
 
@@ -358,7 +358,7 @@ describe('performOnSlots', function () {
 describe('queued', function () {
 
     it('sets shouldBeQueued to true', function () {
-        config(['media.queue.enabled' => false]);
+        config(['nvl-media.queue.enabled' => false]);
         $def = (new ConversionDefinition('thumb'))->queued();
 
         expect($def->shouldBeQueued)->toBeTrue();

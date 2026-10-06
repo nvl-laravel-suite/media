@@ -25,7 +25,7 @@ test('every literal package translation key has a standalone English value', fun
         preg_match_all('/\btrans\(\s*[\'"]([^\'"]+)[\'"]/', $contents, $matches);
 
         foreach ($matches[1] as $key) {
-            if (str_starts_with($key, 'media::') && ! str_contains($key, '{$') && ! str_ends_with($key, '.')) {
+            if (str_starts_with($key, 'nvl-media::') && ! str_contains($key, '{$') && ! str_ends_with($key, '.')) {
                 $keys[$key] = true;
             }
         }
@@ -36,7 +36,7 @@ test('every literal package translation key has a standalone English value', fun
     }
 
     foreach (MediaType::cases() as $type) {
-        expect($type->getLabel())->not->toContain('media::');
+        expect($type->getLabel())->not->toContain('nvl-media::');
     }
 });
 

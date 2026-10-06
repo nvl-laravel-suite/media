@@ -18,7 +18,7 @@ final readonly class MediaTenantParentResolver implements TenantParentResolver
     /** @return array<string, class-string<Model>> */
     public function types(): array
     {
-        $configured = $this->configuration->get('media.tenancy.owner_types', []);
+        $configured = $this->configuration->get('nvl-media.tenancy.owner_types', []);
         if (! is_array($configured)) {
             throw new TenantConfigurationInvalid('media.tenancy.owner_types must be a class-string list.');
         }

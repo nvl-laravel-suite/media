@@ -96,7 +96,7 @@ final readonly class SignMultipartPartAction
 
     private function assertEnabled(): void
     {
-        if (! (bool) config('media.multipart.enabled', false)) {
+        if (! (bool) config('nvl-media.multipart.enabled', false)) {
             throw new MediaUploadException('Multipart uploads are disabled.');
         }
     }

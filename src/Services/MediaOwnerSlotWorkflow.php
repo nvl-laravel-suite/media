@@ -14,7 +14,7 @@ use LogicException;
 use Nvl\Media\Contracts\AttachMediaContract;
 use Nvl\Media\Contracts\DeleteMediaContract;
 use Nvl\Media\Contracts\DetachMediaContract;
-use Nvl\Media\Contracts\HasMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Data\Display\MediaLibraryItem;
 use Nvl\Media\Data\MediaActorData;
@@ -51,7 +51,7 @@ final readonly class MediaOwnerSlotWorkflow
      */
     public function get(
         MediaActorData $actor,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
     ): ?MediaLibraryItem {
         $slot = $this->resolver->slot($owner, $slot)->name;
@@ -74,7 +74,7 @@ final readonly class MediaOwnerSlotWorkflow
      */
     public function replace(
         MediaActorData $actor,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         string $mediaId,
         ?string $idempotencyKey = null,
@@ -170,7 +170,7 @@ final readonly class MediaOwnerSlotWorkflow
      */
     public function clear(
         MediaActorData $actor,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         ?string $idempotencyKey = null,
     ): void {
@@ -362,7 +362,7 @@ final readonly class MediaOwnerSlotWorkflow
      */
     private function replaceInTransaction(
         MediaActorData $actor,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         MediaSlot $slotDefinition,
         string $candidateId,
@@ -434,7 +434,7 @@ final readonly class MediaOwnerSlotWorkflow
      */
     private function clearInTransaction(
         MediaActorData $actor,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         MediaSlot $slotDefinition,
     ): array {
@@ -575,7 +575,7 @@ final readonly class MediaOwnerSlotWorkflow
      *
      * Cross-connection owners continue to rely on the configured shared mutation lock.
      */
-    private function lockOwner(Model&HasMedia $owner): void
+    private function lockOwner(Model&HasNvlMedia $owner): void
     {
         $ownerConnection = $owner->getConnection();
         $mediaConnection = (new MediaAssociation)->getConnection();
@@ -609,7 +609,7 @@ final readonly class MediaOwnerSlotWorkflow
      * Load a result projection from the current exact owner association.
      */
     private function currentProjection(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         string $expectedMediaId,
     ): MediaLibraryItem {
@@ -632,7 +632,7 @@ final readonly class MediaOwnerSlotWorkflow
      * Resolve a completed idempotent result without rerunning lifecycle effects.
      */
     private function replayProjection(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         MediaOwnerSlotOperationClaim $claim,
     ): MediaLibraryItem {
@@ -654,7 +654,7 @@ final readonly class MediaOwnerSlotWorkflow
      */
     private function authorizeClearReplay(
         MediaActorData $actor,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         MediaOwnerSlotOperationClaim $claim,
     ): void {
         $mediaId = $this->clearCheckpointPayload($claim)['authorization_media_id'];
@@ -686,7 +686,7 @@ final readonly class MediaOwnerSlotWorkflow
      * Determine whether a checkpointed clear already removed its exact association.
      */
     private function clearCheckpointCommitted(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         MediaOwnerSlotOperationClaim $claim,
         bool $lockForUpdate = false,
@@ -796,7 +796,7 @@ final readonly class MediaOwnerSlotWorkflow
         MediaActorData $actor,
         MediaAbility $ability,
         ?Media $media,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
     ): void {
         if ($this->authorization->allows($actor, $ability, $media, $owner)) {
             return;

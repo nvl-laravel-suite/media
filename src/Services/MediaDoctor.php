@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
-use Nvl\Media\Contracts\HasMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Contracts\MediaContentScanner;
 use Nvl\Media\Contracts\MultipartUploadGateway;
@@ -52,6 +52,7 @@ final readonly class MediaDoctor
     public function inspect(bool $production = false): array
     {
         return [
+            $this->permissionAdoptionCheck(),
             ...$this->schemaChecks(),
             ...$this->tenancyChecks(),
             $this->migrationOwnershipCheck(),
@@ -69,6 +70,25 @@ final readonly class MediaDoctor
         ];
     }
 
+    /** Validate the opt-in bridge and report only explicitly selected permission names. */
+    private function permissionAdoptionCheck(): MediaDoctorCheckData
+    {
+        $enabled = config('nvl-media.authorization.spatie_permission.enabled', false);
+        if (! is_bool($enabled)) {
+            return new MediaDoctorCheckData('adoption.spatie_permission', 'error', false, 'nvl-media.authorization.spatie_permission.enabled must be boolean.');
+        }
+        if (! $enabled) {
+            return new MediaDoctorCheckData('adoption.spatie_permission', 'info', true, 'Spatie permission bridge is disabled; package ownership authorization applies.');
+        }
+        $permission = config('nvl-media.authorization.spatie_permission.global_permission');
+        if (! is_string($permission) || trim($permission) === '') {
+            return new MediaDoctorCheckData('adoption.spatie_permission', 'error', false, 'The explicit Spatie permission bridge requires a nonempty global permission name.');
+        }
+
+        return new MediaDoctorCheckData('adoption.spatie_permission', 'info', true,
+            'Explicit Spatie permission bridge is active; global permission: '.$permission.'. Only deliberately configured ability mappings grant cross-owner access.');
+    }
+
     /**
      * Verify the opt-in ownership installation without requiring it in disabled deployments.
      *
@@ -76,7 +96,7 @@ final readonly class MediaDoctor
      */
     private function tenancyChecks(): array
     {
-        if (config('tenancy.enabled') !== true) {
+        if (config('nvl-tenancy.enabled') !== true) {
             return [];
         }
 
@@ -115,8 +135,8 @@ final readonly class MediaDoctor
                 : 'Owner-slot operations must use the canonical tenant connection.',
         );
 
-        $mixed = config('tenancy.sharing.media') === 'copy'
-            || config('tenancy.resources.media') === 'platform';
+        $mixed = config('nvl-tenancy.sharing.media') === 'copy'
+            || config('nvl-tenancy.resources.media') === 'platform';
         $mixedReady = ! $mixed || collect([
             MediaTables::get(MediaTables::Media),
             MediaTables::get(MediaTables::Associations),
@@ -150,7 +170,7 @@ final readonly class MediaDoctor
      */
     private function migrationOwnershipCheck(): MediaDoctorCheckData
     {
-        $duplicates = config('media.migrations.enabled') === true
+        $duplicates = config('nvl-media.migrations.enabled') === true
             ? $this->publishedMigrationDuplicates(dirname(__DIR__, 2).'/database/migrations')
             : [];
 
@@ -209,9 +229,9 @@ final readonly class MediaDoctor
      */
     private function integrityChecks(bool $production): array
     {
-        $verification = config('media.integrity.verification');
-        $providerChecksum = config('media.integrity.provider_checksum');
-        $readback = config('media.integrity.streamed_readback_fallback');
+        $verification = config('nvl-media.integrity.verification');
+        $providerChecksum = config('nvl-media.integrity.provider_checksum');
+        $readback = config('nvl-media.integrity.streamed_readback_fallback');
         $safe = $verification === 'required'
             && in_array($providerChecksum, ['prefer', 'ignore'], true)
             && $readback === true;
@@ -232,10 +252,10 @@ final readonly class MediaDoctor
     private function ownerSlotChecks(): array
     {
         $processingTimeout = config(
-            'media.owner_slots.idempotency.processing_timeout_minutes',
+            'nvl-media.owner_slots.idempotency.processing_timeout_minutes',
         );
-        $retentionDays = config('media.owner_slots.idempotency.retention_days');
-        $pruneChunk = config('media.owner_slots.idempotency.prune_chunk');
+        $retentionDays = config('nvl-media.owner_slots.idempotency.retention_days');
+        $pruneChunk = config('nvl-media.owner_slots.idempotency.prune_chunk');
         $valid = is_int($processingTimeout)
             && $processingTimeout >= 1
             && $processingTimeout <= 1_440
@@ -290,14 +310,14 @@ final readonly class MediaDoctor
 
                 if (! class_exists($ownerClass)
                     || ! is_subclass_of($ownerClass, Model::class)
-                    || ! is_subclass_of($ownerClass, HasMedia::class)) {
+                    || ! is_subclass_of($ownerClass, HasNvlMedia::class)) {
                     $invalid[] = "{$ownerType}:{$slotName} (owner model is unavailable)";
 
                     continue;
                 }
 
                 $owner = new $ownerClass;
-                $slot = $owner->getMediaSlot($slotName);
+                $slot = $owner->nvlMedia()->slot($slotName);
 
                 if (! $slot instanceof MediaSlot
                     || ! $slot->isSingleFile
@@ -466,7 +486,7 @@ final readonly class MediaDoctor
      */
     private function diskChecks(bool $production): array
     {
-        $configured = config('media.allowed_disks', []);
+        $configured = config('nvl-media.allowed_disks', []);
         $disks = is_array($configured) ? $configured : [];
 
         if ($disks === []) {
@@ -507,7 +527,7 @@ final readonly class MediaDoctor
                     : "Set media disk [{$name}] throw option to true.",
             );
             $safePublicLocal = $driver !== 'local'
-                || (bool) config('media.routes.assets_enabled', true);
+                || (bool) config('nvl-media.routes.assets_enabled', true);
             $checks[] = new MediaDoctorCheckData(
                 "storage.{$name}.public_local_delivery",
                 $production ? 'error' : 'warning',
@@ -557,7 +577,7 @@ final readonly class MediaDoctor
             );
         }
 
-        $limit = MediaConfiguration::integer('media.adoption.path_sample_size', 25, 1);
+        $limit = MediaConfiguration::integer('nvl-media.adoption.path_sample_size', 25, 1);
         $columns = ['id', 'disk', 'folder', 'hash'];
 
         if (Schema::hasColumn(MediaTables::get(MediaTables::Media), 'storage_path')) {
@@ -623,7 +643,7 @@ final readonly class MediaDoctor
     private function imageChecks(): array
     {
         try {
-            $driver = MediaImageDriver::resolve(config('media.image_driver', MediaImageDriver::Gd));
+            $driver = MediaImageDriver::resolve(config('nvl-media.image_driver', MediaImageDriver::Gd));
             $driverAvailable = match ($driver) {
                 MediaImageDriver::Gd => extension_loaded('gd'),
                 MediaImageDriver::Imagick => extension_loaded('imagick'),
@@ -756,8 +776,8 @@ final readonly class MediaDoctor
      */
     private function routeChecks(): array
     {
-        $managementEnabled = (bool) config('media.routes.api_enabled', false);
-        $middleware = config('media.routes.management_middleware', []);
+        $managementEnabled = (bool) config('nvl-media.routes.api_enabled', false);
+        $middleware = config('nvl-media.routes.management_middleware', []);
         $middlewareProtected = ! $managementEnabled
             || (is_array($middleware) && in_array('auth', $middleware, true));
 
@@ -779,8 +799,8 @@ final readonly class MediaDoctor
             new MediaDoctorCheckData(
                 'routes.assets.loaded',
                 'error',
-                ! (bool) config('media.routes.assets_enabled', true)
-                    || Route::has('media.assets.show'),
+                ! (bool) config('nvl-media.routes.assets_enabled', true)
+                    || Route::has('nvl.media.assets.show'),
                 'Media asset route state was inspected.',
             ),
         ];
@@ -791,27 +811,27 @@ final readonly class MediaDoctor
      */
     private function sourceChecks(bool $production): array
     {
-        $enabled = (bool) config('media.sources.remote.enabled', false);
+        $enabled = (bool) config('nvl-media.sources.remote.enabled', false);
         $ports = MediaConfiguration::integerList(
-            'media.sources.remote.allowed_ports',
+            'nvl-media.sources.remote.allowed_ports',
             [80, 443],
         );
         $safePorts = $ports !== [] && collect($ports)->every(
             static fn (int $port): bool => $port >= 1 && $port <= 65535,
         );
         $connectTimeout = MediaConfiguration::integer(
-            'media.sources.remote.connect_timeout',
+            'nvl-media.sources.remote.connect_timeout',
             0,
             1,
         );
         $totalTimeout = MediaConfiguration::integer(
-            'media.sources.remote.total_timeout',
+            'nvl-media.sources.remote.total_timeout',
             0,
             1,
         );
-        $redirects = config('media.sources.remote.redirects');
-        $maximumBytes = config('media.sources.remote.maximum_bytes');
-        $verifyConnectedIp = config('media.sources.remote.verify_connected_ip');
+        $redirects = config('nvl-media.sources.remote.redirects');
+        $maximumBytes = config('nvl-media.sources.remote.maximum_bytes');
+        $verifyConnectedIp = config('nvl-media.sources.remote.verify_connected_ip');
         $boundsSafe = $connectTimeout > 0
             && $totalTimeout >= $connectTimeout
             && is_int($redirects)
@@ -845,7 +865,7 @@ final readonly class MediaDoctor
      */
     private function lockChecks(bool $production): array
     {
-        $multiNode = (bool) config('media.deployment.multi_node', false);
+        $multiNode = (bool) config('nvl-media.deployment.multi_node', false);
         $atomic = false;
         $central = false;
 
@@ -886,12 +906,12 @@ final readonly class MediaDoctor
     {
         $scanner = $this->resolve(MediaContentScanner::class);
         $authorization = $this->resolve(MediaAuthorization::class);
-        $acceptsUntrustedUploads = (bool) config('media.scanner.untrusted_uploads', true);
+        $acceptsUntrustedUploads = (bool) config('nvl-media.scanner.untrusted_uploads', true);
         $scannerSafe = $production
             ? (! $acceptsUntrustedUploads || ! $scanner instanceof NullMediaContentScanner)
-            : (! (bool) config('media.scanner.required', false)
+            : (! (bool) config('nvl-media.scanner.required', false)
                 || ! $scanner instanceof NullMediaContentScanner
-                || (bool) config('media.scanner.allow_noop', false));
+                || (bool) config('nvl-media.scanner.allow_noop', false));
 
         return [
             new MediaDoctorCheckData(
@@ -922,7 +942,7 @@ final readonly class MediaDoctor
      */
     private function multipartChecks(bool $production): array
     {
-        if (! (bool) config('media.multipart.enabled', false)) {
+        if (! (bool) config('nvl-media.multipart.enabled', false)) {
             return [new MediaDoctorCheckData(
                 'multipart.disabled',
                 'warning',
@@ -958,7 +978,7 @@ final readonly class MediaDoctor
                 'multipart.scanner.attestation',
                 $production ? 'error' : 'warning',
                 ! $scanner instanceof NullMediaContentScanner
-                    && (bool) config('media.multipart.required_scan', true),
+                    && (bool) config('nvl-media.multipart.required_scan', true),
                 'Enabled multipart uploads require scanner attestation.',
             ),
         ];

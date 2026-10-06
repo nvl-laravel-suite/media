@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Providers;
 
-use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\ServiceProvider;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Support\Traits\RegistersNamespacedResources;
 
 /** Maps the optional management and asset-delivery routes. */
 class RouteServiceProvider extends ServiceProvider
 {
+    use RegistersNamespacedResources;
+
     protected string $name = 'Media';
 
     /**
@@ -18,7 +21,7 @@ class RouteServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        parent::boot();
+        $this->map();
     }
 
     /**
@@ -36,13 +39,15 @@ class RouteServiceProvider extends ServiceProvider
      */
     protected function mapApiRoutes(): void
     {
-        if (! (bool) config('media.routes.api_enabled', false)) {
+        if (! (bool) config('nvl-media.routes.api_enabled', false)) {
             return;
         }
 
-        Route::middleware($this->middleware('media.routes.api_middleware', ['api']))
-            ->prefix(trim(MediaConfiguration::string('media.routes.api_prefix', 'api/v1'), '/'))
-            ->group(__DIR__.'/../../routes/api.php');
+        Route::middleware($this->middleware('nvl-media.routes.api_middleware', ['api']))
+            ->prefix(trim(MediaConfiguration::string('nvl-media.routes.api_prefix', 'nvl/api/v1'), '/'))
+            ->group(function (): void {
+                $this->loadRoutesFrom(__DIR__.'/../../routes/api.php');
+            });
     }
 
     /**
@@ -50,11 +55,11 @@ class RouteServiceProvider extends ServiceProvider
      */
     protected function mapAssetRoutes(): void
     {
-        if (! (bool) config('media.routes.assets_enabled', true)) {
+        if (! (bool) config('nvl-media.routes.assets_enabled', true)) {
             return;
         }
 
-        Route::group([], __DIR__.'/../../routes/assets.php');
+        $this->loadRoutesFrom(__DIR__.'/../../routes/assets.php');
     }
 
     /**

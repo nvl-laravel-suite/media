@@ -43,7 +43,7 @@ final class MediaDeduplicationLock
         ?string $uploadedByType,
         Closure $callback,
     ): Media {
-        if (! (bool) config('media.deduplication_lock.enabled', true)) {
+        if (! (bool) config('nvl-media.deduplication_lock.enabled', true)) {
             return $callback();
         }
 
@@ -80,7 +80,7 @@ final class MediaDeduplicationLock
             ? 'public'
             : 'private:'.($uploadedByType ?? 'untyped').':'.($uploadedBy ?? 'anonymous');
 
-        return 'media:deduplication:'.hash('sha256', $this->tenantBoundary->key(
+        return 'nvl:media:deduplication:'.hash('sha256', $this->tenantBoundary->key(
             'media.assets',
             implode('|', [$digest, $disk, $scope]),
         ));
@@ -121,7 +121,7 @@ final class MediaDeduplicationLock
      */
     private function seconds(): int
     {
-        return MediaConfiguration::integer('media.deduplication_lock.seconds', 30, 1);
+        return MediaConfiguration::integer('nvl-media.deduplication_lock.seconds', 30, 1);
     }
 
     /**
@@ -131,6 +131,6 @@ final class MediaDeduplicationLock
      */
     private function waitSeconds(): int
     {
-        return MediaConfiguration::integer('media.deduplication_lock.wait_seconds', 30);
+        return MediaConfiguration::integer('nvl-media.deduplication_lock.wait_seconds', 30);
     }
 }

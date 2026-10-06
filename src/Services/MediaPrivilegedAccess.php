@@ -19,7 +19,7 @@ final class MediaPrivilegedAccess
      */
     public function allows(Authenticatable $actor, MediaAbility $ability): bool
     {
-        if (! (bool) config('media.authorization.spatie_permission.enabled', true)) {
+        if (config('nvl-media.authorization.spatie_permission.enabled', false) !== true) {
             return false;
         }
 
@@ -28,7 +28,7 @@ final class MediaPrivilegedAccess
         }
 
         $globalPermission = config(
-            'media.authorization.spatie_permission.global_permission',
+            'nvl-media.authorization.spatie_permission.global_permission',
         );
 
         if (is_string($globalPermission)
@@ -38,7 +38,7 @@ final class MediaPrivilegedAccess
         }
 
         $permission = config(
-            "media.authorization.spatie_permission.ability_permissions.{$ability->value}",
+            "nvl-media.authorization.spatie_permission.ability_permissions.{$ability->value}",
         );
 
         return is_string($permission)
@@ -49,7 +49,7 @@ final class MediaPrivilegedAccess
     private function hasGlobalRole(Authenticatable $actor): bool
     {
         $roles = MediaConfiguration::stringList(
-            'media.authorization.spatie_permission.global_roles',
+            'nvl-media.authorization.spatie_permission.global_roles',
         );
 
         if ($roles === [] || ! method_exists($actor, 'hasAnyRole')) {

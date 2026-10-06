@@ -189,7 +189,7 @@ final class StorageHealthCommand extends Command
             return trim($disk);
         }
 
-        $mediaDisk = config('media.disk');
+        $mediaDisk = config('nvl-media.disk');
 
         if (is_string($mediaDisk) && trim($mediaDisk) !== '') {
             return trim($mediaDisk);
@@ -414,12 +414,12 @@ final class StorageHealthCommand extends Command
         $label = $variation instanceof MediaImageVariation ? " variation [{$variation->label}]" : '';
         $routeName = $media->is_public
             ? MediaConfiguration::string(
-                'media.assets.public_route_name',
-                'media.assets.show',
+                'nvl-media.assets.public_route_name',
+                'nvl.media.assets.show',
             )
             : MediaConfiguration::string(
-                'media.assets.private_route_name',
-                'media.private.show',
+                'nvl-media.assets.private_route_name',
+                'nvl.media.private.show',
             );
 
         if (! Route::has($routeName)) {
@@ -474,7 +474,7 @@ final class StorageHealthCommand extends Command
     {
         $owner = $media->uploaded_by
             ?? MediaConfiguration::string(
-                'media.assets.private_owner_fallback',
+                'nvl-media.assets.private_owner_fallback',
                 'system',
             );
         $url = $this->urlResolver->privateUrl($media, $parameters, now()->addMinutes(5), $owner);
@@ -611,7 +611,7 @@ final class StorageHealthCommand extends Command
         bool $cleanup,
     ): array {
         $root = $this->orphanInventoryRoot();
-        $restrictToRoot = (bool) config('media.reconciliation.restrict_to_root', true);
+        $restrictToRoot = (bool) config('nvl-media.reconciliation.restrict_to_root', true);
         $report = [
             'candidates' => 0,
             'protected' => 0,
@@ -629,7 +629,7 @@ final class StorageHealthCommand extends Command
         [$livePaths, $tombstonePaths] = $this->referencedObjectPaths($disk);
         $cutoff = now()->subMinutes($olderThanMinutes)->getTimestamp();
         $pageSize = MediaConfiguration::integer(
-            'media.reconciliation.page_size',
+            'nvl-media.reconciliation.page_size',
             500,
             1,
         );
@@ -700,8 +700,8 @@ final class StorageHealthCommand extends Command
      */
     private function orphanInventoryRoot(): string
     {
-        $root = trim(MediaConfiguration::string('media.root_folder', 'media'), '/');
-        if (config('tenancy.enabled') !== true) {
+        $root = trim(MediaConfiguration::string('nvl-media.root_folder', 'media'), '/');
+        if (config('nvl-tenancy.enabled') !== true) {
             return $root;
         }
 

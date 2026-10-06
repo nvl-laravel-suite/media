@@ -10,10 +10,10 @@ use Nvl\Media\Slots\MediaSlot;
 
 beforeEach(function () {
     config([
-        'media.default_path' => '{model_type}/{model_id}',
-        'media.conversions_folder' => 'conversions',
+        'nvl-media.default_path' => '{model_type}/{model_id}',
+        'nvl-media.conversions_folder' => 'conversions',
         'filesystems.default' => 'public',
-        'media.conversions_disk' => null,
+        'nvl-media.conversions_disk' => null,
     ]);
 
     $this->resolver = new MediaPathResolver;
@@ -91,7 +91,7 @@ describe('resolveForConversions', function () {
     });
 
     it('uses custom conversions folder from config', function () {
-        config(['media.conversions_folder' => 'thumbs']);
+        config(['nvl-media.conversions_folder' => 'thumbs']);
 
         $model = createMockModel('abc-123', 'users');
         $collection = new MediaSlot('photos');
@@ -285,42 +285,42 @@ describe('interpolate', function () {
 describe('static utilities', function () {
 
     it('rootFolder reads from config', function () {
-        config(['media.root_folder' => 'media-files']);
+        config(['nvl-media.root_folder' => 'media-files']);
         expect(MediaPathResolver::rootFolder())->toBe('media-files');
     });
 
     it('rootFolder trims slashes', function () {
-        config(['media.root_folder' => '/media/']);
+        config(['nvl-media.root_folder' => '/media/']);
         expect(MediaPathResolver::rootFolder())->toBe('media');
     });
 
     it('rootFolder returns empty string when not configured', function () {
-        config(['media.root_folder' => '']);
+        config(['nvl-media.root_folder' => '']);
         expect(MediaPathResolver::rootFolder())->toBe('');
     });
 
     it('storagePath prepends root folder', function () {
-        config(['media.root_folder' => 'media']);
+        config(['nvl-media.root_folder' => 'media']);
         expect(MediaPathResolver::storagePath('users/123'))->toBe('media/users/123');
     });
 
     it('storagePath returns just root when folder is empty', function () {
-        config(['media.root_folder' => 'media']);
+        config(['nvl-media.root_folder' => 'media']);
         expect(MediaPathResolver::storagePath(''))->toBe('media');
     });
 
     it('storagePath returns folder when root is empty', function () {
-        config(['media.root_folder' => '']);
+        config(['nvl-media.root_folder' => '']);
         expect(MediaPathResolver::storagePath('users/123'))->toBe('users/123');
     });
 
     it('conversionsFolder reads from config', function () {
-        config(['media.conversions_folder' => 'thumbs']);
+        config(['nvl-media.conversions_folder' => 'thumbs']);
         expect(MediaPathResolver::conversionsFolder())->toBe('thumbs');
     });
 
     it('conversionsFolder defaults to conversions', function () {
-        config(['media.conversions_folder' => null]);
+        config(['nvl-media.conversions_folder' => null]);
         expect(MediaPathResolver::conversionsFolder())->toBe('conversions');
     });
 
@@ -352,7 +352,7 @@ describe('static utilities', function () {
 describe('media path building', function () {
 
     it('mediaPath combines root + folder + hash', function () {
-        config(['media.root_folder' => 'media']);
+        config(['nvl-media.root_folder' => 'media']);
 
         $media = new Media;
         $media->folder = 'users/123';
@@ -363,7 +363,7 @@ describe('media path building', function () {
     });
 
     it('mediaPath handles empty folder', function () {
-        config(['media.root_folder' => 'media']);
+        config(['nvl-media.root_folder' => 'media']);
 
         $media = new Media;
         $media->folder = '';
@@ -374,7 +374,7 @@ describe('media path building', function () {
     });
 
     it('mediaPath handles empty root folder', function () {
-        config(['media.root_folder' => '']);
+        config(['nvl-media.root_folder' => '']);
 
         $media = new Media;
         $media->folder = 'uploads';
@@ -385,7 +385,7 @@ describe('media path building', function () {
     });
 
     it('variationFolder builds correct path', function () {
-        config(['media.root_folder' => 'media', 'media.conversions_folder' => 'conversions']);
+        config(['nvl-media.root_folder' => 'media', 'nvl-media.conversions_folder' => 'conversions']);
 
         $media = new Media;
         $media->folder = 'users/123';
@@ -395,7 +395,7 @@ describe('media path building', function () {
     });
 
     it('variationFolder handles empty folder', function () {
-        config(['media.root_folder' => '', 'media.conversions_folder' => 'conversions']);
+        config(['nvl-media.root_folder' => '', 'nvl-media.conversions_folder' => 'conversions']);
 
         $media = new Media;
         $media->folder = '';
@@ -405,7 +405,7 @@ describe('media path building', function () {
     });
 
     it('variationPath combines folder and filename', function () {
-        config(['media.root_folder' => 'media', 'media.conversions_folder' => 'conversions']);
+        config(['nvl-media.root_folder' => 'media', 'nvl-media.conversions_folder' => 'conversions']);
 
         $media = new Media;
         $media->folder = 'users/123';

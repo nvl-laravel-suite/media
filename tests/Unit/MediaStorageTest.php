@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Exceptions\DiskNotDefinedException;
@@ -55,7 +56,7 @@ describe('MediaFileOperator', function () {
 
     it('stores raw contents at the given path and invalidates existence cache', function () {
         Storage::fake('public');
-        config(['media.cache_file_existence' => true, 'media.cache_ttl' => 60]);
+        config(['nvl-media.cache_file_existence' => true, 'nvl-media.cache_ttl' => 60]);
 
         expect(mediaFileExistence()->exists('public', 'test/file.txt'))->toBeFalse();
 
@@ -68,7 +69,7 @@ describe('MediaFileOperator', function () {
 
     it('removes a file from disk and invalidates existence cache', function () {
         Storage::fake('public');
-        config(['media.cache_file_existence' => true, 'media.cache_ttl' => 60]);
+        config(['nvl-media.cache_file_existence' => true, 'nvl-media.cache_ttl' => 60]);
 
         Storage::disk('public')->put('uploads/photo.jpg', 'content');
 
@@ -83,7 +84,7 @@ describe('MediaFileOperator', function () {
 
     it('cleans empty local directories when config enabled', function () {
         Storage::fake('public');
-        config(['media.clean_empty_directories' => true]);
+        config(['nvl-media.clean_empty_directories' => true]);
 
         Storage::disk('public')->put('uploads/subdir/file.txt', 'content');
 
@@ -94,7 +95,7 @@ describe('MediaFileOperator', function () {
 
     it('preserves non-empty directories', function () {
         Storage::fake('public');
-        config(['media.clean_empty_directories' => true]);
+        config(['nvl-media.clean_empty_directories' => true]);
 
         Storage::disk('public')->put('uploads/file1.txt', 'content1');
         Storage::disk('public')->put('uploads/file2.txt', 'content2');
@@ -193,23 +194,42 @@ describe('MediaFileOperator', function () {
 
         mediaFileOperator()->put('s3', 'media/public.txt', 'public', MediaVisibility::Public);
 
-        config(['media.s3.use_acl_visibility' => true]);
+        config(['nvl-media.s3.use_acl_visibility' => true]);
         mediaFileOperator()->put('s3', 'media/acl-public.txt', 'public', MediaVisibility::Public);
     });
 });
 
 describe('MediaFileExistence', function () {
+    it('preserves foreign existence cache values while invalidating only its owned entry', function (): void {
+        Storage::fake('public');
+        config(['nvl-media.cache_file_existence' => true]);
+        $path = 'namespace/file.txt';
+        $foreignKey = "media_exists:public:{$path}";
+        $ownedKey = "nvl:media:file-existence:public:{$path}";
+        Cache::put($foreignKey, false, 60);
+        Storage::disk('public')->put($path, 'content');
+
+        expect(mediaFileExistence()->exists('public', $path))->toBeTrue()
+            ->and(Cache::get($ownedKey))->toBeTrue()
+            ->and(Cache::get($foreignKey))->toBeFalse();
+
+        mediaFileExistence()->forget('public', $path);
+
+        expect(Cache::has($ownedKey))->toBeFalse()
+            ->and(Cache::get($foreignKey))->toBeFalse();
+    });
+
     it('returns true when file exists', function () {
         Storage::fake('public');
         Storage::disk('public')->put('test/file.txt', 'content');
-        config(['media.cache_file_existence' => false]);
+        config(['nvl-media.cache_file_existence' => false]);
 
         expect(mediaFileExistence()->exists('public', 'test/file.txt'))->toBeTrue();
     });
 
     it('returns false when file does not exist', function () {
         Storage::fake('public');
-        config(['media.cache_file_existence' => false]);
+        config(['nvl-media.cache_file_existence' => false]);
 
         expect(mediaFileExistence()->exists('public', 'nonexistent.txt'))->toBeFalse();
     });
@@ -217,7 +237,7 @@ describe('MediaFileExistence', function () {
     it('caches result when caching is enabled', function () {
         Storage::fake('public');
         Storage::disk('public')->put('cached/file.txt', 'content');
-        config(['media.cache_file_existence' => true, 'media.cache_ttl' => 60]);
+        config(['nvl-media.cache_file_existence' => true, 'nvl-media.cache_ttl' => 60]);
 
         expect(mediaFileExistence()->exists('public', 'cached/file.txt'))->toBeTrue();
 
@@ -229,7 +249,7 @@ describe('MediaFileExistence', function () {
     it('treats the configured cache ttl as seconds', function () {
         Storage::fake('public');
         Storage::disk('public')->put('ttl/file.txt', 'content');
-        config(['media.cache_file_existence' => true, 'media.cache_ttl' => 1]);
+        config(['nvl-media.cache_file_existence' => true, 'nvl-media.cache_ttl' => 1]);
 
         expect(mediaFileExistence()->exists('public', 'ttl/file.txt'))->toBeTrue();
 
@@ -242,7 +262,7 @@ describe('MediaFileExistence', function () {
     it('supports an authoritative existence check that bypasses cached state', function () {
         Storage::fake('public');
         Storage::disk('public')->put('fresh/file.txt', 'content');
-        config(['media.cache_file_existence' => true, 'media.cache_ttl' => 60]);
+        config(['nvl-media.cache_file_existence' => true, 'nvl-media.cache_ttl' => 60]);
 
         expect(mediaFileExistence()->exists('public', 'fresh/file.txt'))->toBeTrue();
 
@@ -255,7 +275,7 @@ describe('MediaFileExistence', function () {
     it('skips cache when caching is disabled', function () {
         Storage::fake('public');
         Storage::disk('public')->put('nocache/file.txt', 'content');
-        config(['media.cache_file_existence' => false]);
+        config(['nvl-media.cache_file_existence' => false]);
 
         expect(mediaFileExistence()->exists('public', 'nocache/file.txt'))->toBeTrue();
 

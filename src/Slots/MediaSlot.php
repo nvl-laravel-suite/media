@@ -80,7 +80,7 @@ class MediaSlot
         public readonly string $name,
     ) {
         $this->disk = MediaDiskResolver::resolve();
-        $this->pathTemplate = MediaConfiguration::string('media.default_path', 'misc');
+        $this->pathTemplate = MediaConfiguration::string('nvl-media.default_path', 'misc');
         $this->sharingMode = self::SHARING_SHARED;
     }
 

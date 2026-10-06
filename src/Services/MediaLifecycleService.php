@@ -7,9 +7,10 @@ namespace Nvl\Media\Services;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Nvl\Media\Contracts\AttachMediaContract;
 use Nvl\Media\Contracts\DeleteMediaContract;
 use Nvl\Media\Contracts\DetachMediaContract;
-use Nvl\Media\Contracts\HasMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 
@@ -20,14 +21,36 @@ final class MediaLifecycleService
         private readonly DeleteMediaContract $deleteAction,
         private readonly DetachMediaContract $detachAction,
         private readonly MediaMutationLock $mutationLock,
+        private readonly AttachMediaContract $attachAction,
     ) {}
+
+    /** Synchronize a collection atomically through the owned attachment boundaries.
+     * @param  array<int, Media>|Collection<int, Media>  $media
+     */
+    public function sync(Model&HasNvlMedia $model, array|Collection $media, string $collection = 'default'): void
+    {
+        $items = $media instanceof Collection ? $media : new Collection($media);
+        $identifiers = $items->map(static fn (Media $asset): string => $asset->id)->all();
+        $this->mutationLock->executeForOwnerCollection($model, $collection, function () use ($model, $items, $identifiers, $collection): void {
+            (new MediaAssociation)->getConnection()->transaction(function () use ($model, $items, $identifiers, $collection): void {
+                foreach ($model->nvlMedia()->all($collection) as $asset) {
+                    if (! in_array($asset->id, $identifiers, true)) {
+                        $this->detachAction->execute($asset, $model, $collection);
+                    }
+                }
+                foreach ($items as $order => $asset) {
+                    $this->attachAction->execute($asset, $model, $collection, order: $order);
+                }
+            });
+        });
+    }
 
     /**
      * Delete all media in a collection for a model.
      */
-    public function clearCollection(Model&HasMedia $model, string $collection = 'default'): void
+    public function clearCollection(Model&HasNvlMedia $model, string $collection = 'default'): void
     {
-        $this->removeManyFromModel($model, $model->getMedia($collection), $collection);
+        $this->removeManyFromModel($model, $model->nvlMedia()->all($collection), $collection);
     }
 
     /**
@@ -36,7 +59,7 @@ final class MediaLifecycleService
      * @param  array<int, Media|string>|Collection<int, Media|string>  $except
      */
     public function clearCollectionExcept(
-        Model&HasMedia $model,
+        Model&HasNvlMedia $model,
         string $collection = 'default',
         array|Collection $except = [],
     ): void {
@@ -46,7 +69,7 @@ final class MediaLifecycleService
             $exceptIds = collect($except)->map(fn ($item) => $item instanceof Media ? $item->id : $item)->all();
         }
 
-        $items = $model->getMedia($collection)
+        $items = $model->nvlMedia()->all($collection)
             ->reject(fn (Media $media) => in_array($media->id, $exceptIds, true));
 
         $this->removeManyFromModel($model, $items, $collection);
@@ -63,9 +86,9 @@ final class MediaLifecycleService
     /**
      * Delete all media associated with a model.
      */
-    public function deleteAll(Model&HasMedia $model): void
+    public function deleteAll(Model&HasNvlMedia $model): void
     {
-        $this->removeManyFromModel($model, $model->media()->get());
+        $this->removeManyFromModel($model, $model->nvlMedia()->query()->get());
     }
 
     /**
@@ -79,7 +102,7 @@ final class MediaLifecycleService
     /**
      * Remove a media association from one model, deleting the underlying row only when it is no longer shared.
      */
-    public function removeFromModel(Model&HasMedia $model, string|Media $media, ?string $collection = null): void
+    public function removeFromModel(Model&HasNvlMedia $model, string|Media $media, ?string $collection = null): void
     {
         $mediaId = $media instanceof Media ? $media->id : $media;
 
@@ -97,7 +120,7 @@ final class MediaLifecycleService
      *
      * @param  Collection<int, Media>  $items
      */
-    private function removeManyFromModel(Model&HasMedia $model, Collection $items, ?string $collection = null): void
+    private function removeManyFromModel(Model&HasNvlMedia $model, Collection $items, ?string $collection = null): void
     {
         if ($items->isEmpty()) {
             return;
@@ -133,7 +156,7 @@ final class MediaLifecycleService
     /**
      * Remove a resolved media record from one model, detaching only the targeted association when shared elsewhere.
      */
-    private function removeResolvedFromModel(Model&HasMedia $model, Media $media, ?string $collection = null): void
+    private function removeResolvedFromModel(Model&HasNvlMedia $model, Media $media, ?string $collection = null): void
     {
         $targetAssociationIds = MediaAssociation::query()
             ->where('media_id', $media->id)

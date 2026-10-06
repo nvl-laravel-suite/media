@@ -14,18 +14,18 @@ use Nvl\Media\Support\MediaAssetVersion;
 
 beforeEach(function () {
     config([
-        'media.root_folder' => '',
-        'media.conversions_folder' => 'conversions',
-        'media.assets.public_route_name' => 'media.assets.show',
-        'media.assets.private_route_name' => 'media.private.show',
-        'media.assets.allowed_parameters' => ['v'],
-        'media.assets.private_owner_fallback' => 'system',
-        'media.assets.signed_url_lifetime' => 5,
-        'media.assets.remote_public_delivery' => 'route',
+        'nvl-media.root_folder' => '',
+        'nvl-media.conversions_folder' => 'conversions',
+        'nvl-media.assets.public_route_name' => 'nvl.media.assets.show',
+        'nvl-media.assets.private_route_name' => 'nvl.media.private.show',
+        'nvl-media.assets.allowed_parameters' => ['v'],
+        'nvl-media.assets.private_owner_fallback' => 'system',
+        'nvl-media.assets.signed_url_lifetime' => 5,
+        'nvl-media.assets.remote_public_delivery' => 'route',
     ]);
 
-    if (! Route::has('media.assets.show')) {
-        Route::get('/test-media-assets/{media}', static fn (): string => '')->name('media.assets.show');
+    if (! Route::has('nvl.media.assets.show')) {
+        Route::get('/test-media-assets/{media}', static fn (): string => '')->name('nvl.media.assets.show');
     }
 });
 
@@ -115,7 +115,7 @@ describe('forMedia', function () {
         Storage::fake('cloudflare-r2');
         config([
             'filesystems.disks.cloudflare-r2.driver' => 's3',
-            'media.assets.remote_public_delivery' => 'route',
+            'nvl-media.assets.remote_public_delivery' => 'route',
         ]);
 
         $media = createTestMedia(['disk' => 'cloudflare-r2']);
@@ -132,7 +132,7 @@ describe('forMedia', function () {
         config([
             'filesystems.disks.cloudflare-r2.driver' => 's3',
             'filesystems.disks.cloudflare-r2.url' => 'https://media.example.test',
-            'media.assets.remote_public_delivery' => 'route',
+            'nvl-media.assets.remote_public_delivery' => 'route',
         ]);
 
         $media = createTestMedia(['disk' => 'cloudflare-r2']);
@@ -150,7 +150,7 @@ describe('forMedia', function () {
         config([
             'filesystems.disks.cloudflare-r2.driver' => 's3',
             'filesystems.disks.cloudflare-r2.url' => 'https://media.example.test',
-            'media.assets.remote_public_delivery' => 'disk',
+            'nvl-media.assets.remote_public_delivery' => 'disk',
         ]);
 
         $media = createTestMedia(['disk' => 'cloudflare-r2']);
@@ -347,7 +347,7 @@ describe('variation availability', function () {
         config([
             'filesystems.disks.cloudflare-r2.driver' => 's3',
             'filesystems.disks.cloudflare-r2.url' => 'https://media.example.test',
-            'media.assets.remote_public_delivery' => 'disk',
+            'nvl-media.assets.remote_public_delivery' => 'disk',
         ]);
 
         $media = createTestMedia([
@@ -380,7 +380,7 @@ describe('variation availability', function () {
         ];
         $media->is_public = false;
         $media->uploaded_by = 'user-123';
-        config(['media.assets.private_route_name' => 'media.private.missing']);
+        config(['nvl-media.assets.private_route_name' => 'nvl-media.private.missing']);
         $urls[] = MediaAssetUrl::privateUrl(
             media: $media,
             parameters: ['v' => 'stale'],
@@ -458,7 +458,7 @@ describe('parameter normalization', function () {
 
     it('does not let configuration broaden the supported parameter set', function () {
         Storage::fake('public');
-        config(['media.assets.allowed_parameters' => ['v', 'w']]);
+        config(['nvl-media.assets.allowed_parameters' => ['v', 'w']]);
 
         $media = createTestMedia(['disk' => 'public']);
         $variation = createResolverVariation($media);
@@ -478,8 +478,8 @@ describe('parameter normalization', function () {
         config([
             'filesystems.disks.cloudflare-r2.driver' => 's3',
             'filesystems.disks.cloudflare-r2.url' => 'https://media.example.test',
-            'media.assets.remote_public_delivery' => 'route',
-            'media.assets.allowed_parameters' => [],
+            'nvl-media.assets.remote_public_delivery' => 'route',
+            'nvl-media.assets.allowed_parameters' => [],
         ]);
 
         $media = createTestMedia(['disk' => 'cloudflare-r2']);
@@ -498,8 +498,8 @@ describe('parameter normalization', function () {
         config([
             'filesystems.disks.cloudflare-r2.driver' => 's3',
             'filesystems.disks.cloudflare-r2.url' => 'https://media.example.test',
-            'media.assets.remote_public_delivery' => 'disk',
-            'media.assets.allowed_parameters' => [],
+            'nvl-media.assets.remote_public_delivery' => 'disk',
+            'nvl-media.assets.allowed_parameters' => [],
         ]);
 
         $media = createTestMedia(['disk' => 'cloudflare-r2']);
@@ -518,7 +518,7 @@ describe('parameter normalization', function () {
 
     it('omits disabled named variation parameters from private signed URLs', function () {
         Storage::fake('public');
-        config(['media.assets.allowed_parameters' => []]);
+        config(['nvl-media.assets.allowed_parameters' => []]);
 
         $media = createTestMedia([
             'disk' => 'public',
@@ -538,8 +538,8 @@ describe('parameter normalization', function () {
 
     it('uses normalized parameters when private signed routes fall back to temporary disk URLs', function () {
         config([
-            'media.assets.allowed_parameters' => [],
-            'media.assets.private_route_name' => 'media.private.missing',
+            'nvl-media.assets.allowed_parameters' => [],
+            'nvl-media.assets.private_route_name' => 'media.private.missing',
         ]);
 
         $media = createTestMedia([

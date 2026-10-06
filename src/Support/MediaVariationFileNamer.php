@@ -27,7 +27,7 @@ final class MediaVariationFileNamer
 
         $basename = pathinfo($sourceFilename, PATHINFO_FILENAME);
         $pattern = MediaConfiguration::string(
-            'media.variation_naming.pattern',
+            'nvl-media.variation_naming.pattern',
             '{basename}-{label}.{extension}',
         );
         $filename = strtr($pattern, [

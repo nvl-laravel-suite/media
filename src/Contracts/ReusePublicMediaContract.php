@@ -17,7 +17,7 @@ interface ReusePublicMediaContract
      */
     public function execute(
         Media|string $media,
-        Model&HasMedia $model,
+        Model&HasNvlMedia $model,
         string $collection = 'default',
         ?string $locale = null,
         ?int $order = null,

@@ -11,6 +11,6 @@ abstract class MediaTenantAssetTestCase extends MediaTenancyTestCase
     protected function defineEnvironment($app): void
     {
         parent::defineEnvironment($app);
-        $app['config']->set('media.routes.assets_enabled', true);
+        $app['config']->set('nvl-media.routes.assets_enabled', true);
     }
 }

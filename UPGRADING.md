@@ -19,7 +19,7 @@ are independent and cleanup must never remove another tenant's copy.
 
 Version 1.0 uses UUID media records, string-compatible morph identifiers, explicit lifecycle and visibility, localized metadata rows, and separate management and delivery routes.
 
-1. Set `media.migrations.enabled=false` for an existing schema.
+1. Set `nvl-media.migrations.enabled=false` for an existing schema.
 2. Run `php artisan nvl:media:doctor --strict --format=json`.
 3. Stage the legacy Spatie-style table under a non-canonical name, run `php artisan nvl:media:adopt-spatie --source=... --format=json`, resolve every mapping/path error, then repeat with `--apply`. Pass `--translations` and `--variations` for staged companion tables.
 4. Register owners with `HasMedia` and `InteractsWithMedia`.
@@ -27,7 +27,7 @@ Version 1.0 uses UUID media records, string-compatible morph identifiers, explic
 6. Enable asset delivery independently of management APIs.
 7. Run read-only `php artisan nvl:media:reconcile --production` before and after cutover.
 
-If existing `folder` values are already complete disk-relative paths, set `MEDIA_ROOT_FOLDER=` during in-place adoption. Leaving the default `media` prefix would point every imported row at a different object. Keep the empty root only for a dedicated disk, or move objects through `nvl:media:migrate-disk` into the prefixed layout. `nvl:media:doctor` samples persisted rows and flags this mismatch.
+If existing `folder` values are already complete disk-relative paths, set `NVL_MEDIA_ROOT_FOLDER=` during in-place adoption. Leaving the default `media` prefix would point every imported row at a different object. Keep the empty root only for a dedicated disk, or move objects through `nvl:media:migrate-disk` into the prefixed layout. `nvl:media:doctor` samples persisted rows and flags this mismatch.
 
 Treat any strict `storage.persisted_paths` failure as a data incident. Diagnose
 and restore missing objects before considering association or row removal; do
@@ -35,11 +35,11 @@ not schedule `nvl:media:reconcile --cleanup-orphans` as an adoption shortcut.
 
 ### Image and queue configuration
 
-The v1 configuration uses `media.queue.enabled`, `media.queue.connection`, `media.queue.name`, and `media.queue.jobs.*`. Remove the pre-v1 flat `queue_conversions`, `queue_connection`, and `queue_name` keys.
+The v1 configuration uses `nvl-media.queue.enabled`, `nvl-media.queue.connection`, `nvl-media.queue.name`, and `nvl-media.queue.jobs.*`. Remove the pre-v1 flat `queue_conversions`, `queue_connection`, and `queue_name` keys.
 
 Image presets now accept `ImageFit`, `ImageFormat`, and `ImageCompression` enum values. `max_size` with `ImageFit::Max` preserves aspect ratio and never upscales. The built-in `optimized` output is bounded to 1200 pixels.
 
-S3 omits per-object ACLs by default for Bucket Owner Enforced compatibility. Set `MEDIA_S3_USE_ACL_VISIBILITY=true` only for an ACL-enabled bucket. Changing `media.variation_naming.pattern` changes derived paths and requires controlled regeneration.
+S3 omits per-object ACLs by default for Bucket Owner Enforced compatibility. Set `NVL_MEDIA_S3_USE_ACL_VISIBILITY=true` only for an ACL-enabled bucket. Changing `nvl-media.variation_naming.pattern` changes derived paths and requires controlled regeneration.
 
 Preserve identifiers and verify row counts, checksums, associations, physical objects, signatures, and rollback before removing old code.
 
@@ -49,26 +49,26 @@ The clean v1 schema includes immutable variation paths, persisted upload-specifi
 
 1. Require `ext-curl`, deploy the new code, and run `php artisan migrate` before enabling ingestion.
 2. Merge the new `authorization`, `owner_slots`, `sources.remote`, `integrity`, `mutation_lock`, `multipart`, `query`, `reconciliation`, and `deployment` configuration groups.
-3. Change custom `media.file_types` entries to `extension => string|list<string>` where a canonical extension has legitimate MIME aliases. Existing string entries remain valid.
+3. Change custom `nvl-media.file_types` entries to `extension => string|list<string>` where a canonical extension has legitimate MIME aliases. Existing string entries remain valid.
 4. Configure every production disk with `throw=true`, use Redis-backed mutation/deduplication locks and durable queues, and keep queue `retry_after` or SQS visibility timeout above every Media job timeout.
 5. Bind a real `MediaContentScanner` whenever untrusted uploads are accepted. `nvl:media:doctor --production` fails closed on the no-op scanner.
 6. Keep multipart disabled unless direct uploads are required. When enabled, configure a recoverable gateway, Redis-backed locks, scanner attestation, expired-session pruning, and the production integration gate.
 7. Run `php artisan nvl:media:doctor --production --strict --format=json`, followed by read-only `php artisan nvl:media:reconcile --production --orphans`.
-8. Remote URL ingestion is now opt-in. Set `MEDIA_REMOTE_SOURCES_ENABLED=true` only where it is used, then canary it separately after the ordinary upload path.
+8. Remote URL ingestion is now opt-in. Set `NVL_MEDIA_REMOTE_SOURCES_ENABLED=true` only where it is used, then canary it separately after the ordinary upload path.
 9. If the application uses Spatie Permission, configure explicit `global_roles` or seed the `media.manage`/granular `media.*-any` permissions. Include `media.manage-staging` only for actors allowed to adopt another actor's staged media. Role names default to an empty list and therefore do not grant new access during upgrade.
 10. Application services may adopt `Nvl\Media\Facades\Media` or inject `MediaLibraryContract`. No global class alias is registered, and existing model-trait/action APIs remain valid.
 
 Storage identities are now cryptographically random and use only the validated canonical extension. Upload and replacement actions detect MIME and SHA-256 from bytes, enforce dangerous multi-extension rejection, scan before storage, and verify stored size/checksum. Existing display filenames remain presentation metadata and no longer influence executable object keys.
 
-The optional Spatie-compatible authorization bridge is additive and has no Composer dependency on `spatie/laravel-permission`. Configured global roles bypass uploader ownership consistently in policies, listing scope, and private delivery. They do not bypass shared-association integrity or quarantine. Disable `media.authorization.spatie_permission.enabled` when the application authorizer must be the sole source of cross-owner access.
+The optional Spatie-compatible authorization bridge is additive and has no Composer dependency on `spatie/laravel-permission`. Configured global roles bypass uploader ownership consistently in policies, listing scope, and private delivery. They do not bypass shared-association integrity or quarantine. Disable `nvl-media.authorization.spatie_permission.enabled` when the application authorizer must be the sole source of cross-owner access.
 
 The public action contracts are now honored consistently by model-trait, facade, lifecycle-service, and package-controller calls. Applications that intentionally replaced `UploadMediaContract`, `AttachMediaContract`, `DetachMediaContract`, `DeleteMediaContract`, or `ReusePublicMediaContract` no longer need to replace concrete package controllers or trait internals as well.
 
 The owner-slot idempotency foundation adds the
 `px_media_owner_slot_operations` table. Run migrations before deploying
 owner-slot workflows. Custom deployments may isolate only this ledger with
-`media.owner_slots.idempotency.connection` and
-`media.owner_slots.idempotency.table`; the table must not collide with another
+`nvl-media.owner_slots.idempotency.connection` and
+`nvl-media.owner_slots.idempotency.table`; the table must not collide with another
 Media table. The ledger contains canonical request hashes and stable failure
 codes, never request payloads or exception messages. Processing attempts use a
 renewable 30-minute lease by default; recovery rotates the operation UUID and
@@ -84,7 +84,7 @@ model's registered `MediaSlot` policy and domain convenience accessors. Existing
 staged files must satisfy the registered MIME, size, visibility, ownership, and
 sharing rules; slots with a custom file acceptor receive new uploads/copies, not
 already-persisted replacement rows. Configure
-`media.owner_slots.copy.metadata_keys` as an explicit list of safe scalar
+`nvl-media.owner_slots.copy.metadata_keys` as an explicit list of safe scalar
 presentation/provenance fields instead of copying arbitrary metadata.
 
 After migration, run the owner-slot workflow tests, then schedule:
@@ -112,20 +112,18 @@ Review the dedicated [PHP API](docs/php-api.md), [HTTP API](docs/http-api.md), [
 
 ## Shared owner registry compatibility
 
-Move model identity declarations to `nvl-core.owners` and reference the alias from `media` capability configuration as described in the [README](README.md#shared-owner-identity). Preserve package contracts, resolvers/handlers, visibility scopes, and mutation authorization. Core does not grant package capabilities. Conflicting aliases or multiple canonical aliases for one model fail before use.
+Declare owner classes in `nvl-core.owners`, for example `'owners' => [Article::class]`, and reference the same model class from each package capability. Laravel's `getMorphClass()` is the stored owner identity: it returns the host-authored morph alias or the FQCN when no map exists. Core declarations and package allowlists do not add or enforce a host morph map and do not grant authorization.
 
-Legacy class inputs remain accepted for one major cycle and are reported through Core diagnostics. Existing Content, Taxonomy, and Metafields mappings keep their established aliases. Legacy SEO, Media, Comments, Templates, Pages, and Translatable class-backed behavior does not automatically create a new morph alias. Existing host morph mappings are respected.
-
-Adding a canonical Core alias changes Laravel's write-time morph type for that model. Before adding it to an existing class-backed deployment, explicitly convert the known package-owned morph columns and reconcile every other affected host relationship. Keep unrelated rows and host-owned morph tables unchanged. This release performs no automatic owner-data conversion and does not ship `nvl:owners:upgrade`. Preserve existing aliases when no conversion is required, rebuild configuration caches, and restart workers after the cutover.
+Legacy alias references remain read compatibility during major 5 and are removed in major 6. A legacy configured alias must agree with the model's current `getMorphClass()`; mismatches are diagnostics and require a host decision. Doctor can inspect declared package owner columns for stored-versus-current identities without rewriting them. If the host introduces or changes its morph map, review and convert only the affected stored columns and reconcile host relationships before cutover. No automatic owner-data conversion or `nvl:owners:upgrade` is provided. Rebuild configuration caches and restart workers after the coordinated change.
 
 ## Queue default inheritance
 
-Remove a published queue connection only when you intend to inherit `nvl-core.queue.connection` or the effective Laravel `queue.default`. Retain an explicit `sync` to keep synchronous behavior. `MEDIA_QUEUE_CONNECTION` remains supported; `QUEUE_CONNECTION` is read by Laravel configuration, while Media resolves its effective runtime configuration. Rebuild configuration caches and restart workers after changing these settings. This change does not migrate data.
+Remove a published queue connection only when you intend to inherit `nvl-core.queue.connection` or the effective Laravel `queue.default`. Retain an explicit `sync` to keep synchronous behavior. `NVL_MEDIA_QUEUE_CONNECTION` remains supported; `QUEUE_CONNECTION` is read by Laravel configuration, while Media resolves its effective runtime configuration. Rebuild configuration caches and restart workers after changing these settings. This change does not migrate data.
 
 
 ## Infrastructure option inheritance
 
-Fresh Media queue names now inherit Core or the selected Laravel connection's queue. Keep an explicit `MEDIA_QUEUE=media` or `media.queue.name = 'media'` when existing workers use that dedicated name. Move operation lock stores to `locks.mutation.store`, `locks.deduplication.store`, and `locks.multipart.store`, or share `locks.store`; keep existing operation duration/wait values. Historical store keys remain supported for one major cycle and appear in Core diagnostics. Rebuild configuration caches and restart workers.
+Fresh Media queue names now inherit Core or the selected Laravel connection's queue. Keep an explicit `NVL_MEDIA_QUEUE=media` or `nvl-media.queue.name = 'media'` when existing workers use that dedicated name. Move operation lock stores to `locks.mutation.store`, `locks.deduplication.store`, and `locks.multipart.store`, or share `locks.store`; keep existing operation duration/wait values. Historical store keys remain supported for one major cycle and appear in Core diagnostics. Rebuild configuration caches and restart workers.
 
 ## Next major: isolated schema identities
 
@@ -133,12 +131,26 @@ This is a breaking schema identity change. Back up storage and migration history
 
 ```sh
 php artisan nvl:doctor --strict --format=json
-php artisan nvl:schema:upgrade --package=media --claim-legacy --dry-run --format=json
-php artisan nvl:schema:upgrade --package=media --claim-legacy --format=json
+php artisan nvl:schema:upgrade --package=media --claim-legacy --migration-owner=vendor --dry-run --format=json
+php artisan nvl:schema:upgrade --package=media --claim-legacy --migration-owner=vendor --format=json
 ```
 
 The command validates released columns and relational keys plus creating migration history, renames owned legacy tables to the effective `tables.*` targets and rewrites exact package migration identities while retaining batches and unrelated host records. It refuses foreign/incomplete shapes and conflicting targets. Explicit old table mappings retain those names; remove them when choosing new defaults. A second run is empty.
 
-Unmodified published files, including changed timestamps, map by verified checksum to the exact vendor migration identity and current package migration implementation. Modified host copies remain host-owned. Disable vendor loading when retaining a published owner; duplicate ownership fails before migration. No migration files or stored morph types are rewritten.
+Declare each published path and canonical identity explicitly in `nvl-core.migrations.published`; retimestamped history also needs an exact `legacy` mapping. Use `--migration-owner=vendor` after manually archiving declared copies outside loaded paths, or `--migration-owner=published` after manually replacing executable copies with current migration code and disabling vendor loading. The plan verifies ownership and preserves batches; checksums do not automatically claim files. Modified host copies remain host-owned. No migration files or stored morph types are rewritten.
 
-DDL transactions are driver dependent and per connection. Inspect dry-run warnings for MySQL/MariaDB or split storage; after a failure, inspect completed steps before resuming. Schema-qualified rename targets require an explicit host schema move first. Re-enable your selected migration owner, migrate remaining package changes and rerun Doctor before resuming writes. See the suite upgrade guide for shared owner/locale inputs, Core option defaults and one-major deprecation rules.
+DDL transactions are driver dependent and per connection. Inspect dry-run warnings for MySQL/MariaDB or split storage; after a failure, inspect completed steps before resuming. Schema-qualified rename targets require an explicit host schema move first. Re-enable your selected migration owner, run `nvl:schema:preflight` with the same selected paths and connection, then migrate remaining package changes and rerun Doctor before resuming writes. See the suite upgrade guide for shared owner/locale inputs, Core option defaults and one-major deprecation rules.
+
+## Major 5: namespaced model capability
+
+New integrations implement `HasNvlMedia` and use `InteractsWithNvlMedia`. Move slot/conversion definitions into `registerNvlMedia(MediaRegistration $media, ?Media $asset = null)`, using `$media->slot()` and `$media->conversion()`. Move uploads and reads to `$owner->nvlMedia()->add()`, `fromString()`, `all()`, `first()` and `firstUrl()`. Eager-load `nvlMediaAssociations`, whose NVL assets load with it. The facade, injected library contract and owner-slot Actions accept this capability.
+
+The legacy `HasMedia` interface and `InteractsWithMedia` trait remain forwarding adapters throughout major 5 and are removed in major 6. Existing NVL-only models using that trait retain their public calls and old registration overrides. Handwritten implementations of the old contract must also provide the new capability methods or adopt the forwarding trait. A host composing Spatie Media uses the new NVL contract/trait, preserving Spatie's `media()`, `addMedia()` and `registerMediaConversions()` unchanged. Do not compose the deprecated NVL trait on that dual-library model.
+
+This API change performs no database, file or morph-identity conversion. NVL and Spatie collection operations use their own models, associations, disks and conversion definitions. Soft deletion preserves both sets; force deletion invokes each library's own cleanup. The reproducible standalone proof is `tools/run-media-spatie-consumer.sh`; Spatie is required only by its test fixture, never by the production Media manifest.
+
+## Major 5 cache and lock identities
+
+Mutation, deduplication, and multipart locks use `nvl:media:mutation:`, `nvl:media:deduplication:`, and `nvl:media:multipart:`. File existence entries use `nvl:media:file-existence:` instead of `media_exists:`. Invalidation touches only the owned entry; generic host keys are never read, copied, or removed.
+
+Drain old mutation workers and maintenance processes, then wait for their outstanding lock leases to end before starting the new major across all nodes. Running old and new lock prefixes concurrently would create independent serialization domains. Restart workers after cutover; preserve host-selected stores and keys, and do not flush a shared cache to remove old NVL entries.

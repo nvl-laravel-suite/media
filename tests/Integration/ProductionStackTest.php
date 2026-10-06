@@ -46,14 +46,14 @@ it('proves PostgreSQL, Redis locking, and S3-compatible multipart recovery toget
             'port' => (int) env('REDIS_PORT', 6379),
             'database' => 0,
         ],
-        'media.mutation_lock.store' => $redisStore,
-        'media.mutation_lock.seconds' => 10,
-        'media.mutation_lock.wait_seconds' => 0,
+        'nvl-media.mutation_lock.store' => $redisStore,
+        'nvl-media.mutation_lock.seconds' => 10,
+        'nvl-media.mutation_lock.wait_seconds' => 0,
     ]);
     Cache::forgetDriver($redisStore);
 
     $mediaId = (string) Str::uuid();
-    $lockKey = $scenario->run($scenario::A, fn (): string => 'media:mutation:'.hash(
+    $lockKey = $scenario->run($scenario::A, fn (): string => 'nvl:media:mutation:'.hash(
         'sha256',
         app(TenantBoundary::class)->key('media.assets', $mediaId),
     ));

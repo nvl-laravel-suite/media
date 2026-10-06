@@ -121,7 +121,7 @@ describe('shouldOptimize', function () {
     });
 
     it('respects configurable skip_formats', function () {
-        config(['media.optimization.skip_formats' => ['svg', 'gif', 'bmp']]);
+        config(['nvl-media.optimization.skip_formats' => ['svg', 'gif', 'bmp']]);
 
         $service = createOptimizationService();
         $file = UploadedFile::fake()->create('photo.bmp', 100, 'image/bmp');

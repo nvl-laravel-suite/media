@@ -42,7 +42,7 @@ describe('Content-Type and security headers', function () {
         $media = createHeaderTestMedia();
         Storage::disk('public')->put($media->buildPath(), createTinyJpeg());
 
-        $response = $this->get("/media/assets/{$media->id}");
+        $response = $this->get("/nvl/media/assets/{$media->id}");
 
         $response->assertOk()
             ->assertHeader('Content-Type', 'image/jpeg')
@@ -57,7 +57,7 @@ describe('ETag header', function () {
         $media = createHeaderTestMedia(['hash' => 'etag-test-hash.jpg']);
         Storage::disk('public')->put($media->buildPath(), createTinyJpeg());
 
-        $response = $this->get("/media/assets/{$media->id}");
+        $response = $this->get("/nvl/media/assets/{$media->id}");
 
         $response->assertOk()
             ->assertHeader('ETag', '"etag-test-hash.jpg"');
@@ -69,7 +69,7 @@ describe('ETag header', function () {
 
         $response = $this->withHeaders([
             'If-None-Match' => '"matching-etag.jpg"',
-        ])->get("/media/assets/{$media->id}");
+        ])->get("/nvl/media/assets/{$media->id}");
 
         $response->assertStatus(304);
     });
@@ -80,7 +80,7 @@ describe('ETag header', function () {
 
         $response = $this->withHeaders([
             'If-None-Match' => '"old-hash.jpg"',
-        ])->get("/media/assets/{$media->id}");
+        ])->get("/nvl/media/assets/{$media->id}");
 
         $response->assertOk();
     });
@@ -100,13 +100,13 @@ describe('ETag header', function () {
 
         $etag = MediaAssetVersion::etag($media, $variation);
 
-        $this->get("/media/assets/{$media->id}?v=thumb")
+        $this->get("/nvl/media/assets/{$media->id}?v=thumb")
             ->assertOk()
             ->assertHeader('ETag', "\"{$etag}\"");
 
         $this->withHeaders([
             'If-None-Match' => "\"unrelated\", W/\"{$etag}\"",
-        ])->get("/media/assets/{$media->id}?v=thumb")
+        ])->get("/nvl/media/assets/{$media->id}?v=thumb")
             ->assertStatus(304);
     });
 });
@@ -117,7 +117,7 @@ describe('Cache-Control headers', function () {
     it('uses public immutable cache for public assets', function () {
         config([
             'filesystems.disks.public.url' => null,
-            'media.assets.public_cache_control' => 'public, max-age=31536000, immutable',
+            'nvl-media.assets.public_cache_control' => 'public, max-age=31536000, immutable',
         ]);
 
         $media = createHeaderTestMedia();
@@ -140,7 +140,7 @@ describe('HTTP delivery semantics', function () {
         Storage::disk('public')->put($media->buildPath(), '0123456789');
 
         $response = $this->withHeader('Range', 'bytes=2-5')
-            ->get("/media/assets/{$media->id}");
+            ->get("/nvl/media/assets/{$media->id}");
 
         $response->assertStatus(206)
             ->assertHeader('Accept-Ranges', 'bytes')
@@ -165,7 +165,7 @@ describe('HTTP delivery semantics', function () {
         Storage::disk('s3')->put($media->buildPath(), 'abcdefghij');
 
         $response = $this->withHeader('Range', 'bytes=4-')
-            ->get("/media/assets/{$media->id}");
+            ->get("/nvl/media/assets/{$media->id}");
 
         $response->assertStatus(206)
             ->assertHeader('Content-Range', 'bytes 4-9/10')
@@ -178,7 +178,7 @@ describe('HTTP delivery semantics', function () {
         $media = createHeaderTestMedia();
         Storage::disk('public')->put($media->buildPath(), '0123456789');
 
-        $response = $this->call('HEAD', "/media/assets/{$media->id}");
+        $response = $this->call('HEAD', "/nvl/media/assets/{$media->id}");
 
         $response->assertOk()
             ->assertHeader('Accept-Ranges', 'bytes')
@@ -193,7 +193,7 @@ describe('HTTP delivery semantics', function () {
         Storage::disk('public')->put($media->buildPath(), '0123456789');
 
         $this->withHeader('Range', 'bytes=50-60')
-            ->get("/media/assets/{$media->id}")
+            ->get("/nvl/media/assets/{$media->id}")
             ->assertStatus(416)
             ->assertHeader('Content-Range', 'bytes */10');
     });
@@ -206,7 +206,7 @@ describe('private asset serving', function () {
         $media = createHeaderTestMedia(['is_public' => false]);
         Storage::disk('public')->put($media->buildPath(), createTinyJpeg());
 
-        $response = $this->get("/media/assets/{$media->id}");
+        $response = $this->get("/nvl/media/assets/{$media->id}");
 
         $response->assertNotFound();
     });

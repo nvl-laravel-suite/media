@@ -13,8 +13,8 @@ beforeEach(function () {
 
     config([
         'filesystems.default' => 'public',
-        'media.auto_generate_variations' => false,
-        'media.auto_generate_conversions' => false,
+        'nvl-media.auto_generate_variations' => false,
+        'nvl-media.auto_generate_conversions' => false,
     ]);
 
     $this->service = app(MediaLifecycleService::class);

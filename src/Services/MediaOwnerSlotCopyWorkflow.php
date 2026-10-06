@@ -14,7 +14,7 @@ use LogicException;
 use Nvl\Media\Contracts\AttachMediaContract;
 use Nvl\Media\Contracts\DeleteMediaContract;
 use Nvl\Media\Contracts\DetachMediaContract;
-use Nvl\Media\Contracts\HasMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Contracts\UploadMediaContract;
 use Nvl\Media\Data\Display\MediaLibraryItem;
@@ -74,7 +74,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
      */
     public function copy(
         MediaActorData $actor,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         string $sourceMediaId,
         ?string $idempotencyKey = null,
@@ -221,7 +221,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
      */
     private function copyUnderAcquiredLocks(
         MediaActorData $actor,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         MediaSlot $slotDefinition,
         string $sourceMediaId,
@@ -265,7 +265,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
      */
     private function copyInTransaction(
         MediaActorData $actor,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         MediaSlot $slotDefinition,
         string $sourceMediaId,
@@ -347,7 +347,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
      */
     private function replaceCanonicalCopy(
         MediaActorData $actor,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         MediaSlot $slotDefinition,
         string $candidateId,
@@ -427,7 +427,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
      */
     private function recoverCheckpoint(
         MediaActorData $actor,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         MediaOwnerSlotOperationClaim $claim,
         bool $lockForUpdate = false,
@@ -510,7 +510,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
      * Resolve a completed idempotent result without rerunning lifecycle effects.
      */
     private function replayProjection(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         MediaOwnerSlotOperationClaim $claim,
     ): MediaLibraryItem {
@@ -603,7 +603,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
     /**
      * Serialize an initially empty slot through its durable owner row when possible.
      */
-    private function lockOwner(Model&HasMedia $owner): void
+    private function lockOwner(Model&HasNvlMedia $owner): void
     {
         if ($owner->getConnection()->getName()
             !== (new MediaAssociation)->getConnection()->getName()) {
@@ -680,7 +680,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
         $allowed = [];
 
         foreach (MediaConfiguration::stringList(
-            'media.owner_slots.copy.metadata_keys',
+            'nvl-media.owner_slots.copy.metadata_keys',
             self::DEFAULT_METADATA_KEYS,
         ) as $key) {
             $key = trim($key);
@@ -729,7 +729,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
         MediaActorData $actor,
         MediaAbility $ability,
         ?Media $media,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
     ): void {
         if ($this->authorization->allows($actor, $ability, $media, $owner)) {
             return;

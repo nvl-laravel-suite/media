@@ -50,7 +50,7 @@ describe('AllowedMimeTypes', function () {
     });
 
     it('reads defaults from config when no constructor arg', function () {
-        config(['media.file_types' => ['image/jpeg' => 'image/jpeg', 'image/png' => 'image/png']]);
+        config(['nvl-media.file_types' => ['image/jpeg' => 'image/jpeg', 'image/png' => 'image/png']]);
 
         $rule = new AllowedMimeTypes;
         $file = UploadedFile::fake()->image('photo.jpg');
@@ -95,7 +95,7 @@ describe('MaxFileSize', function () {
     });
 
     it('reads config default when no constructor arg', function () {
-        config(['media.max_file_size' => 500]);
+        config(['nvl-media.max_file_size' => 500]);
         $rule = new MaxFileSize;
         $file = UploadedFile::fake()->image('photo.jpg')->size(1); // 1 KB = 1024 bytes > 500
         $message = '';

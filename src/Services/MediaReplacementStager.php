@@ -6,7 +6,7 @@ namespace Nvl\Media\Services;
 
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
-use Nvl\Media\Contracts\HasMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Data\Ingestion\StagedMediaFileData;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
@@ -47,7 +47,7 @@ final class MediaReplacementStager
         foreach ($media->associations as $association) {
             $associable = $association->associable;
 
-            if (! $associable instanceof HasMedia) {
+            if (! $associable instanceof HasNvlMedia) {
                 continue;
             }
 
@@ -55,7 +55,7 @@ final class MediaReplacementStager
             $slotName = is_string($configuredSlot) && $configuredSlot !== ''
                 ? $configuredSlot
                 : $association->collection;
-            $slot = $associable->getMediaSlot($slotName);
+            $slot = $associable->nvlMedia()->slot($slotName);
 
             if ($slot instanceof MediaSlot) {
                 $slots[] = $slot;

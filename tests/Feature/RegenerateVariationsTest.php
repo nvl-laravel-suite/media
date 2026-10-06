@@ -16,7 +16,7 @@ describe('RegenerateMediaVariationsJob', function () {
         Bus::fake([GenerateImageVariationJob::class]);
 
         config([
-            'media.image_variation_presets' => [
+            'nvl-media.image_variation_presets' => [
                 'thumb' => ['width' => 150, 'height' => 150, 'quality' => 80, 'format' => 'webp', 'enabled' => true],
                 'large' => ['width' => 1280, 'height' => 1280, 'quality' => 85, 'format' => 'webp', 'enabled' => true],
                 'disabled' => ['width' => 50, 'height' => 50, 'quality' => 50, 'format' => 'webp', 'enabled' => false],
@@ -48,7 +48,7 @@ describe('RegenerateMediaVariationsJob', function () {
         Bus::fake([GenerateImageVariationJob::class]);
 
         config([
-            'media.image_variation_presets' => [
+            'nvl-media.image_variation_presets' => [
                 'thumb' => ['width' => 150, 'height' => 150, 'quality' => 80, 'format' => 'webp', 'enabled' => true],
                 'medium' => ['width' => 640, 'height' => 640, 'quality' => 85, 'format' => 'webp', 'enabled' => true],
                 'large' => ['width' => 1280, 'height' => 1280, 'quality' => 85, 'format' => 'webp', 'enabled' => true],
@@ -79,7 +79,7 @@ describe('RegenerateMediaVariationsJob', function () {
         Bus::fake([GenerateImageVariationJob::class]);
 
         config([
-            'media.image_variation_presets' => [
+            'nvl-media.image_variation_presets' => [
                 'thumb' => ['width' => 150, 'height' => 150, 'quality' => 80, 'format' => 'webp', 'enabled' => true],
             ],
         ]);
@@ -109,7 +109,7 @@ describe('RegenerateMediaVariationsJob', function () {
         Bus::fake([GenerateImageVariationJob::class]);
 
         config([
-            'media.image_variation_presets' => [
+            'nvl-media.image_variation_presets' => [
                 'thumb' => ['width' => 150, 'height' => 150, 'quality' => 80, 'format' => 'webp', 'enabled' => true],
             ],
         ]);
@@ -138,7 +138,7 @@ describe('RegenerateMediaVariationsJob', function () {
         Bus::fake([GenerateImageVariationJob::class]);
 
         config([
-            'media.image_variation_presets' => [
+            'nvl-media.image_variation_presets' => [
                 'thumb' => ['width' => 150, 'height' => 150, 'quality' => 80, 'format' => 'webp', 'enabled' => true],
             ],
         ]);
@@ -181,7 +181,7 @@ describe('RegenerateMediaVariationsJob', function () {
         Bus::fake([GenerateImageVariationJob::class]);
 
         config([
-            'media.image_variation_presets' => [
+            'nvl-media.image_variation_presets' => [
                 'thumb' => ['width' => 150, 'height' => 150, 'enabled' => false],
             ],
         ]);

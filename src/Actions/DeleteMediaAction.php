@@ -68,7 +68,7 @@ final class DeleteMediaAction implements DeleteMediaContract
 
                 if (! $force
                     && $lockedMedia->is_public
-                    && config('media.prevent_deleting_reused_public_media', true)
+                    && config('nvl-media.prevent_deleting_reused_public_media', true)
                     && $lockedMedia->associations->count() > 1) {
                     throw MediaInUseException::publicAsset(
                         $lockedMedia->id,
@@ -92,7 +92,7 @@ final class DeleteMediaAction implements DeleteMediaContract
                 return false;
             }
 
-            if ((bool) config('media.delete_files_on_media_delete', true)) {
+            if ((bool) config('nvl-media.delete_files_on_media_delete', true)) {
                 $this->fileEffects->deleteAfterCommit(
                     $disk,
                     [$originalPath, ...$variationPaths],

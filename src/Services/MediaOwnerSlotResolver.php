@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use LogicException;
-use Nvl\Media\Contracts\HasMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Slots\MediaSlot;
 
@@ -22,7 +22,7 @@ final readonly class MediaOwnerSlotResolver
     /**
      * Resolve and validate a package-owned single-file slot.
      */
-    public function slot(Model&HasMedia $owner, string $slot): MediaSlot
+    public function slot(Model&HasNvlMedia $owner, string $slot): MediaSlot
     {
         $owner = $this->canonical($owner);
         $this->ownerIdentity($owner);
@@ -35,7 +35,7 @@ final readonly class MediaOwnerSlotResolver
             );
         }
 
-        $resolved = $owner->getMediaSlot($slot);
+        $resolved = $owner->nvlMedia()->slot($slot);
 
         if (! $resolved instanceof MediaSlot) {
             throw new InvalidArgumentException(
@@ -57,7 +57,7 @@ final readonly class MediaOwnerSlotResolver
      *
      * @return array{type: string, id: string}
      */
-    public function ownerIdentity(Model&HasMedia $owner): array
+    public function ownerIdentity(Model&HasNvlMedia $owner): array
     {
         $owner = $this->canonical($owner);
         $ownerId = $owner->getKey();
@@ -88,7 +88,7 @@ final readonly class MediaOwnerSlotResolver
      * @return Collection<int, MediaAssociation>
      */
     public function associations(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         bool $lockForUpdate = false,
     ): Collection {
@@ -111,7 +111,7 @@ final readonly class MediaOwnerSlotResolver
      * Resolve the only association in a single-file slot.
      */
     public function currentAssociation(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $slot,
         bool $lockForUpdate = false,
     ): ?MediaAssociation {
@@ -127,10 +127,10 @@ final readonly class MediaOwnerSlotResolver
     }
 
     /** Return an ownership-verified Media-capable owner. */
-    private function canonical(Model&HasMedia $owner, bool $lock = false): Model&HasMedia
+    private function canonical(Model&HasNvlMedia $owner, bool $lock = false): Model&HasNvlMedia
     {
         $canonical = $this->owners->resolve($owner, $lock);
-        if (! $canonical instanceof HasMedia) {
+        if (! $canonical instanceof HasNvlMedia) {
             throw new InvalidArgumentException('A Media-capable owner is required.');
         }
 

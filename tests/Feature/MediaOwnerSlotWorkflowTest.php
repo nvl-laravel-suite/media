@@ -147,8 +147,8 @@ function useOwnerSlotLedger(string $connection, string $prefix): string
             'prefix' => '',
             'foreign_key_constraints' => true,
         ],
-        'media.owner_slots.idempotency.connection' => $connection,
-        'media.owner_slots.idempotency.processing_timeout_minutes' => 5,
+        'nvl-media.owner_slots.idempotency.connection' => $connection,
+        'nvl-media.owner_slots.idempotency.processing_timeout_minutes' => 5,
     ]);
     $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_nvl_media_create_media_owner_slot_operations_table.php';
     $migration->up();
@@ -200,8 +200,8 @@ it('uses configured owner-slot operation storage', function (): void {
     $connection = (string) config('database.default');
 
     config([
-        'media.owner_slots.idempotency.connection' => $connection,
-        'media.owner_slots.idempotency.table' => 'custom_media_owner_slot_operations',
+        'nvl-media.owner_slots.idempotency.connection' => $connection,
+        'nvl-media.owner_slots.idempotency.table' => 'custom_media_owner_slot_operations',
     ]);
 
     $operation = new MediaOwnerSlotOperation;
@@ -209,12 +209,12 @@ it('uses configured owner-slot operation storage', function (): void {
     expect($operation->getConnectionName())->toBe($connection)
         ->and($operation->getTable())->toBe('custom_media_owner_slot_operations');
 
-    config(['media.owner_slots.idempotency.table' => 'unsafe-name']);
+    config(['nvl-media.owner_slots.idempotency.table' => 'unsafe-name']);
 
     expect(fn (): string => (new MediaOwnerSlotOperation)->getTable())
         ->toThrow(InvalidArgumentException::class, 'safe table identifier');
 
-    config(['media.owner_slots.idempotency.table' => MediaTables::Media]);
+    config(['nvl-media.owner_slots.idempotency.table' => MediaTables::Media]);
 
     expect(fn (): string => (new MediaOwnerSlotOperation)->getTable())
         ->toThrow(InvalidArgumentException::class, 'must not collide');
@@ -428,7 +428,7 @@ it('requires the request hash when transitioning a claim', function (): void {
 
 it('recovers expired processing leases while invalidating the stale claim', function (): void {
     config([
-        'media.owner_slots.idempotency.processing_timeout_minutes' => 5,
+        'nvl-media.owner_slots.idempotency.processing_timeout_minutes' => 5,
     ]);
 
     $service = app(MediaOwnerSlotIdempotency::class);
@@ -530,8 +530,8 @@ it('prunes only expired terminal operations in bounded chunks', function (): voi
         ]);
 
     config([
-        'media.owner_slots.idempotency.retention_days' => 7,
-        'media.owner_slots.idempotency.prune_chunk' => 1,
+        'nvl-media.owner_slots.idempotency.retention_days' => 7,
+        'nvl-media.owner_slots.idempotency.prune_chunk' => 1,
     ]);
 
     expect($service->prune())->toBe(2)
@@ -1480,7 +1480,7 @@ it('rolls back clear when same-connection idempotency completion fails', functio
 it('copies through canonical ingestion with safe metadata and exact replay', function (): void {
     Storage::fake('public');
     config([
-        'media.owner_slots.copy.metadata_keys' => [
+        'nvl-media.owner_slots.copy.metadata_keys' => [
             'approved',
             'credit',
             'license_year',
@@ -1585,7 +1585,7 @@ it('copies through canonical ingestion with safe metadata and exact replay', fun
 it('recovers a committed copy from an expired processing checkpoint', function (): void {
     Storage::fake('public');
     config([
-        'media.owner_slots.idempotency.processing_timeout_minutes' => 5,
+        'nvl-media.owner_slots.idempotency.processing_timeout_minutes' => 5,
     ]);
 
     $destination = ownerSlotWorkflowOwner();
@@ -1862,8 +1862,8 @@ it('preserves and recovers a split-connection checkpoint when completion fails',
             'prefix' => '',
             'foreign_key_constraints' => true,
         ],
-        'media.owner_slots.idempotency.connection' => 'owner_slot_ledger',
-        'media.owner_slots.idempotency.processing_timeout_minutes' => 5,
+        'nvl-media.owner_slots.idempotency.connection' => 'owner_slot_ledger',
+        'nvl-media.owner_slots.idempotency.processing_timeout_minutes' => 5,
     ]);
     $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_nvl_media_create_media_owner_slot_operations_table.php';
     $migration->up();
@@ -1967,8 +1967,8 @@ it('preserves a split checkpoint when an after-commit listener throws', function
             'prefix' => '',
             'foreign_key_constraints' => true,
         ],
-        'media.owner_slots.idempotency.connection' => 'owner_slot_listener',
-        'media.owner_slots.idempotency.processing_timeout_minutes' => 5,
+        'nvl-media.owner_slots.idempotency.connection' => 'owner_slot_listener',
+        'nvl-media.owner_slots.idempotency.processing_timeout_minutes' => 5,
     ]);
     $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_nvl_media_create_media_owner_slot_operations_table.php';
     $migration->up();
@@ -2045,8 +2045,8 @@ it('recovers a split clear checkpoint without clearing a newer attachment', func
             'prefix' => '',
             'foreign_key_constraints' => true,
         ],
-        'media.owner_slots.idempotency.connection' => 'owner_slot_clear',
-        'media.owner_slots.idempotency.processing_timeout_minutes' => 5,
+        'nvl-media.owner_slots.idempotency.connection' => 'owner_slot_clear',
+        'nvl-media.owner_slots.idempotency.processing_timeout_minutes' => 5,
     ]);
     $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_nvl_media_create_media_owner_slot_operations_table.php';
     $migration->up();
@@ -2360,7 +2360,7 @@ it('rolls back copy before Media callbacks when split checkpoint persistence fai
 
 it('reconciles a clear checkpoint again under the owner mutation lock', function (): void {
     Storage::fake('public');
-    config(['media.owner_slots.idempotency.processing_timeout_minutes' => 1]);
+    config(['nvl-media.owner_slots.idempotency.processing_timeout_minutes' => 1]);
     $owner = ownerSlotWorkflowOwner('Clear checkpoint race owner');
     $actor = ownerSlotWorkflowActor();
     $actorData = ownerSlotWorkflowActorData($actor);

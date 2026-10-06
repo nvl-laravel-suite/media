@@ -11,7 +11,7 @@ use Nvl\Media\Tests\Stubs\TestMediaModel;
 
 beforeEach(function () {
     config([
-        'media.image_variation_presets' => [
+        'nvl-media.image_variation_presets' => [
             'thumb' => ['width' => 150, 'height' => 150, 'quality' => 80, 'format' => 'webp', 'enabled' => true],
             'small' => ['width' => 320, 'height' => 320, 'quality' => 80, 'format' => 'webp', 'enabled' => true],
             'medium' => ['width' => 640, 'height' => 640, 'quality' => 85, 'format' => 'webp', 'enabled' => true],

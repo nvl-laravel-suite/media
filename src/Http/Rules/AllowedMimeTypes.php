@@ -23,13 +23,13 @@ class AllowedMimeTypes implements ValidationRule
     {
         $this->allowedTypes = ! empty($allowedTypes)
             ? $allowedTypes
-            : MediaConfiguration::nestedStringList('media.file_types');
+            : MediaConfiguration::nestedStringList('nvl-media.file_types');
     }
 
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
         if (! $value instanceof UploadedFile) {
-            $fail((string) trans('media::media/validation.rules.file_required'));
+            $fail((string) trans('nvl-media::media/validation.rules.file_required'));
 
             return;
         }
@@ -37,7 +37,7 @@ class AllowedMimeTypes implements ValidationRule
         $mime = $value->getMimeType();
 
         if (! in_array($mime, $this->allowedTypes, true)) {
-            $fail((string) trans('media::media/validation.rules.unsupported_mime_type', [
+            $fail((string) trans('nvl-media::media/validation.rules.unsupported_mime_type', [
                 'attribute' => $attribute,
                 'mime' => $mime,
             ]));

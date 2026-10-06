@@ -47,7 +47,7 @@ final class DefaultMediaAuthorization implements MediaAuthorization
 
         if ($actor->signed && $ability === MediaAbility::Download) {
             $expectedOwner = $media->uploaded_by
-                ?? MediaConfiguration::string('media.assets.private_owner_fallback', 'system');
+                ?? MediaConfiguration::string('nvl-media.assets.private_owner_fallback', 'system');
 
             return hash_equals((string) $expectedOwner, (string) $actor->id);
         }

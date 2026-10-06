@@ -6,7 +6,7 @@ use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Services\SvgScanner;
 
 beforeEach(function () {
-    config(['media.svg_scanning' => true]);
+    config(['nvl-media.svg_scanning' => true]);
 });
 
 function writeSvg(string $content): string
@@ -45,7 +45,7 @@ it('passes a clean SVG', function () {
 });
 
 it('skips scanning when config is disabled', function () {
-    config(['media.svg_scanning' => false]);
+    config(['nvl-media.svg_scanning' => false]);
 
     $scanner = new SvgScanner;
     $path = writeSvg('<svg><script>alert("xss")</script></svg>');

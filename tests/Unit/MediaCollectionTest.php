@@ -8,8 +8,8 @@ use Nvl\Media\Slots\MediaSlot;
 beforeEach(function () {
     config([
         'filesystems.default' => 'public',
-        'media.disk' => 'public',
-        'media.default_path' => '{model_type}/{model_id}',
+        'nvl-media.disk' => 'public',
+        'nvl-media.default_path' => '{model_type}/{model_id}',
     ]);
 });
 

@@ -178,13 +178,13 @@ final class MediaAssetUrl
         self::assertAvailable($media);
 
         $defaultOwner = MediaConfiguration::string(
-            'media.assets.private_owner_fallback',
+            'nvl-media.assets.private_owner_fallback',
             'system',
         );
         $resolvedOwner = $owner ?? $media->uploaded_by ?? $defaultOwner;
         $normalized = self::normalizeAssetParameters($parameters);
         $normalized = self::withoutUnavailableVariation($media, $normalized);
-        $tenantAware = config('tenancy.enabled') === true;
+        $tenantAware = config('nvl-tenancy.enabled') === true;
         if ($tenantAware && ($tenantId === null || $canonicalOrigin === null)) {
             throw new TenantContextMissing('Tenant-aware private Media URLs require a verified canonical site origin.');
         }
@@ -198,12 +198,12 @@ final class MediaAssetUrl
             ...$normalized,
         ];
         $routeName = MediaConfiguration::string(
-            'media.assets.private_route_name',
-            'media.private.show',
+            'nvl-media.assets.private_route_name',
+            'nvl.media.private.show',
         );
-        $fallbackLifetime = MediaConfiguration::integer('media.temporary_url_lifetime', 5, 1);
+        $fallbackLifetime = MediaConfiguration::integer('nvl-media.temporary_url_lifetime', 5, 1);
         $ttlMinutes = MediaConfiguration::integer(
-            'media.assets.signed_url_lifetime',
+            'nvl-media.assets.signed_url_lifetime',
             $fallbackLifetime,
             1,
         );
@@ -327,8 +327,8 @@ final class MediaAssetUrl
     {
         $payload = array_merge(['media' => $media->id], $queryParams);
         $routeName = MediaConfiguration::string(
-            'media.assets.public_route_name',
-            'media.assets.show',
+            'nvl-media.assets.public_route_name',
+            'nvl.media.assets.show',
         );
 
         try {
@@ -462,7 +462,7 @@ final class MediaAssetUrl
 
     private static function remotePublicDelivery(): string
     {
-        $mode = config('media.assets.remote_public_delivery', 'route');
+        $mode = config('nvl-media.assets.remote_public_delivery', 'route');
 
         return $mode === 'disk' ? 'disk' : 'route';
     }
@@ -475,7 +475,7 @@ final class MediaAssetUrl
     public static function allowedParameters(): array
     {
         $configured = MediaConfiguration::stringList(
-            'media.assets.allowed_parameters',
+            'nvl-media.assets.allowed_parameters',
             self::SUPPORTED_ASSET_PARAMETERS,
         );
 

@@ -11,8 +11,8 @@ use Nvl\Media\Tests\Stubs\TestMediaUser;
 beforeEach(function (): void {
     $this->originalOwnerMorphMap = Relation::morphMap();
     config()->set('nvl-core.owners', ['person' => TestMediaUser::class]);
-    config()->set('media.allowed_associable_types', ['person']);
-    config()->set('media.associable_mutation_abilities', ['person' => 'attach-media']);
+    config()->set('nvl-media.allowed_associable_types', ['person']);
+    config()->set('nvl-media.associable_mutation_abilities', ['person' => 'attach-media']);
 });
 
 afterEach(function (): void {
@@ -34,8 +34,21 @@ it('resolves allowlisted shared aliases and preserves per-owner mutation abiliti
 });
 
 it('rejects a registered shared alias when media has not allowlisted it', function (): void {
-    config()->set('media.allowed_associable_types', []);
+    config()->set('nvl-media.allowed_associable_types', []);
 
     expect(fn () => app(MediaAssociableResolver::class)->resolveForMutation('person', '1'))
         ->toThrow(AuthorizationException::class);
+});
+
+it('prefers the class-keyed mutation ability over a resolved historical capability key', function (): void {
+    config()->set('nvl-media.associable_mutation_abilities', [
+        'person' => 'legacy-attach',
+        TestMediaUser::class => 'class-attach',
+    ]);
+    $owner = TestMediaUser::forceCreate(['name' => 'Owner', 'email' => 'class-owner@example.test', 'password' => 'password']);
+    $this->actingAs($owner);
+    Gate::define('legacy-attach', static fn (): bool => false);
+    Gate::define('class-attach', static fn (): bool => true);
+
+    expect(app(MediaAssociableResolver::class)->resolveForMutation('person', (string) $owner->getKey())->is($owner))->toBeTrue();
 });

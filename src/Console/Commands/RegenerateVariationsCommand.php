@@ -65,7 +65,7 @@ class RegenerateVariationsCommand extends Command
      */
     public function handle(): int
     {
-        if (config('tenancy.enabled') !== true) {
+        if (config('nvl-tenancy.enabled') !== true) {
             return $this->handleBounded();
         }
 

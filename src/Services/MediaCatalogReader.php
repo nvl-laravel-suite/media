@@ -77,7 +77,7 @@ final readonly class MediaCatalogReader
             return [];
         }
 
-        $configuredKeys = $this->configuration->get('media.catalog.metadata_keys', []);
+        $configuredKeys = $this->configuration->get('nvl-media.catalog.metadata_keys', []);
         $approved = [];
         if (is_array($configuredKeys)) {
             foreach ($configuredKeys as $key) {
@@ -104,8 +104,8 @@ final readonly class MediaCatalogReader
             return [];
         }
 
-        $configuredMaximum = $this->configuration->get('media.catalog.max_tags', 25);
-        $configuredLength = $this->configuration->get('media.catalog.max_tag_length', 100);
+        $configuredMaximum = $this->configuration->get('nvl-media.catalog.max_tags', 25);
+        $configuredLength = $this->configuration->get('nvl-media.catalog.max_tag_length', 100);
         $maximum = max(0, is_int($configuredMaximum) ? $configuredMaximum : 25);
         $length = max(1, is_int($configuredLength) ? $configuredLength : 100);
 

@@ -13,17 +13,17 @@ use Nvl\Media\Models\Media;
 
 beforeEach(function () {
     config([
-        'media.root_folder' => '',
-        'media.conversions_folder' => 'conversions',
-        'media.queue.enabled' => true,
-        'media.queue.connection' => 'database',
-        'media.queue.name' => 'media',
-        'media.auto_generate_variations' => true,
-        'media.image_variation_presets' => [
+        'nvl-media.root_folder' => '',
+        'nvl-media.conversions_folder' => 'conversions',
+        'nvl-media.queue.enabled' => true,
+        'nvl-media.queue.connection' => 'database',
+        'nvl-media.queue.name' => 'media',
+        'nvl-media.auto_generate_variations' => true,
+        'nvl-media.image_variation_presets' => [
             'thumb' => ['width' => 150, 'height' => 150, 'quality' => 80, 'format' => 'webp', 'enabled' => true],
             'large' => ['width' => 1280, 'height' => 1280, 'quality' => 85, 'format' => 'webp', 'enabled' => false],
         ],
-        'media.output_conversion' => ['enabled' => false],
+        'nvl-media.output_conversion' => ['enabled' => false],
     ]);
 });
 
@@ -96,10 +96,10 @@ describe('GenerateImageVariationJob', function () {
 
     it('uses bounded per-job queue settings', function () {
         config([
-            'media.queue.jobs.generate.tries' => 5,
-            'media.queue.jobs.generate.timeout' => 240,
-            'media.queue.jobs.generate.unique_for' => 900,
-            'media.queue.jobs.generate.backoff' => [15, 45],
+            'nvl-media.queue.jobs.generate.tries' => 5,
+            'nvl-media.queue.jobs.generate.timeout' => 240,
+            'nvl-media.queue.jobs.generate.unique_for' => 900,
+            'nvl-media.queue.jobs.generate.backoff' => [15, 45],
         ]);
 
         $job = new GenerateImageVariationJob('media-123', 'thumb', ['width' => 150]);

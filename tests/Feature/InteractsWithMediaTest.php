@@ -479,7 +479,7 @@ describe('deleteMedia and deleteAllMedia', function () {
 
     it('preserves media while an owning model is soft deleted', function () {
         Storage::fake('public');
-        config(['media.delete_media_on_model_delete' => true]);
+        config(['nvl-media.delete_media_on_model_delete' => true]);
 
         $model = createTestModel();
         $media = createTraitMedia();
@@ -492,7 +492,7 @@ describe('deleteMedia and deleteAllMedia', function () {
 
     it('deletes media when an owner without soft deletes is deleted', function () {
         Storage::fake('public');
-        config(['media.delete_media_on_model_delete' => true]);
+        config(['nvl-media.delete_media_on_model_delete' => true]);
 
         $owner = TestMediaUser::query()->create([
             'name' => 'Hard-delete owner',
@@ -518,7 +518,7 @@ describe('deleteMedia and deleteAllMedia', function () {
 
     it('keeps media intact when a later listener prevents a hard owner deletion', function () {
         Storage::fake('public');
-        config(['media.delete_media_on_model_delete' => true]);
+        config(['nvl-media.delete_media_on_model_delete' => true]);
 
         $owner = TestMediaUser::query()->create([
             'name' => 'Rejected hard-delete owner',
@@ -653,7 +653,7 @@ describe('deletePreservingMedia', function () {
 
     it('deletes model but preserves associated media', function () {
         Storage::fake('public');
-        config(['media.delete_media_on_model_delete' => true]);
+        config(['nvl-media.delete_media_on_model_delete' => true]);
 
         $model = createTestModel();
         $media = createTraitMedia();

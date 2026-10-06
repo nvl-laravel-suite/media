@@ -24,8 +24,8 @@ final readonly class MediaScannerPolicy
      */
     public function assertReady(): void
     {
-        $required = (bool) config('media.scanner.required', false);
-        $allowNoop = (bool) config('media.scanner.allow_noop', false);
+        $required = (bool) config('nvl-media.scanner.required', false);
+        $allowNoop = (bool) config('nvl-media.scanner.allow_noop', false);
 
         if ($required && $this->scanner instanceof NullMediaContentScanner && ! $allowNoop) {
             throw new MediaUploadException(

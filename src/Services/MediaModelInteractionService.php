@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Nvl\Media\Contracts\AttachMediaContract;
 use Nvl\Media\Contracts\DetachMediaContract;
-use Nvl\Media\Contracts\HasMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\ReusePublicMediaContract;
 use Nvl\Media\Contracts\UploadMediaContract;
 use Nvl\Media\MediaAdder;
@@ -51,7 +51,7 @@ final readonly class MediaModelInteractionService
     /**
      * Build a MediaAdder for the given model and source.
      */
-    public function newAdder(Model&HasMedia $model, UploadedFile|string $file): MediaAdder
+    public function newAdder(Model&HasNvlMedia $model, UploadedFile|string $file): MediaAdder
     {
         return new MediaAdder(
             model: $model,
@@ -70,7 +70,7 @@ final readonly class MediaModelInteractionService
      * Build an adder with an optional default slot.
      */
     public function addMedia(
-        Model&HasMedia $model,
+        Model&HasNvlMedia $model,
         UploadedFile|string $file,
         ?string $slot = null,
     ): MediaAdder {
@@ -82,7 +82,7 @@ final readonly class MediaModelInteractionService
     /**
      * Create a preserving-original adder.
      */
-    public function copyMedia(Model&HasMedia $model, UploadedFile|string $file): MediaAdder
+    public function copyMedia(Model&HasNvlMedia $model, UploadedFile|string $file): MediaAdder
     {
         return $this->newAdder($model, $file)->preservingOriginal();
     }
@@ -139,7 +139,7 @@ final readonly class MediaModelInteractionService
     /**
      * Create an adder from a request file key.
      */
-    public function addMediaFromRequest(Model&HasMedia $model, string $key): MediaAdder
+    public function addMediaFromRequest(Model&HasNvlMedia $model, string $key): MediaAdder
     {
         return $this->newAdder($model, $this->sourceResolver->fromRequest($this->request, $key));
     }
@@ -147,7 +147,7 @@ final readonly class MediaModelInteractionService
     /**
      * Create an adder from a remote URL.
      */
-    public function addMediaFromUrl(Model&HasMedia $model, string $url, string ...$allowedMimeTypes): MediaAdder
+    public function addMediaFromUrl(Model&HasNvlMedia $model, string $url, string ...$allowedMimeTypes): MediaAdder
     {
         return $this->newAdder($model, $this->sourceResolver->fromUrl($url, ...$allowedMimeTypes));
     }
@@ -155,7 +155,7 @@ final readonly class MediaModelInteractionService
     /**
      * Create an adder from a base64 payload.
      */
-    public function addMediaFromBase64(Model&HasMedia $model, string $base64data, string ...$allowedMimeTypes): MediaAdder
+    public function addMediaFromBase64(Model&HasNvlMedia $model, string $base64data, string ...$allowedMimeTypes): MediaAdder
     {
         return $this->newAdder($model, $this->sourceResolver->fromBase64($base64data, ...$allowedMimeTypes));
     }
@@ -163,7 +163,7 @@ final readonly class MediaModelInteractionService
     /**
      * Create an adder from a raw string source.
      */
-    public function addMediaFromString(Model&HasMedia $model, string $text): MediaAdder
+    public function addMediaFromString(Model&HasNvlMedia $model, string $text): MediaAdder
     {
         return $this->newAdder($model, $this->sourceResolver->fromString($text));
     }
@@ -172,7 +172,7 @@ final readonly class MediaModelInteractionService
      * Create an adder from generated binary content with byte-detected MIME.
      */
     public function addMediaFromBinary(
-        Model&HasMedia $model,
+        Model&HasNvlMedia $model,
         string $contents,
         string $filename,
         string ...$allowedMimeTypes,
@@ -186,7 +186,7 @@ final readonly class MediaModelInteractionService
     /**
      * Create an adder from an existing disk object.
      */
-    public function addMediaFromDisk(Model&HasMedia $model, string $key, ?string $disk = null): MediaAdder
+    public function addMediaFromDisk(Model&HasNvlMedia $model, string $key, ?string $disk = null): MediaAdder
     {
         return $this->newAdder($model, $this->sourceResolver->fromDisk($key, $disk));
     }
@@ -197,7 +197,7 @@ final readonly class MediaModelInteractionService
      * @param  array<string, mixed>  $metadata
      */
     public function reusePublicMedia(
-        Model&HasMedia $model,
+        Model&HasNvlMedia $model,
         Media|string $media,
         string $collection = 'default',
         ?string $locale = null,

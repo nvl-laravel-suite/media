@@ -7,7 +7,7 @@ description: Implement, integrate, test, or review nvl/media in Laravel 13. Use 
 
 Treat binary lifecycle, database lifecycle, associations, delivery, and localized metadata as one security boundary. Never expose internal storage paths through public DTOs.
 
-The supported 2.x production profile is PHP 8.3/8.4, Laravel 13, PostgreSQL, S3-compatible private storage with exception-enabled writes, Redis cache/locks/queues, and a real scanner. Multipart is opt-in and requires the recoverable gateway, central session locks, scanner attestation, pruning, and the PostgreSQL/Redis/S3 integration gate. SQLite/local/array/sync are development-compatible but do not prove production concurrency guarantees.
+The supported major 5 production profile is PHP 8.3/8.4, Laravel 13, PostgreSQL, S3-compatible private storage with exception-enabled writes, Redis cache/locks/queues, and a real scanner. Multipart is opt-in and requires the recoverable gateway, central session locks, scanner attestation, pruning, and the PostgreSQL/Redis/S3 integration gate. SQLite/local/array/sync are development-compatible but do not prove production concurrency guarantees.
 
 ## Read the canonical references
 
@@ -27,14 +27,15 @@ The supported 2.x production profile is PHP 8.3/8.4, Laravel 13, PostgreSQL, S3-
 
 ## Choose ownership semantics
 
-- Define slots on a `HasMedia` owner and use `InteractsWithMedia`.
+- Implement `HasNvlMedia` and use `InteractsWithNvlMedia`. Define slots/conversions in `registerNvlMedia(MediaRegistration $media, ?Media $asset = null)` through `$media->slot()` and `$media->conversion()`; access uploads/mutations/reads through `nvlMedia()` (`add`, `attach`, `detach`, `sync`, `slot`, `first`, `firstUrl`, `all`). Eager-load `nvlMediaAssociations()` for NVL assets.
+- A model composing Spatie Media keeps Spatie `media()`, `addMedia()` and `registerMediaConversions()` independently. Compose only the new NVL capability there. Deprecated NVL `HasMedia`/`InteractsWithMedia` forward to the same NVL implementation through major 5 and are removed in major 6.
 - For application services, inject `MediaLibraryContract` or explicitly import `Nvl\Media\Facades\Media`; never assume a global class alias. The facade delegates to the same Actions and contracts as the trait.
 - Treat facade mutations as trusted application-service calls. Authorize user-driven operations with policies or `Media::allows()` before invoking them.
 - In jobs and console commands, call `MediaAdder::uploadedBy($actor)` before the terminal upload method when private ownership or uploader-scoped deduplication matters.
 - Use a private one-to-one slot when an owner has one replaceable exclusive file.
 - Use reusable public media for assets that may have many associations and global checksum deduplication.
 - Keep private deduplication inside the configured uploader, tenant, or owner boundary.
-- Use the optional Spatie-compatible bridge for cross-owner administrators. Keep global role names explicit; prefer `media.manage` or granular `media.*-any` permissions. Privilege bypasses uploader ownership, not association integrity or quarantine.
+- Use the optional Spatie-compatible bridge for cross-owner administrators. Keep global role names explicit; use explicit `nvl.media.manage` or granular `nvl.media.*-any` permission mappings; generic old grants require a deliberate host mapping. Privilege bypasses uploader ownership, not association integrity or quarantine.
 - Use `AttachMediaAction`, `DetachMediaAction`, or `ReusePublicMediaAction`; never write association rows directly.
 - Attachment and public reuse reload current persisted state under the media
   mutation lock and a database row lock. Recheck availability and public reuse
@@ -45,7 +46,7 @@ The supported 2.x production profile is PHP 8.3/8.4, Laravel 13, PostgreSQL, S3-
 ## Upload and finalize
 
 - Use `UploadMediaAction` for proxied uploads.
-- Treat detected bytes, never client MIME/extension/headers/object metadata, as authoritative. Keep `media.file_types` as `extension => string|list<string>`.
+- Treat detected bytes, never client MIME/extension/headers/object metadata, as authoritative. Keep `nvl-media.file_types` as `extension => string|list<string>`.
 - Keep all materialized uploads on `MediaIngestionPipeline`: dangerous multi-extension rejection, canonical type, size/slot policy, scanner, SVG policy, SHA-256, random canonical storage name, and stored-object verification.
 - Keep remote URL ingestion disabled unless the application uses it. When enabled, retain public-address validation, cURL pinning, redirect revalidation, connected-IP attestation, and byte/time limits; test transports may opt out of attestation outside production.
 - For direct object storage, use `InitiateMultipartUploadAction`, `SignMultipartPartAction`, `CompleteMultipartUploadAction`, and `AbortMultipartUploadAction`; every mutation accepts the opaque session ID and reloads persisted actor-owned state.
@@ -53,7 +54,7 @@ The supported 2.x production profile is PHP 8.3/8.4, Laravel 13, PostgreSQL, S3-
 - Bind a real `MediaContentScanner` for production untrusted ingestion.
 - Do not make multipart media available before matching size/checksum/type scanner attestation.
 - Keep completion idempotent and protect deduplication and per-media/session mutation with central atomic locks.
-- `addMedia($explicitLocalPath)` deletes that owned source only after root commit; use `copyMedia()` or `preservingOriginal()` to retain it.
+- `nvlMedia()->add($explicitLocalPath)` deletes that owned source only after root commit; use `nvlMedia()->copy()` or `preservingOriginal()` to retain it.
 
 ## Deliver and transform
 
@@ -96,24 +97,37 @@ The supported 2.x production profile is PHP 8.3/8.4, Laravel 13, PostgreSQL, S3-
 
 ## Shared owner identities
 
-- Declare canonical owner identity once in `nvl-core.owners`; reference its alias in `media` capability configuration.
-- Owners still implement HasMedia and use InteractsWithMedia. Preserve collection/slot declarations and authorize the configured mutation ability.
+- Declare owner class lists in `nvl-core.owners` and reference model classes in `media` capability configuration. Laravel `getMorphClass()` supplies the host-authored stored identity; declarations do not add global host morph mappings.
+- Owners implement HasNvlMedia and use InteractsWithNvlMedia. Preserve collection/slot declarations and authorize the configured mutation ability.
 - Keep the package allowlist and authorization independent of Core registration. Never authorize a model merely because Core knows it.
-- Accept legacy class/resolver/handler inputs during the documented one-major compatibility cycle. Report deprecated host identity inputs through `nvl:doctor`; preserve established write-time morph types.
-- Before introducing an alias for historical FQCN-backed data, explicitly convert reviewed package-owned columns and reconcile affected host relations. Never silently rewrite host morph tables or enable `enforceMorphMap()` globally.
+- Preserve resolvers, handlers and authorization. Legacy aliases require agreement with native `getMorphClass()` and are removed in major 6; Doctor reports mismatches and stored identity drift without conversion.
+- If the host changes its morph map, explicitly reconcile reviewed package-owned columns and affected host relations before cutover. Core and package capability registration never mutate the host morph map or rewrite stored values.
 
 ## Shared diagnostics and queue inheritance
 
 - Run `php artisan nvl:doctor --strict --format=json` for all loaded package checks; retain `nvl:media:doctor` for Media-specific production diagnostics.
-- Resolve Media queue connection from explicit `media.queue.connection`, then `nvl-core.queue.connection`, then effective `queue.default`. Null inherits; empty strings are invalid; explicit sync remains synchronous.
-- Keep `MEDIA_QUEUE_CONNECTION` in config files, rebuild cached configuration, and restart workers after queue changes.
+- Resolve Media queue connection from explicit `nvl-media.queue.connection`, then `nvl-core.queue.connection`, then effective `queue.default`. Null inherits; empty strings are invalid; explicit sync remains synchronous.
+- Keep `NVL_MEDIA_QUEUE_CONNECTION` in config files, rebuild cached configuration, and restart workers after queue changes.
 
 
 ## Shared infrastructure options
 
-- Resolve queue names through `media.queue.name`, Core's queue name, then the selected Laravel connection's queue. Specify `MEDIA_QUEUE=media` when deployment workers consume that dedicated name.
+- Resolve queue names through `nvl-media.queue.name`, Core's queue name, then the selected Laravel connection's queue. Specify `NVL_MEDIA_QUEUE=media` when deployment workers consume that dedicated name.
 - Use `locks.store` for a shared cache store and `locks.mutation.store`, `locks.deduplication.store`, or `locks.multipart.store` for explicit independent overrides. Preserve operation duration/wait settings; historical store keys are supported for one major cycle and reported through Doctor.
 
 ### Brownfield storage identities
 
-Resolve all package tables through the table helper and canonical `media.tables.*`, connections through `media.connection` with Core/Laravel inheritance. Defaults use `nvl_media_*`; migration filenames include that package slug. Never silently adopt a matching table or generic migration filename. Run shared `nvl:doctor --strict --format=json` and the explicit `nvl:schema:upgrade --package=media --claim-legacy --dry-run --format=json` before upgrading owned legacy storage. Validate the complete plan and choose one migration owner. Preserve host records, constraint names and stored morph values. Deprecated config inputs last one major; canonical options take precedence.
+Resolve all package tables through the table helper and canonical `nvl-media.tables.*`, connections through `nvl-media.connection` with Core/Laravel inheritance. Defaults use `nvl_media_*`; migration filenames include that package slug. Never silently adopt a matching table or generic migration filename. Run shared `nvl:doctor --strict --format=json` and the explicit `nvl:schema:upgrade --package=media --claim-legacy --dry-run --format=json` before upgrading owned legacy storage. Validate the complete plan and choose one migration owner. Preserve host records, constraint names and stored morph values. Deprecated config inputs last one major; canonical options take precedence.
+
+## Cache and lock ownership
+
+Mutation, deduplication, and multipart locks use `nvl:media:mutation:`, `nvl:media:deduplication:`, and `nvl:media:multipart:`. File existence entries use `nvl:media:file-existence:` instead of `media_exists:`. Invalidation touches only the owned entry; generic host keys are never read, copied, or removed.
+
+Drain old mutation workers and maintenance processes, then wait for their outstanding lock leases to end before starting the new major across all nodes. Running old and new lock prefixes concurrently would create independent serialization domains. Restart workers after cutover; preserve host-selected stores and keys, and do not flush a shared cache to remove old NVL entries.
+
+## Canonical configuration ownership
+
+- Read/write `nvl-media` configuration and publish only canonical `nvl-<package>-<resource>` tags. Keep logical package/tenant resource identifiers unchanged.
+- Generic config roots and unprefixed package environment names are foreign by default. For an upgrading NVL host only, select `nvl-core.compatibility.legacy_config` package IDs and `legacy_env` explicitly; both default off. Canonical presence wins, including false/null/empty values. Legacy inputs are read without writing back and are removed in major 6.
+- Use canonical `NVL_<PACKAGE>_*` variables only in config evaluation, then rebuild configuration caches and restart workers after cutover. Shared Laravel environment variables retain their names. Consult Core's versioned `support/resources/global-names.json` for all renames.
+- Old global aliases and legacy route families require separate explicit `global_aliases`/`legacy_routes` package selections. Preserve collisions and use Doctor diagnostics; never grant generic permissions automatically or claim signed-link compatibility without the same authorization/signature checks.

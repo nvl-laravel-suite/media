@@ -101,7 +101,7 @@ final class MediaUploadValidator
         }
 
         $globalLimit = MediaConfiguration::integer(
-            'media.max_file_size',
+            'nvl-media.max_file_size',
             10 * 1024 * 1024,
             1,
         );

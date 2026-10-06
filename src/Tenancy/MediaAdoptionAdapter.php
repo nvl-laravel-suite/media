@@ -175,7 +175,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
                 $errors[] = $table.'.tenant_id';
             }
         }
-        $platform = $this->configuration->get('tenancy.resources.media') === 'platform';
+        $platform = $this->configuration->get('nvl-tenancy.resources.media') === 'platform';
         if ($schema->hasTable(MediaTables::get(MediaTables::Media))
             && $connection->table(MediaTables::get(MediaTables::Media))->where(function (Builder $query) use ($platform): void {
                 $query->whereNull('storage_path');
@@ -366,7 +366,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
 
     private function legacyFolder(string $folder): string
     {
-        $root = $this->configuration->get('media.root_folder', 'media');
+        $root = $this->configuration->get('nvl-media.root_folder', 'media');
         if (! is_string($root)) {
             throw new TenantConfigurationInvalid('media.root_folder must be a string.');
         }
@@ -376,7 +376,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
 
     private function tenantPath(string $tenant, string $folder, string $filename): string
     {
-        $root = $this->configuration->get('media.root_folder', 'media');
+        $root = $this->configuration->get('nvl-media.root_folder', 'media');
         if (! is_string($root)) {
             throw new TenantConfigurationInvalid('media.root_folder must be a string.');
         }
@@ -386,7 +386,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
 
     private function conversionsFolder(): string
     {
-        $folder = $this->configuration->get('media.conversions_folder', 'conversions');
+        $folder = $this->configuration->get('nvl-media.conversions_folder', 'conversions');
         if (! is_string($folder) || trim($folder, '/') === '') {
             throw new TenantConfigurationInvalid('media.conversions_folder must be a non-empty string.');
         }
@@ -782,7 +782,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
             return false;
         }
 
-        return $this->configuration->get('tenancy.sharing.media') !== 'copy'
+        return $this->configuration->get('nvl-tenancy.sharing.media') !== 'copy'
             || ($row->ownership_key ?? null) === 'tenant:'.$tenant;
     }
 
@@ -811,7 +811,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
     private function ownership(string $tenant): array
     {
         $attributes = ['tenant_id' => $tenant];
-        if ($this->configuration->get('tenancy.sharing.media') === 'copy') {
+        if ($this->configuration->get('nvl-tenancy.sharing.media') === 'copy') {
             $attributes['ownership_key'] = 'tenant:'.$tenant;
         }
 
@@ -820,7 +820,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
 
     private function platformOwned(): bool
     {
-        return $this->configuration->get('tenancy.resources.media') === 'platform';
+        return $this->configuration->get('nvl-tenancy.resources.media') === 'platform';
     }
 
     /** @return array{string, ?string} */

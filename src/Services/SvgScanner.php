@@ -48,7 +48,7 @@ final class SvgScanner
      */
     public function scan(string $filePath): void
     {
-        if (! config('media.svg_scanning', true)) {
+        if (! config('nvl-media.svg_scanning', true)) {
             return;
         }
 

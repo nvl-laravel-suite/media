@@ -10,6 +10,6 @@ abstract class MediaCatalogTenancyTestCase extends MediaTenancyTestCase
     protected function defineEnvironment($app): void
     {
         parent::defineEnvironment($app);
-        $app['config']->set('tenancy.sharing.media', 'copy');
+        $app['config']->set('nvl-tenancy.sharing.media', 'copy');
     }
 }

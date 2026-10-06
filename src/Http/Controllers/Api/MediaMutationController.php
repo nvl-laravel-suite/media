@@ -65,7 +65,7 @@ final class MediaMutationController extends Controller
 
         return response()->json([
             'data' => ['deleted' => $this->deleteMedia->execute($media)],
-            'message' => (string) trans('media::media/messages.success.deleted'),
+            'message' => (string) trans('nvl-media::media/messages.success.deleted'),
         ]);
     }
 
@@ -80,7 +80,7 @@ final class MediaMutationController extends Controller
 
         return response()->json([
             'data' => $this->resources->fromModel($renamed),
-            'message' => (string) trans('media::media/messages.success.renamed'),
+            'message' => (string) trans('nvl-media::media/messages.success.renamed'),
         ]);
     }
 
@@ -96,11 +96,11 @@ final class MediaMutationController extends Controller
             $data->associableType,
             $data->associableId,
         );
-        $associable->updateMediaOrder($data->mediaIds, $data->collection);
+        $associable->nvlMedia()->order($data->mediaIds, $data->collection);
 
         return response()->json([
             'data' => ['reordered' => true],
-            'message' => (string) trans('media::media/messages.success.reordered'),
+            'message' => (string) trans('nvl-media::media/messages.success.reordered'),
         ]);
     }
 
@@ -133,7 +133,7 @@ final class MediaMutationController extends Controller
         return response()->json([
             'data' => ['affected' => $count],
             'message' => (string) trans(
-                'media::media/messages.success.bulk_completed',
+                'nvl-media::media/messages.success.bulk_completed',
                 ['action' => $data->action],
             ),
         ]);

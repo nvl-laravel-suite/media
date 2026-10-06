@@ -37,41 +37,41 @@ use Nvl\Media\Models\MediaImageVariation;
 interface MediaLibraryContract
 {
     public function add(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         UploadedFile|string $file,
         ?string $slot = null,
     ): MediaAdder;
 
-    public function copy(Model&HasMedia $owner, UploadedFile|string $file): MediaAdder;
+    public function copy(Model&HasNvlMedia $owner, UploadedFile|string $file): MediaAdder;
 
-    public function fromRequest(Model&HasMedia $owner, string $key): MediaAdder;
+    public function fromRequest(Model&HasNvlMedia $owner, string $key): MediaAdder;
 
     public function fromUrl(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $url,
         string ...$allowedMimeTypes,
     ): MediaAdder;
 
     public function fromBase64(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $payload,
         string ...$allowedMimeTypes,
     ): MediaAdder;
 
-    public function fromString(Model&HasMedia $owner, string $contents): MediaAdder;
+    public function fromString(Model&HasNvlMedia $owner, string $contents): MediaAdder;
 
     /**
      * Create an upload builder from generated binary content.
      */
     public function fromBinary(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $contents,
         string $filename,
         string ...$allowedMimeTypes,
     ): MediaAdder;
 
     public function fromDisk(
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $key,
         ?string $disk = null,
     ): MediaAdder;
@@ -103,7 +103,7 @@ interface MediaLibraryContract
      */
     public function attach(
         Media $media,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $collection = 'default',
         ?string $locale = null,
         ?int $order = null,
@@ -116,7 +116,7 @@ interface MediaLibraryContract
      */
     public function reuse(
         Media|string $media,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         string $collection = 'default',
         ?string $locale = null,
         ?int $order = null,
@@ -126,7 +126,7 @@ interface MediaLibraryContract
 
     public function detach(
         Media|string $media,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         ?string $collection = null,
     ): int;
 

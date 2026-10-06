@@ -14,13 +14,13 @@ Publish the configuration and set:
 ```php
 'routes' => [
     'api_enabled' => true,
-    'api_prefix' => 'api/v1',
+    'api_prefix' => 'nvl/api/v1',
     'api_middleware' => ['api'],
     'management_middleware' => ['auth', 'throttle:60,1'],
 ],
 ```
 
-The final base path is `{api_prefix}/media`. With shipped defaults it is `/api/v1/media`.
+The final base path is `{api_prefix}/media`. With shipped defaults it is `/nvl/api/v1/media`.
 
 `api_middleware` wraps the complete route file. `management_middleware` wraps every management endpoint inside it. Production diagnostics reject publicly writable management routes. Replace `auth` with the application’s intended guard, such as `auth:sanctum`, when appropriate.
 
@@ -41,7 +41,7 @@ The package registers `MediaPolicy` for `Nvl\Media\Models\Media`.
 | `regenerate` | `MediaAbility::Mutate` | Variation regeneration |
 | `download` | `MediaAbility::Download` | Management download |
 
-By default, public assets are readable and private assets are limited to their typed uploader. Configured global Spatie-compatible roles or permissions may grant cross-owner access. Association endpoints additionally authorize mutation of the target associable model using `media.associable_mutation_abilities`.
+By default, public assets are readable and private assets are limited to their typed uploader. Configured global Spatie-compatible roles or permissions may grant cross-owner access. Association endpoints additionally authorize mutation of the target associable model using `nvl-media.associable_mutation_abilities`.
 
 ## Endpoint index
 
@@ -66,7 +66,7 @@ All route names have the `nvl.media.management.` prefix.
 | `GET` | `/media/{media}/download` | `nvl.media.management.download` | Binary `200` |
 | `POST` | `/media/{media}/replace` | `nvl.media.management.replace` | `200` |
 
-Paths in the rest of this document include the shipped `/api/v1` prefix.
+Paths in the rest of this document include the shipped `/nvl/api/v1` prefix.
 
 ## Common response shapes
 
@@ -90,8 +90,8 @@ Detail and mutation responses use this privileged representation:
   "tags": ["campaign"],
   "metadata": {"credit": "Studio"},
   "uploadedBy": "42",
-  "url": "https://example.test/media/assets/018f...",
-  "previewUrl": "https://example.test/media/assets/018f...?version=0123456789abcdef&v=thumb",
+  "url": "https://example.test/nvl/media/assets/018f...",
+  "previewUrl": "https://example.test/nvl/media/assets/018f...?version=0123456789abcdef&v=thumb",
   "imageVariations": [
     {
       "id": "018f...",
@@ -101,7 +101,7 @@ Detail and mutation responses use this privileged representation:
       "size": 9216,
       "format": "webp",
       "quality": 82,
-      "url": "https://example.test/media/assets/018f...?version=0123456789abcdef&v=thumb"
+      "url": "https://example.test/nvl/media/assets/018f...?version=0123456789abcdef&v=thumb"
     }
   ],
   "translations": {
@@ -142,7 +142,7 @@ Conditional keys appear only when their relationships or counts were loaded. URL
   "size": 9216,
   "format": "webp",
   "quality": 82,
-  "url": "https://example.test/media/assets/018f...?version=0123456789abcdef&v=thumb"
+  "url": "https://example.test/nvl/media/assets/018f...?version=0123456789abcdef&v=thumb"
 }
 ```
 
@@ -182,7 +182,7 @@ The unsupported-variation response also includes stable code `variations_unsuppo
 
 ## List media
 
-`GET /api/v1/media`
+`GET /nvl/api/v1/media`
 
 Query parameters:
 
@@ -199,7 +199,7 @@ Query parameters:
 | `extension` | string | `null` | Maximum 10 characters |
 | `locale` | string | `null` | Maximum 5 characters |
 | `associableType` | string | `null` | Morph class/type filter |
-| `perPage` | integer | `25` | `1..100`, also capped by `media.query.maximum_page_size` |
+| `perPage` | integer | `25` | `1..100`, also capped by `nvl-media.query.maximum_page_size` |
 | `page` | integer | `1` | Minimum 1 |
 | `sortBy` | string | `created_at` | `created_at`, `updated_at`, `filename`, `size`, `type`, `extension`, `mime_type` |
 | `sortDirection` | string | `desc` | `asc` or `desc` |
@@ -231,16 +231,16 @@ Response:
           "associationsCount": 1,
           "createdAt": "2026-07-28T12:00:00Z",
           "updatedAt": "2026-07-28T12:00:00Z",
-          "previewUrl": "https://example.test/media/assets/018f...?version=0123456789abcdef&v=thumb",
-          "url": "https://example.test/media/assets/018f...",
+          "previewUrl": "https://example.test/nvl/media/assets/018f...?version=0123456789abcdef&v=thumb",
+          "url": "https://example.test/nvl/media/assets/018f...",
           "imageVariations": []
         }
       ],
       "links": {
-        "first": "https://example.test/api/v1/media?page=1",
-        "last": "https://example.test/api/v1/media?page=4",
+        "first": "https://example.test/nvl/api/v1/media?page=1",
+        "last": "https://example.test/nvl/api/v1/media?page=4",
         "prev": null,
-        "next": "https://example.test/api/v1/media?page=2"
+        "next": "https://example.test/nvl/api/v1/media?page=2"
       },
       "meta": {
         "currentPage": 1,
@@ -267,22 +267,22 @@ Response:
 
 ## Upload media
 
-`POST /api/v1/media`
+`POST /nvl/api/v1/media`
 
 Content type: `multipart/form-data`.
 
 | Field | Type | Required | Constraint |
 | --- | --- | --- | --- |
-| `files[]` | file list | yes | 1 to `media.max_files_per_upload`; each file passes package size/type policy |
+| `files[]` | file list | yes | 1 to `nvl-media.max_files_per_upload`; each file passes package size/type policy |
 | `collection` | string | no | Default `default`, maximum 50 |
-| `disk` | string | no | Must be configured and in `media.allowed_disks` |
+| `disk` | string | no | Must be configured and in `nvl-media.allowed_disks` |
 | `isPublic` | boolean | no | Default `false` |
 | `tags[]` | string list | no | Each maximum 50 |
 
 The authenticated user must be an Eloquent model because its morph type and identifier establish uploader ownership.
 
 ```bash
-curl -X POST "https://example.test/api/v1/media" \
+curl -X POST "https://example.test/nvl/api/v1/media" \
   -H "Accept: application/json" \
   -H "Authorization: Bearer TOKEN" \
   -F "files[]=@cover.jpg" \
@@ -312,7 +312,7 @@ Each item is a management media resource. The controller performs early file val
 
 ## Show media
 
-`GET /api/v1/media/{media}`
+`GET /nvl/api/v1/media/{media}`
 
 Optional query parameter `include_variations` defaults to `true`. The response is:
 
@@ -329,7 +329,7 @@ Optional query parameter `include_variations` defaults to `true`. The response i
 
 ## Update metadata
 
-`PUT /api/v1/media/{media}` or `PATCH /api/v1/media/{media}`
+`PUT /nvl/api/v1/media/{media}` or `PATCH /nvl/api/v1/media/{media}`
 
 All fields are optional:
 
@@ -364,7 +364,7 @@ The response is `{"data": <management-media-resource>}`.
 
 ## Delete media
 
-`DELETE /api/v1/media/{media}`
+`DELETE /nvl/api/v1/media/{media}`
 
 Successful response:
 
@@ -383,7 +383,7 @@ Deletion soft-deletes the database row first. Files are removed after the real o
 
 ## Rename media
 
-`PATCH /api/v1/media/{media}/rename`
+`PATCH /nvl/api/v1/media/{media}/rename`
 
 ```json
 {
@@ -397,7 +397,7 @@ The response contains the management media resource and a success message.
 
 ## Replace media
 
-`POST /api/v1/media/{media}/replace`
+`POST /nvl/api/v1/media/{media}/replace`
 
 Content type: `multipart/form-data`.
 
@@ -411,7 +411,7 @@ The response contains the management media resource and a success message.
 
 ## Attach media
 
-`POST /api/v1/media/{media}/attach`
+`POST /nvl/api/v1/media/{media}/attach`
 
 ```json
 {
@@ -425,13 +425,13 @@ The response contains the management media resource and a success message.
 
 | Field | Required | Constraint |
 | --- | --- | --- |
-| `associableType` | yes | Must resolve through `media.allowed_associable_types` |
+| `associableType` | yes | Must resolve through `nvl-media.allowed_associable_types` |
 | `associableId` | yes | Existing target identifier |
 | `collection` | no | Default `default`, maximum 50 |
 | `locale` | no | Maximum 5 |
 | `order` | no | Integer, minimum 0 |
 
-The target model must implement `HasMedia`. The actor must have `Associate` access to the media and the configured mutation ability on the target model.
+The target model must implement `HasNvlMedia`. The actor must have `Associate` access to the media and the configured mutation ability on the target model.
 
 Response:
 
@@ -454,7 +454,7 @@ Response:
 
 ## Detach media
 
-`POST /api/v1/media/{media}/detach`
+`POST /nvl/api/v1/media/{media}/detach`
 
 ```json
 {
@@ -479,7 +479,7 @@ Response:
 
 ## Reorder associations
 
-`POST /api/v1/media/reorder`
+`POST /nvl/api/v1/media/reorder`
 
 ```json
 {
@@ -508,7 +508,7 @@ Response:
 
 ## Bulk operations
 
-`POST /api/v1/media/bulk`
+`POST /nvl/api/v1/media/bulk`
 
 Delete:
 
@@ -539,7 +539,7 @@ Move:
 }
 ```
 
-`action` must be `delete`, `tag`, or `move`; `ids` is a non-empty UUID list. Tags are required for `tag`. Folder is required for `move`, maximum 255 characters, must remain a safe relative path, and resolves beneath `media.root_folder`.
+`action` must be `delete`, `tag`, or `move`; `ids` is a non-empty UUID list. Tags are required for `tag`. Folder is required for `move`, maximum 255 characters, must remain a safe relative path, and resolves beneath `nvl-media.root_folder`.
 
 Bulk locks are acquired in sorted UUID order. Move performs copy–verify–database-swap–delete for originals and variations.
 
@@ -556,7 +556,7 @@ Response:
 
 ## List variations
 
-`GET /api/v1/media/{media}/variations`
+`GET /nvl/api/v1/media/{media}/variations`
 
 Response:
 
@@ -571,7 +571,7 @@ Response:
       "size": 9216,
       "format": "webp",
       "quality": 82,
-      "url": "https://example.test/media/assets/018f...?version=0123456789abcdef&v=thumb"
+      "url": "https://example.test/nvl/media/assets/018f...?version=0123456789abcdef&v=thumb"
     }
   ]
 }
@@ -579,7 +579,7 @@ Response:
 
 ## Regenerate variations
 
-`POST /api/v1/media/{media}/regenerate`
+`POST /nvl/api/v1/media/{media}/regenerate`
 
 ```json
 {
@@ -619,7 +619,7 @@ with status `422`.
 
 ## List usages
 
-`GET /api/v1/media/{media}/usages`
+`GET /nvl/api/v1/media/{media}/usages`
 
 ```json
 {
@@ -640,7 +640,7 @@ Owner details are intentionally generic; the package does not expose arbitrary a
 
 ## Management download
 
-`GET /api/v1/media/{media}/download`
+`GET /nvl/api/v1/media/{media}/download`
 
 On success, returns a streamed attachment using the media display filename and detected `Content-Type`.
 
@@ -658,23 +658,23 @@ Asset delivery is controlled independently:
 ```php
 'routes' => [
     'assets_enabled' => true,
-    'assets_prefix' => 'media',
+    'assets_prefix' => 'nvl/media',
 ],
 ```
 
 ### Public asset
 
-Route name: `media.assets.show`
+Route name: `nvl.media.assets.show`
 
-`GET /media/assets/{media}?version=0123456789abcdef&v=thumb`
+`GET /nvl/media/assets/{media}?version=0123456789abcdef&v=thumb`
 
 Only public, usable media may be delivered. `version` is the authoritative content version emitted by the package URL builder, and `v` must be a named stored variation. Arbitrary transform parameters are rejected. Versioned URLs receive the configured immutable cache policy; a manually requested URL without `version` remains available for compatibility but is forced to revalidate. The route supports configured throttling, cache headers, conditional requests, byte ranges, and streamed remote-disk reads.
 
 ### Private asset
 
-Route name: `media.private.show`
+Route name: `nvl.media.private.show`
 
-`GET /media/private/{owner}/{media}?expires=...&signature=...&v=thumb`
+`GET /nvl/media/private/{owner}/{media}?expires=...&signature=...&v=thumb`
 
 The URL must be generated by `$media->buildUrl()`, `$media->buildPrivateUrl()`, or `$media->getTemporaryUrl()`. It is a signed capability tied to the owner token and media UUID. An authenticated request may also be evaluated through the authorization contract where configured, but consumers should never assemble this path or signature manually.
 
@@ -682,7 +682,7 @@ Invalid or expired signatures return `403`. Private cache control defaults to `p
 
 ### Delivery parameters
 
-The shipped `media.assets.allowed_parameters` contains only `v`. A variation label is part of the signed private URL. Adding ignored or unsigned transformation parameters would weaken the delivery contract and is unsupported.
+The shipped `nvl-media.assets.allowed_parameters` contains only `v`. A variation label is part of the signed private URL. Adding ignored or unsigned transformation parameters would weaken the delivery contract and is unsupported.
 
 ## Multipart HTTP integration
 
@@ -704,3 +704,5 @@ See [PHP API](php-api.md#multipart-dtos) and [S3 and object storage](s3.md).
 - [Configuration](configuration.md)
 - [Extension contracts and events](extending.md)
 - [Command reference](commands.md)
+
+Legacy asset paths and names are available only when `media` is selected in `nvl-core.compatibility.legacy_routes`. The compatibility routes use the original handler, tenant admission, owner authorization, and signature checks. Existing signed private links remain valid until their original expiry; rebuild generated links with `nvl.media.private.show`, regenerate route caches, and restart workers before disabling compatibility. Reserved host route names or method/path combinations are preserved and reported by Doctor. These aliases are removed in major 6.

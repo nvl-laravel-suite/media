@@ -26,10 +26,10 @@ beforeEach(function (): void {
     Storage::fake('public');
 
     config([
-        'media.allowed_disks' => ['public'],
-        'media.auto_generate_variations' => false,
-        'media.auto_generate_conversions' => false,
-        'media.output_conversion.enabled' => false,
+        'nvl-media.allowed_disks' => ['public'],
+        'nvl-media.auto_generate_variations' => false,
+        'nvl-media.auto_generate_conversions' => false,
+        'nvl-media.output_conversion.enabled' => false,
     ]);
 });
 
@@ -78,7 +78,7 @@ it('relocates one media record and its variations with revision locking', functi
         'throw' => true,
     ]]);
     Storage::fake('archive');
-    config(['media.allowed_disks' => ['public', 'archive']]);
+    config(['nvl-media.allowed_disks' => ['public', 'archive']]);
     $contents = 'relocation-source';
     $media = g09Media([
         'size' => strlen($contents),
@@ -128,7 +128,7 @@ it('cleans staged relocation copies when a later source object is missing', func
             'root' => storage_path('framework/testing/disks/archive'),
             'throw' => true,
         ],
-        'media.allowed_disks' => ['public', 'archive'],
+        'nvl-media.allowed_disks' => ['public', 'archive'],
     ]);
     Storage::fake('archive');
     $media = g09Media();
@@ -179,7 +179,7 @@ it('registers one named update route for both put and patch', function (): void 
 });
 
 it('dry-runs and idempotently applies a reconciled Spatie-style adoption', function (): void {
-    config(['media.root_folder' => '']);
+    config(['nvl-media.root_folder' => '']);
     Schema::create('media_spatie_legacy', function (Blueprint $table): void {
         $table->unsignedBigInteger('id')->primary();
         $table->string('model_type')->nullable();
@@ -307,7 +307,7 @@ it('registers the dry-run-first Spatie adoption command', function (): void {
 it('diagnoses root-folder path drift against representative persisted rows', function (): void {
     $media = g09Media(['folder' => 'legacy', 'hash' => 'existing.pdf']);
     Storage::disk('public')->put('legacy/existing.pdf', 'existing');
-    config(['media.root_folder' => 'media']);
+    config(['nvl-media.root_folder' => 'media']);
 
     $drifted = collect(app(MediaDoctor::class)->inspect())
         ->firstWhere('key', 'storage.persisted_paths');
@@ -316,7 +316,7 @@ it('diagnoses root-folder path drift against representative persisted rows', fun
         ->and($drifted->passed)->toBeFalse()
         ->and($drifted->message)->toContain('empty media.root_folder');
 
-    config(['media.root_folder' => '']);
+    config(['nvl-media.root_folder' => '']);
     $aligned = collect(app(MediaDoctor::class)->inspect())
         ->firstWhere('key', 'storage.persisted_paths');
 

@@ -7,7 +7,7 @@ namespace Nvl\Media\Services;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
-use Nvl\Media\Contracts\HasMedia;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Enums\MediaAbility;
@@ -39,7 +39,7 @@ final readonly class MediaStagingPolicy
      */
     public function removableAssociations(
         MediaActorData $actor,
-        Model&HasMedia $owner,
+        Model&HasNvlMedia $owner,
         MediaSlot $slot,
         Media $media,
         Collection $associations,
@@ -132,7 +132,7 @@ final readonly class MediaStagingPolicy
         }
 
         $globalLimit = MediaConfiguration::integer(
-            'media.max_file_size',
+            'nvl-media.max_file_size',
             10 * 1024 * 1024,
             1,
         );
