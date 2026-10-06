@@ -16,12 +16,22 @@ use Nvl\Media\Relations\StringMorphMany;
 use Nvl\Media\Services\MediaBatchQueryBuilder;
 use Nvl\Media\Services\MediaOwnerFactory;
 
-/** Adds only namespaced NVL entry points and lifecycle state to an Eloquent owner. */
+/**
+ * Adds only namespaced NVL entry points and lifecycle state to an Eloquent owner.
+ *
+ * @api
+ *
+ * @nvl-consumer-relation nvlMediaAssociations
+ */
 trait InteractsWithNvlMedia
 {
     private ?MediaOwner $nvlMediaOwner = null;
 
-    /** Boot NVL deletion independently of any other media implementation. */
+    /**
+     * Boot NVL deletion independently of any other media implementation.
+     *
+     * @internal
+     */
     public static function bootInteractsWithNvlMedia(): void
     {
         static::deleted(static function (self $owner): void {
@@ -41,6 +51,8 @@ trait InteractsWithNvlMedia
 
     /** Return the one eager-loadable NVL relation.
      * @return MorphMany<MediaAssociation, $this>
+     *
+     * @internal
      */
     public function nvlMediaAssociations(): MorphMany
     {

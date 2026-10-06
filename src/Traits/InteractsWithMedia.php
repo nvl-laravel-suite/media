@@ -17,7 +17,14 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Slots\MediaSlot;
 
-/** @deprecated Use InteractsWithNvlMedia; this forwarding surface remains through major 5. */
+/**
+ * @deprecated Use InteractsWithNvlMedia; this forwarding surface remains through major 5.
+ *
+ * @api
+ *
+ * @nvl-consumer-relation media
+ * @nvl-consumer-relation mediaAssociations
+ */
 trait InteractsWithMedia
 {
     use InteractsWithNvlMedia;
@@ -35,7 +42,11 @@ trait InteractsWithMedia
     /** Register legacy conversions when the owner overrides this hook. */
     public function registerMediaConversions(?Media $media = null): void {}
 
-    /** Retain the explicitly callable old hook; Laravel boots the nested namespaced trait. */
+    /**
+     * Retain the explicitly callable old hook; Laravel boots the nested namespaced trait.
+     *
+     * @internal
+     */
     public static function bootInteractsWithMedia(): void {}
 
     /** Forward the retained deletePreservingMedia operation to the NVL owner API. */
@@ -46,6 +57,8 @@ trait InteractsWithMedia
 
     /**
      * @return MorphToMany<Media, covariant Model>
+     *
+     * @internal
      */
     public function media(): MorphToMany
     {
@@ -54,6 +67,8 @@ trait InteractsWithMedia
 
     /**
      * @return MorphMany<MediaAssociation, $this>
+     *
+     * @internal
      */
     public function mediaAssociations(): MorphMany
     {

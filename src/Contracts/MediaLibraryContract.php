@@ -33,6 +33,8 @@ use Nvl\Media\Models\MediaImageVariation;
  * Advanced consumers may continue injecting the focused action and service
  * contracts directly. This contract exists to provide one stable, replaceable
  * boundary for the Media facade and application-level orchestration.
+ *
+ * @api
  */
 interface MediaLibraryContract
 {

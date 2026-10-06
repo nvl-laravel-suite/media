@@ -11,6 +11,8 @@ use Nvl\Media\Services\MediaQueryService;
 
 /**
  * Adds tags to a set of media records in one transaction.
+ *
+ * @api
  */
 final class BulkTagMediaAction
 {

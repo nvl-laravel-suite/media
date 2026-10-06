@@ -8,6 +8,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Names the three built-in image variation presets while allowing custom labels.
+ *
+ * @api
  */
 #[TypeScript]
 enum ImagePreset: string

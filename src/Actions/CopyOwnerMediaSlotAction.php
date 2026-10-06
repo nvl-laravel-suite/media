@@ -12,6 +12,8 @@ use Nvl\Media\Services\MediaOwnerSlotCopyWorkflow;
 
 /**
  * Copies one authorized Media source into a registered owner slot.
+ *
+ * @api
  */
 final readonly class CopyOwnerMediaSlotAction
 {

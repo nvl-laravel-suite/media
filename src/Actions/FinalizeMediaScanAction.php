@@ -17,6 +17,8 @@ use Nvl\Media\Services\MediaVariationDispatcher;
 
 /**
  * Finalizes an out-of-band scan using scanner-attested technical metadata.
+ *
+ * @api
  */
 final class FinalizeMediaScanAction
 {

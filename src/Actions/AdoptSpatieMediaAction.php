@@ -22,6 +22,8 @@ use Throwable;
 
 /**
  * Plans or applies a reconciled Spatie-style media adoption.
+ *
+ * @api
  */
 final readonly class AdoptSpatieMediaAction
 {

@@ -16,6 +16,8 @@ use Nvl\Media\Support\MediaDiskResolver;
  * A "slot" represents a structural role that media plays for a specific model instance
  * (e.g. avatar, certificate, featured image). It is NOT a folder or a virtual grouping —
  * it answers the question: "What is this media for on this model?"
+ *
+ * @api
  */
 class MediaSlot
 {

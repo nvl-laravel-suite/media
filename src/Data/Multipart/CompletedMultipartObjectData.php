@@ -9,6 +9,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Server-verified metadata returned by object storage after completion.
+ *
+ * @api
  */
 #[TypeScript]
 final class CompletedMultipartObjectData extends Data

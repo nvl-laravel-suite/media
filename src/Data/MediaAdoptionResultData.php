@@ -8,6 +8,8 @@ use Spatie\LaravelData\Data;
 
 /**
  * Reports reconciled Spatie media adoption counts and storage readiness.
+ *
+ * @api
  */
 final class MediaAdoptionResultData extends Data
 {

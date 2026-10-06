@@ -10,7 +10,11 @@ use Nvl\Media\Data\Display\OwnerMediaSlots;
 use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Services\MediaOwnerBatchReader;
 
-/** Public read boundary for finite original-asset slot projections. */
+/**
+ * Public read boundary for finite original-asset slot projections.
+ *
+ * @api
+ */
 final readonly class ListOwnerMediaSlotsAction implements ListOwnerMediaSlotsContract
 {
     /** Retain the package-owned batch workflow. */

@@ -8,6 +8,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Storage and reuse boundary for a media binary.
+ *
+ * @api
  */
 #[TypeScript]
 enum MediaVisibility: string

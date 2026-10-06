@@ -18,7 +18,11 @@ use Nvl\Support\Tenancy\Enums\TenantStatus;
 use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 use Nvl\Support\Tenancy\ValueObjects\TenantId;
 
-/** Grants one exact platform Media revision to an active recipient tenant. */
+/**
+ * Grants one exact platform Media revision to an active recipient tenant.
+ *
+ * @api
+ */
 final readonly class GrantMediaToTenantAction
 {
     public function __construct(private TenantContext $context, private TenantDirectory $directory) {}

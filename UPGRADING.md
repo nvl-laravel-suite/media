@@ -163,3 +163,13 @@ This API change performs no database, file or morph-identity conversion. NVL and
 Mutation, deduplication, and multipart locks use `nvl:media:mutation:`, `nvl:media:deduplication:`, and `nvl:media:multipart:`. File existence entries use `nvl:media:file-existence:` instead of `media_exists:`. Invalidation touches only the owned entry; generic host keys are never read, copied, or removed.
 
 Drain old mutation workers and maintenance processes, then wait for their outstanding lock leases to end before starting the new major across all nodes. Running old and new lock prefixes concurrently would create independent serialization domains. Restart workers after cutover; preserve host-selected stores and keys, and do not flush a shared cache to remove old NVL entries.
+
+## Tagged consumer PHP boundary
+
+Use source `@api` workflows, extension contracts, and value types for application integration. Direct use of untagged implementations or `@internal` members is unsupported. This classification keeps existing concrete Action signatures and runtime behavior; it does not authorize package model persistence, ad hoc queries, relation traversal, or generic model serialization. Returned models are identity/result handles with only the explicitly declared in-memory read fields described in the README.
+
+The host-owned `MediaCatalogImport` port retains its authorized snapshot and staged-object tuples, including storage identity required for the transfer. `MediaCatalogSnapshot` and `StagedCatalogMedia` are integration payloads; do not expose their storage paths as display fields or treat them as permission to access arbitrary backing objects.
+
+`MediaOwner::query()`, `associations()`, `ownerDeleted()`, `owns()`, and `invalidate()` plus capability relation methods are internal storage or lifecycle seams. Migrate direct traversal, eager/lazy loading, and aggregate queries to the package authorized read Actions or explicit C1 host scopes/adapters. Native host queries and opted-in Translatable behavior remain supported.
+
+`MediaUsage::fromModel` is an internal association projector. Use `MediaLibraryContract::usages($id)` to obtain its usage DTO collection; MediaAssociation itself remains an identity-only handle.

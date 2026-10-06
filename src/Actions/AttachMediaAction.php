@@ -21,6 +21,8 @@ use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 
 /**
  * Attaches a media record to a model via a polymorphic pivot with deduplication.
+ *
+ * @api
  */
 final class AttachMediaAction implements AttachMediaContract
 {

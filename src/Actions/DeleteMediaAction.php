@@ -16,6 +16,8 @@ use Nvl\Media\Support\MediaAssociationSnapshot;
 
 /**
  * Soft-deletes a media record and removes its objects after the root commit.
+ *
+ * @api
  */
 final class DeleteMediaAction implements DeleteMediaContract
 {

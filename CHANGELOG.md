@@ -11,6 +11,7 @@ All notable changes to `nvl/media` are documented here.
 
 ### Changed
 
+- Classify the supported consumer PHP surface with explicit source annotations and restrict package model handles to declared identity and in-memory read fields; preserve existing workflow behavior and concrete signatures.
 - Preserve early host `MediaAuthorization` bindings with `bindIf`; private batch URLs remain null and use separate authorized Download delivery.
 
 - Isolate owned cache and lock keys under `nvl:media:`; preserve generic host entries and explicit store choices.

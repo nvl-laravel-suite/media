@@ -12,6 +12,8 @@ use Nvl\Media\Services\MediaQueryService;
  *
  * This bulk action intentionally delegates to DeleteMediaAction so file cleanup,
  * variation cleanup, and delete semantics remain identical to single deletes.
+ *
+ * @api
  */
 final class BulkDeleteMediaAction
 {

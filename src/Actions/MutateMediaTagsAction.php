@@ -10,6 +10,8 @@ use Nvl\Media\Services\MediaMutationLock;
 
 /**
  * Mutates canonical media tags under the shared media lock.
+ *
+ * @api
  */
 final class MutateMediaTagsAction
 {

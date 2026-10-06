@@ -12,7 +12,11 @@ use Nvl\Media\Support\MediaImageConfiguration;
 use Nvl\Media\Support\MediaMimeResolver;
 use Nvl\Media\Support\MediaQueueConfiguration;
 
-/** ConversionDefinition: fluent builder for image variation processing parameters. */
+/**
+ * ConversionDefinition: fluent builder for image variation processing parameters.
+ *
+ * @api
+ */
 class ConversionDefinition
 {
     private const int PAYLOAD_VERSION = 1;

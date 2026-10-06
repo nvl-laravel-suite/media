@@ -19,6 +19,8 @@ use Throwable;
 
 /**
  * Relocates one media binary and its current variations to another disk.
+ *
+ * @api
  */
 final readonly class RelocateMediaAction
 {

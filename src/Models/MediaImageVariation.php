@@ -36,6 +36,8 @@ use Nvl\Support\Config\PackageStorage;
  * @property array<string, mixed>|null $failure_context
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ *
+ * @api
  */
 class MediaImageVariation extends Model
 {

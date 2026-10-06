@@ -8,6 +8,11 @@ use Illuminate\Database\Eloquent\Model;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 
+/**
+ * Attach an existing media handle to its admitted owner.
+ *
+ * @api
+ */
 interface AttachMediaContract
 {
     /**

@@ -63,6 +63,8 @@ use Nvl\Media\Models\MediaImageVariation;
  * @method static bool allows(Authenticatable $actor, MediaAbility $ability, ?MediaModel $media = null, ?Model $owner = null)
  *
  * @see MediaLibrary
+ *
+ * @api
  */
 final class Media extends Facade
 {

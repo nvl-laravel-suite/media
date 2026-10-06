@@ -10,6 +10,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Validated metadata for a direct multipart upload.
+ *
+ * @api
  */
 #[TypeScript]
 final class InitiateMultipartUploadData extends Data

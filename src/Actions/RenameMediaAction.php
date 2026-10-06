@@ -11,6 +11,8 @@ use Nvl\Media\Services\MediaMutationLock;
 
 /**
  * Renames the display filename for a media record.
+ *
+ * @api
  */
 final class RenameMediaAction
 {

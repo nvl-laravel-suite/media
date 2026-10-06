@@ -26,6 +26,8 @@ use Throwable;
 
 /**
  * Creates a server-owned multipart upload session before invoking the provider.
+ *
+ * @api
  */
 final readonly class InitiateMultipartUploadAction
 {

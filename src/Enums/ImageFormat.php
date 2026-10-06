@@ -10,6 +10,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Defines image formats that the package may produce through Spatie Image.
+ *
+ * @api
  */
 #[TypeScript]
 enum ImageFormat: string

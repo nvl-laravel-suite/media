@@ -15,6 +15,8 @@ use Spatie\LaravelData\Optional;
 
 /**
  * Updates mutable media metadata and localized text fields atomically.
+ *
+ * @api
  */
 final readonly class UpdateMediaMetadataAction
 {

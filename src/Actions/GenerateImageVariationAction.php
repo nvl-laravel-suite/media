@@ -24,6 +24,8 @@ use Throwable;
 
 /**
  * Generates one revision-checked image variation under a shared media mutation lock.
+ *
+ * @api
  */
 final class GenerateImageVariationAction
 {

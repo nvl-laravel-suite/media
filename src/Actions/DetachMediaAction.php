@@ -16,6 +16,8 @@ use Nvl\Media\Support\MediaAssociationSnapshot;
 
 /**
  * Removes association records between a media and a model.
+ *
+ * @api
  */
 final readonly class DetachMediaAction implements DetachMediaContract
 {

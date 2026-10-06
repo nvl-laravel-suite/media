@@ -27,6 +27,8 @@ use Throwable;
 
 /**
  * Completes and recovers a persisted direct-upload session idempotently.
+ *
+ * @api
  */
 final readonly class CompleteMultipartUploadAction
 {

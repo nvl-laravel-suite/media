@@ -12,6 +12,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
  *
  * Provides type-safe MIME references, grouping helpers for slot constraints,
  * and bidirectional factory methods for extension/string lookups.
+ *
+ * @api
  */
 #[TypeScript]
 enum MimeType: string

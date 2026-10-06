@@ -9,6 +9,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Scanner-attested technical metadata for a direct upload.
+ *
+ * @api
  */
 #[TypeScript]
 final class MediaScanResultData extends Data

@@ -14,11 +14,17 @@ use Nvl\Media\MediaAdder;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Slots\MediaSlot;
 
-/** @deprecated Use HasNvlMedia and the owner-scoped API; this surface is retained through major 5. */
+/**
+ * @deprecated Use HasNvlMedia and the owner-scoped API; this surface is retained through major 5.
+ *
+ * @api
+ */
 interface HasMedia extends HasNvlMedia
 {
     /**
      * @return MorphToMany<Media, covariant Model>
+     *
+     * @internal
      */
     public function media(): MorphToMany;
 

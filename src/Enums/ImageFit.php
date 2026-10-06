@@ -10,6 +10,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Defines the supported aspect-ratio and cropping strategy for an image variation.
+ *
+ * @api
  */
 #[TypeScript]
 enum ImageFit: string

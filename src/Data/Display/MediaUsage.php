@@ -13,7 +13,11 @@ use Spatie\LaravelData\Mappers\CamelCaseMapper;
 use Spatie\TypeScriptTransformer\Attributes\LiteralTypeScriptType;
 use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
-/** MediaUsage: read-only DTO representing a media association usage row. */
+/**
+ * MediaUsage: read-only DTO representing a media association usage row.
+ *
+ * @api
+ */
 #[MapInputName(CamelCaseMapper::class)]
 #[MapOutputName(CamelCaseMapper::class)]
 #[TypeScript]
@@ -49,6 +53,8 @@ final class MediaUsage extends Data
 
     /**
      * Create DTO from Eloquent model.
+     *
+     * @internal
      */
     public static function fromModel(MediaAssociation $association): self
     {

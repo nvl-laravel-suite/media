@@ -9,6 +9,8 @@ use Illuminate\Http\Request;
 
 /**
  * Thrown when a media file cannot be stored on the target disk during upload.
+ *
+ * @api
  */
 class MediaUploadException extends MediaException
 {

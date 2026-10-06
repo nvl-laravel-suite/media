@@ -6,7 +6,11 @@ namespace Nvl\Media\Enums;
 
 use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
-/** MediaType: classification of stored files by content category. */
+/**
+ * MediaType: classification of stored files by content category.
+ *
+ * @api
+ */
 #[TypeScript]
 enum MediaType: string
 {

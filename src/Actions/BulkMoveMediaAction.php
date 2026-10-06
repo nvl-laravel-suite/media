@@ -20,6 +20,8 @@ use Throwable;
 
 /**
  * Moves media objects through a copy-swap-delete workflow that survives outer rollbacks.
+ *
+ * @api
  */
 final class BulkMoveMediaAction
 {

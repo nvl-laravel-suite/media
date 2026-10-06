@@ -11,6 +11,8 @@ use Nvl\Media\Models\Media;
 
 /**
  * Consumer-owned authorization policy for media capabilities.
+ *
+ * @api
  */
 interface MediaAuthorization
 {

@@ -9,6 +9,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Completion request for a multipart session.
+ *
+ * @api
  */
 #[TypeScript]
 final class CompleteMultipartUploadData extends Data

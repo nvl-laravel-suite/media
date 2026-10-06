@@ -23,7 +23,11 @@ use Nvl\Media\Services\MediaLifecycleService;
 use Nvl\Media\Services\MediaModelInteractionService;
 use Nvl\Media\Slots\MediaSlot;
 
-/** Provides the complete NVL media capability for one real Eloquent owner. */
+/**
+ * Provides the complete NVL media capability for one real Eloquent owner.
+ *
+ * @api
+ */
 final class MediaOwner
 {
     private bool $registered = false;
@@ -45,7 +49,11 @@ final class MediaOwner
         private readonly MediaRegistration $definitions,
     ) {}
 
-    /** Handle NVL owner deletion without touching third-party storage. */
+    /**
+     * Handle NVL owner deletion without touching third-party storage.
+     *
+     * @internal
+     */
     public function ownerDeleted(): void
     {
         if (! $this->preservingOwnerMedia && config('nvl-media.delete_media_on_model_delete', true)
@@ -66,6 +74,8 @@ final class MediaOwner
      * Return the independent NVL asset relation query.
      *
      * @return MorphToMany<Media, covariant Model>
+     *
+     * @internal
      */
     public function query(): MorphToMany
     {
@@ -91,6 +101,8 @@ final class MediaOwner
      * Return eager-loadable NVL association rows and their assets.
      *
      * @return MorphMany<MediaAssociation, covariant Model>
+     *
+     * @internal
      */
     public function associations(): MorphMany
     {
@@ -582,13 +594,21 @@ final class MediaOwner
         $this->invalidate();
     }
 
-    /** Identify the real model instance when Eloquent clones an owner. */
+    /**
+     * Identify the real model instance when Eloquent clones an owner.
+     *
+     * @internal
+     */
     public function owns(Model $owner): bool
     {
         return $owner === $this->owner;
     }
 
-    /** Invalidate only NVL reads after one of its mutations. */
+    /**
+     * Invalidate only NVL reads after one of its mutations.
+     *
+     * @internal
+     */
     public function invalidate(): void
     {
         $this->owner->unsetRelation('nvlMediaAssociations');

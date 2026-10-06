@@ -9,6 +9,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Request for one signed multipart part.
+ *
+ * @api
  */
 #[TypeScript]
 final class SignMultipartPartData extends Data

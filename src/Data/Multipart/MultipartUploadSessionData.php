@@ -12,6 +12,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Opaque server-issued multipart upload session.
+ *
+ * @api
  */
 #[TypeScript]
 final class MultipartUploadSessionData extends Data

@@ -10,6 +10,11 @@ use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Slots\MediaSlot;
 
+/**
+ * Upload a file into its declared owner slot through the ingestion workflow.
+ *
+ * @api
+ */
 interface UploadMediaContract
 {
     /**

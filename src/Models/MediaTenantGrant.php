@@ -25,6 +25,8 @@ use Nvl\Support\Config\PackageStorage;
  * @property Carbon|null $created_at Creation time.
  * @property Carbon|null $updated_at Update time.
  * @property-read Media $media Platform source asset.
+ *
+ * @api
  */
 final class MediaTenantGrant extends Model
 {

@@ -36,6 +36,8 @@ use Throwable;
 
 /**
  * Stores uploaded files on disk and persists Media records with deduplication.
+ *
+ * @api
  */
 final class UploadMediaAction implements UploadMediaContract
 {

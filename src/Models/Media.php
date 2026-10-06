@@ -75,6 +75,25 @@ use Nvl\Translatable\Translatable;
  * @property-read EloquentCollection<int, MediaAssociation> $associations
  * @property-read EloquentCollection<int, MediaImageVariation> $imageVariations
  * @property-read EloquentCollection<int, MediaTranslation> $translations
+ *
+ * @api
+ *
+ * @nvl-consumer-read id
+ * @nvl-consumer-read filename
+ * @nvl-consumer-read extension
+ * @nvl-consumer-read mime_type
+ * @nvl-consumer-read size
+ * @nvl-consumer-read is_public
+ * @nvl-consumer-read visibility
+ * @nvl-consumer-read status
+ * @nvl-consumer-read revision
+ * @nvl-consumer-read width
+ * @nvl-consumer-read height
+ * @nvl-consumer-read duration_ms
+ * @nvl-consumer-read type
+ * @nvl-consumer-read created_at
+ * @nvl-consumer-read updated_at
+ * @nvl-consumer-read deleted_at
  */
 class Media extends Model implements TranslatableModel
 {

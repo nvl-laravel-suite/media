@@ -28,7 +28,11 @@ use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\FileNameSanitizer;
 use Throwable;
 
-/** MediaAdder: fluent builder for uploading, attaching, and generating variations on a model. */
+/**
+ * MediaAdder: fluent builder for uploading, attaching, and generating variations on a model.
+ *
+ * @api
+ */
 class MediaAdder
 {
     public ?string $pendingSlot = null;

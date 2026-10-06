@@ -9,6 +9,8 @@ use Nvl\Media\Models\Media;
 
 /**
  * Applies consumer-replaceable search semantics to a Media query.
+ *
+ * @api
  */
 interface MediaSearchDriver
 {

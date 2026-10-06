@@ -19,6 +19,8 @@ use Throwable;
 
 /**
  * Replaces a media record's original file while preserving associations.
+ *
+ * @api
  */
 final class ReplaceMediaFileAction
 {

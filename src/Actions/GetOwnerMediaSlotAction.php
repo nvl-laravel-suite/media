@@ -12,6 +12,8 @@ use Nvl\Media\Services\MediaOwnerSlotWorkflow;
 
 /**
  * Returns the authorized projection for one registered Media owner slot.
+ *
+ * @api
  */
 final readonly class GetOwnerMediaSlotAction
 {

@@ -8,6 +8,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Stable authorization abilities for media operations.
+ *
+ * @api
  */
 #[TypeScript]
 enum MediaAbility: string

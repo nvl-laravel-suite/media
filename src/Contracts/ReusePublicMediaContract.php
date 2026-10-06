@@ -8,6 +8,11 @@ use Illuminate\Database\Eloquent\Model;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 
+/**
+ * Reuse an existing public asset through the authorized attachment workflow.
+ *
+ * @api
+ */
 interface ReusePublicMediaContract
 {
     /**

@@ -15,6 +15,8 @@ use Nvl\Media\Services\MediaMultipartSessionMapper;
 
 /**
  * Idempotently aborts an actor-owned persisted multipart session.
+ *
+ * @api
  */
 final readonly class AbortMultipartUploadAction
 {

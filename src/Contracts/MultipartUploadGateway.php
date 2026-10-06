@@ -12,6 +12,8 @@ use Nvl\Media\Data\Multipart\SignMultipartPartData;
 
 /**
  * Object-storage adapter for direct multipart uploads.
+ *
+ * @api
  */
 interface MultipartUploadGateway
 {

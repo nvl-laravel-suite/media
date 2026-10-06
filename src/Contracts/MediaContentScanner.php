@@ -8,6 +8,8 @@ use Illuminate\Http\UploadedFile;
 
 /**
  * Scans the exact materialized file that will be persisted by Media.
+ *
+ * @api
  */
 interface MediaContentScanner
 {

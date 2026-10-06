@@ -12,7 +12,11 @@ use Nvl\Support\Tenancy\Contracts\TenantContext;
 use Nvl\Support\Tenancy\Enums\TenantContextMode;
 use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 
-/** Revokes future imports without affecting committed tenant copies. */
+/**
+ * Revokes future imports without affecting committed tenant copies.
+ *
+ * @api
+ */
 final readonly class RevokeMediaTenantGrantAction
 {
     public function __construct(private TenantContext $context) {}

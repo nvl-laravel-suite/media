@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Data;
 
-/** Exact importer-owned staged object tuple. */
+/**
+ * Exact importer-owned staged object tuple.
+ *
+ * @api
+ */
 final readonly class StagedCatalogMedia
 {
     public function __construct(

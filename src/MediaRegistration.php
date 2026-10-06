@@ -8,7 +8,11 @@ use Illuminate\Support\Collection;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Slots\MediaSlot;
 
-/** Retains slot and conversion definitions for one NVL owner API. */
+/**
+ * Retains slot and conversion definitions for one NVL owner API.
+ *
+ * @api
+ */
 final class MediaRegistration
 {
     /** @var array<string, MediaSlot> */

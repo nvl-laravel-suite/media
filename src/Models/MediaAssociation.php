@@ -31,6 +31,8 @@ use Nvl\Support\Config\PackageStorage;
  * @property array<string, mixed>|null $metadata
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ *
+ * @api
  */
 class MediaAssociation extends Model
 {

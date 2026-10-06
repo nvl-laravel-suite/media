@@ -11,6 +11,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Stable media actor identity for policies and events.
+ *
+ * @api
  */
 #[TypeScript]
 final class MediaActorData extends Data

@@ -38,10 +38,9 @@ final class Article extends Model implements HasNvlMedia
 
 $asset = $article->nvlMedia()->add($upload)->slot('cover');
 $cover = $article->nvlMedia()->first('cover');
-$articles = Article::with('nvlMediaAssociations')->get();
 ```
 
-`nvlMedia()` returns one `MediaOwner` for the actual model instance, keeping registration independent of upload collaborators. It never wraps the owner in a different Eloquent model. `nvlMediaAssociations()` eager-loads its own NVL assets and leaves a host or Spatie `media` relation untouched.
+`nvlMedia()` returns one `MediaOwner` for the actual model instance, keeping registration independent of upload collaborators. It never wraps the owner in a different Eloquent model. `nvlMediaAssociations()` is an internal storage relation. For owner lists use `ListOwnerMediaSlotsContract` with a `MediaActorData` and explicit `MediaBatchAuthorization`; for host existence filtering use the authorized `hasNvlMedia` scope shown below.
 
 | Owner API method | Contract |
 | --- | --- |
@@ -58,10 +57,9 @@ $articles = Article::with('nvlMediaAssociations')->get();
 | `clear()`, `clearExcept()`, `deleteAll()` | Remove owner associations and delete an asset only when it is no longer shared |
 | `delete()` | Delete a specified NVL asset through the global delete Action |
 | `order()`, `modelClass()` | Set collection order or return the NVL Media class |
-| `query()`, `associations()` | Inspect the NVL relation/query independently of the host model's relation names |
 | `deleteOwnerPreservingMedia()` | Delete the owner while preserving its NVL references; other libraries retain their own deletion policy |
 
-The registration object exposes `slot()`, `conversion()`, `getSlot()`, `slots()` and `conversions()`. Definitions are local to one owner. NVL internal lifecycle/cache seams use `ownerDeleted()`, `owns()` and `invalidate()`; application mutations should use the methods above.
+The registration object exposes `slot()`, `conversion()`, `getSlot()`, `slots()` and `conversions()`. Definitions are local to one owner. NVL internal query/lifecycle/cache seams use `query()`, `associations()`, `ownerDeleted()`, `owns()` and `invalidate()`; application mutations should use the methods above.
 
 For Spatie coexistence, implement Spatie's distinct `HasMedia` plus NVL's `HasNvlMedia`, and use Spatie's `InteractsWithMedia` plus NVL's `InteractsWithNvlMedia`. Each retains independent conversion hooks and deletion listeners. The standalone fixture installs the real third-party package only in test tooling.
 
@@ -482,7 +480,7 @@ $definition = (new ConversionDefinition('hero'))
 
 ## `Media` model
 
-Prefer Actions for mutations. The model intentionally exposes relationships, scopes, and lightweight derived helpers.
+Consumers use Actions and authorized readers/scopes. The model exposes only the eight identity methods and the exact in-memory fields listed in README. The relationships, scopes, and derived helpers documented below describe package-internal storage behavior; they do not grant consumer queries, traversal, or serialization.
 
 ### Relationships and scopes
 

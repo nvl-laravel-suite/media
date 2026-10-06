@@ -148,7 +148,7 @@ $model->nvlMedia()->fromBinary($pdfBytes, 'report.pdf', 'application/pdf')->slot
 $model->nvlMedia()->fromDisk($key, 'imports')->slot('documents');
 ```
 
-Use `$owner->nvlMedia()->all()`, `first()`, `firstUrl()`, `attach()`, `detach()`, `sync()` and `slot()` for owner-scoped operations. Eager-load `nvlMediaAssociations`; its related NVL assets load with it. These names coexist with a host's `media()` relation and with Spatie Media's upload and conversion hooks.
+Use `$owner->nvlMedia()->all()`, `first()`, `firstUrl()`, `attach()`, `detach()`, `sync()` and `slot()` for owner-scoped operations. For owner display lists use `ListOwnerMediaSlotsContract` with explicit actor and batch authorization; for host existence filtering use the authorized `hasNvlMedia` scope. `nvlMediaAssociations` is an internal storage relation and is not a consumer eager/lazy-loading API. These names coexist with a host's `media()` relation and with Spatie Media's upload and conversion hooks.
 
 `HasMedia` and `InteractsWithMedia` are deprecated forwarding adapters retained through major 5. NVL-only owners may keep their existing calls during that window. A model using both libraries implements `HasNvlMedia` and uses `InteractsWithNvlMedia` for NVL, alongside Spatie's unchanged contract and trait; no trait aliases are required. `tools/run-media-spatie-consumer.sh` proves this with the real Spatie dependency in isolated test tooling.
 
@@ -622,6 +622,14 @@ composer quality
 `composer quality` verifies the manifest, Pint formatting, PHPStan at maximum strictness, direct dependency declarations, generated TypeScript freshness and compilation, and the isolated Testbench/Pest suite. Run Composer and npm security audits separately against their lockfiles. Compatibility verification covers Laravel 13/Testbench 11 on the suite's PHP 8.4+ runtime. The local production integration command additionally requires PostgreSQL, Redis, and MinIO or equivalent S3-compatible storage.
 
 The documentation coverage test keeps facade, trait, adder, slot, conversion, model-helper, management-route, contract, event, and top-level configuration references synchronized with their public source surfaces.
+
+## Supported PHP usage
+
+The source `@api` declarations identify supported workflows, extension contracts, and value types. Public members marked `@internal` and untagged implementation types remain package-owned. Concrete Actions retain their existing constructors, qualifiers, and `execute()` signatures.
+
+A package model returned or accepted by a public workflow is an identity/result handle. Use its declared type and `getKey()`, `getKeyName()`, `getMorphClass()`, `getRouteKey()`, `getRouteKeyName()`, `is()`, `isNot()`, and `relationLoaded()`. Read only explicitly declared in-memory `@nvl-consumer-read` fields; ordinary model PHPDocs and fillable attributes do not grant consumer reads. Obtain display projections through public reads. Persistence, additional model queries, relation access/loading, and generic model serialization are outside this contract. Host-model queries remain available, while traversal or aggregates of package capability relations require the package public reader or authorized adapter.
+
+The current readable handle fields are `Media`: `id`, `filename`, `extension`, `mime_type`, `size`, `is_public`, `visibility`, `status`, `revision`, `width`, `height`, `duration_ms`, `type`, `created_at`, `updated_at`, `deleted_at`. All other package model handles have no readable attribute grant.
 
 ## License
 

@@ -36,6 +36,8 @@ use Nvl\Media\Services\MediaUrlResolver;
 
 /**
  * Thin consumer API that delegates to the package's focused services and actions.
+ *
+ * @api
  */
 final readonly class MediaLibrary implements MediaLibraryContract
 {

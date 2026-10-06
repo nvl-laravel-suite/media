@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Data;
 
-/** Scalar-only authorized platform asset snapshot. */
+/**
+ * Scalar-only authorized platform asset snapshot.
+ *
+ * @api
+ */
 final readonly class MediaCatalogSnapshot
 {
     /**

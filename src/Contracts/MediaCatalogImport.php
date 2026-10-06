@@ -8,7 +8,11 @@ use Nvl\Media\Data\MediaCatalogSnapshot;
 use Nvl\Media\Data\StagedCatalogMedia;
 use Nvl\Media\Models\Media;
 
-/** Public staged transaction port for composing Media copies into consumer graphs. */
+/**
+ * Public staged transaction port for composing Media copies into consumer graphs.
+ *
+ * @api
+ */
 interface MediaCatalogImport
 {
     public function inspect(string $grantId): MediaCatalogSnapshot;

@@ -9,6 +9,8 @@ use Nvl\Media\Data\Multipart\MultipartUploadSessionData;
 
 /**
  * Multipart gateway capable of inspecting an object after an interrupted completion.
+ *
+ * @api
  */
 interface RecoverableMultipartUploadGateway extends MultipartUploadGateway
 {

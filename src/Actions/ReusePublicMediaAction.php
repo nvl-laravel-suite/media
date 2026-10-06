@@ -15,6 +15,8 @@ use Nvl\Media\Models\MediaAssociation;
  *
  * Delegation to AttachMediaAction is deliberate action composition so reused
  * assets retain canonical association and variation behavior.
+ *
+ * @api
  */
 final readonly class ReusePublicMediaAction implements ReusePublicMediaContract
 {

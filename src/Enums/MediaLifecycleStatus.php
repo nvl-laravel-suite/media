@@ -8,6 +8,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Persisted lifecycle state for a media binary.
+ *
+ * @api
  */
 #[TypeScript]
 enum MediaLifecycleStatus: string

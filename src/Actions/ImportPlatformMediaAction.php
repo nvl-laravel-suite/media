@@ -11,7 +11,11 @@ use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 use Nvl\Support\Tenancy\Services\EffectiveTenantConnection;
 use Throwable;
 
-/** Standalone facade around Media's staged catalog transaction port. */
+/**
+ * Standalone facade around Media's staged catalog transaction port.
+ *
+ * @api
+ */
 final readonly class ImportPlatformMediaAction
 {
     public function __construct(private MediaCatalogImport $imports, private EffectiveTenantConnection $connections) {}

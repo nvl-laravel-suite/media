@@ -11,6 +11,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Temporary credentials for uploading one object part.
+ *
+ * @api
  */
 #[TypeScript]
 final class SignedMultipartPartData extends Data

@@ -16,6 +16,8 @@ use Nvl\Media\Services\MediaMultipartSessionMapper;
 
 /**
  * Signs a fixed-size checksummed part from persisted session state.
+ *
+ * @api
  */
 final readonly class SignMultipartPartAction
 {

@@ -11,6 +11,8 @@ use Nvl\Media\Services\MediaOwnerSlotWorkflow;
 
 /**
  * Clears one registered Media owner slot through the package lifecycle workflow.
+ *
+ * @api
  */
 final readonly class ClearOwnerMediaSlotAction
 {

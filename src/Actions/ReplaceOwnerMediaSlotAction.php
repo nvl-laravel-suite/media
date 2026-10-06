@@ -12,6 +12,8 @@ use Nvl\Media\Services\MediaOwnerSlotWorkflow;
 
 /**
  * Replaces one registered Media owner slot through the package lifecycle workflow.
+ *
+ * @api
  */
 final readonly class ReplaceOwnerMediaSlotAction
 {

@@ -6,6 +6,8 @@ namespace Nvl\Media\Contracts;
 
 /**
  * Resolves every IP address advertised for a remote media hostname.
+ *
+ * @api
  */
 interface MediaHostResolver
 {

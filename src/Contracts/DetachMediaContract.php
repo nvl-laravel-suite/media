@@ -7,6 +7,11 @@ namespace Nvl\Media\Contracts;
 use Illuminate\Database\Eloquent\Model;
 use Nvl\Media\Models\Media;
 
+/**
+ * Detach media associations from the admitted owner.
+ *
+ * @api
+ */
 interface DetachMediaContract
 {
     public function execute(

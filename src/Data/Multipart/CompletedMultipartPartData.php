@@ -9,6 +9,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Provider receipt for one uploaded part.
+ *
+ * @api
  */
 #[TypeScript]
 final class CompletedMultipartPartData extends Data
