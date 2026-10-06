@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
+use Nvl\Support\Config\PackageStorage;
 
 /**
  * MediaAssociation: polymorphic pivot linking media to any associable model.
@@ -127,5 +128,17 @@ class MediaAssociation extends Model
     public function scopeOrdered(Builder $query): void
     {
         $query->orderBy('order');
+    }
+
+    /** Resolve the configured package storage table. */
+    public function getTable(): string
+    {
+        return MediaTables::get(MediaTables::Associations);
+    }
+
+    /** Resolve the package connection through shared infrastructure defaults. */
+    public function getConnectionName(): ?string
+    {
+        return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('media') ?? parent::getConnectionName());
     }
 }

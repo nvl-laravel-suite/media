@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
+use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Tests\Fixtures\MediaTenancyScenario;
-use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Process\Process;
 
@@ -13,6 +14,8 @@ it('restores Media tenant context in a real database queue worker', function ():
     $fixture = sys_get_temp_dir().'/nvl-media-worker-'.bin2hex(random_bytes(8));
     $database = $fixture.'/database.sqlite';
     $queue = 'media-tenant-proof-'.bin2hex(random_bytes(6));
+    $mediaTable = MediaTables::Media;
+    $variationTable = MediaTables::ImageVariations;
     $files = new Filesystem;
 
     try {
@@ -85,7 +88,7 @@ it('restores Media tenant context in a real database queue worker', function ():
 
         $pdo = new PDO('sqlite:'.$database);
         $variations = $pdo->query(
-            'select tenant_id, label, storage_path, status from px_media_image_variations order by tenant_id, label',
+            "select tenant_id, label, storage_path, status from {$variationTable} order by tenant_id, label",
         )->fetchAll(PDO::FETCH_ASSOC);
         $successful = array_values(array_filter(
             $variations,
@@ -100,7 +103,7 @@ it('restores Media tenant context in a real database queue worker', function ():
             'variations' => $variations,
             'failed' => array_map(static fn (string $exception): string => substr($exception, 0, 500), $failed),
             'jobs' => $pdo->query('select id, queue, attempts from jobs')->fetchAll(PDO::FETCH_ASSOC),
-            'media' => $pdo->query('select id, tenant_id, status from px_media')->fetchAll(PDO::FETCH_ASSOC),
+            'media' => $pdo->query("select id, tenant_id, status from {$mediaTable}")->fetchAll(PDO::FETCH_ASSOC),
         ], JSON_THROW_ON_ERROR))
             ->and(array_column($successful, 'tenant_id'))->toBe([
                 MediaTenancyScenario::A,

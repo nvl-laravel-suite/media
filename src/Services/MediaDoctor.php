@@ -27,9 +27,10 @@ use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaImageConfiguration;
 use Nvl\Media\Support\MediaQueueConfiguration;
-use Nvl\Tenancy\Services\EffectiveTenantConnection;
-use Nvl\Tenancy\Services\TenantInstallationState;
-use Nvl\Tenancy\Services\TenantResourceRegistry;
+use Nvl\Support\Config\PackageOptions;
+use Nvl\Support\Tenancy\Contracts\TenantInstallationState;
+use Nvl\Support\Tenancy\Services\EffectiveTenantConnection;
+use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Throwable;
 
 /**
@@ -117,11 +118,11 @@ final readonly class MediaDoctor
         $mixed = config('tenancy.sharing.media') === 'copy'
             || config('tenancy.resources.media') === 'platform';
         $mixedReady = ! $mixed || collect([
-            MediaTables::Media,
-            MediaTables::Associations,
-            MediaTables::ImageVariations,
-            MediaTables::I18n,
-            MediaTables::MultipartUploads,
+            MediaTables::get(MediaTables::Media),
+            MediaTables::get(MediaTables::Associations),
+            MediaTables::get(MediaTables::ImageVariations),
+            MediaTables::get(MediaTables::I18n),
+            MediaTables::get(MediaTables::MultipartUploads),
         ])->every(static fn (string $table): bool => Schema::hasColumn($table, 'ownership_key'));
         $checks[] = new MediaDoctorCheckData(
             'tenancy.schema.partition',
@@ -131,7 +132,7 @@ final readonly class MediaDoctor
                 ? 'Media ownership columns match the configured partition mode.'
                 : 'Media sharing or platform mode requires the adopted mixed ownership schema.',
         );
-        $grantLocksReady = Schema::hasTable(MediaTables::TenantGrantLocks);
+        $grantLocksReady = Schema::hasTable(MediaTables::get(MediaTables::TenantGrantLocks));
         $checks[] = new MediaDoctorCheckData(
             'tenancy.schema.catalog_grant_locks',
             'error',
@@ -337,7 +338,7 @@ final readonly class MediaDoctor
         try {
             $ownerSlotOperationsTable = MediaConfiguration::ownerSlotOperationTable();
             $requirements = [
-                MediaTables::Media => [
+                MediaTables::get(MediaTables::Media) => [
                     'id',
                     'digest',
                     'disk',
@@ -349,21 +350,21 @@ final readonly class MediaDoctor
                     'revision',
                     'variation_definitions',
                 ],
-                MediaTables::Associations => [
+                MediaTables::get(MediaTables::Associations) => [
                     'media_id',
                     'associable_type',
                     'associable_id',
                     'collection',
                     'is_active',
                 ],
-                MediaTables::ImageVariations => [
+                MediaTables::get(MediaTables::ImageVariations) => [
                     'media_id',
                     'label',
                     'status',
                     'source_revision',
                     'storage_path',
                 ],
-                MediaTables::I18n => [
+                MediaTables::get(MediaTables::I18n) => [
                     'media_id',
                     'locale',
                     'title',
@@ -371,7 +372,7 @@ final readonly class MediaDoctor
                     'caption',
                     'description',
                 ],
-                MediaTables::MultipartUploads => [
+                MediaTables::get(MediaTables::MultipartUploads) => [
                     'id',
                     'provider_state',
                     'object_key',
@@ -547,7 +548,7 @@ final readonly class MediaDoctor
      */
     private function representativeStoragePathCheck(bool $production): MediaDoctorCheckData
     {
-        if (! Schema::hasTable(MediaTables::Media)) {
+        if (! Schema::hasTable(MediaTables::get(MediaTables::Media))) {
             return new MediaDoctorCheckData(
                 'storage.persisted_paths',
                 $production ? 'error' : 'warning',
@@ -559,7 +560,7 @@ final readonly class MediaDoctor
         $limit = MediaConfiguration::integer('media.adoption.path_sample_size', 25, 1);
         $columns = ['id', 'disk', 'folder', 'hash'];
 
-        if (Schema::hasColumn(MediaTables::Media, 'storage_path')) {
+        if (Schema::hasColumn(MediaTables::get(MediaTables::Media), 'storage_path')) {
             $columns[] = 'storage_path';
         }
 
@@ -845,17 +846,14 @@ final readonly class MediaDoctor
     private function lockChecks(bool $production): array
     {
         $multiNode = (bool) config('media.deployment.multi_node', false);
-        $storeName = config('media.mutation_lock.store') ?: config('cache.default');
-        $driver = is_string($storeName)
-            ? config("cache.stores.{$storeName}.driver")
-            : null;
-        $central = in_array($driver, ['redis', 'memcached', 'dynamodb'], true);
         $atomic = false;
+        $central = false;
 
         try {
-            $repository = is_string($storeName) && $storeName !== ''
-                ? Cache::store($storeName)
-                : Cache::store();
+            $storeName = PackageOptions::lockStore('media', 'mutation');
+            $driver = config("cache.stores.{$storeName}.driver");
+            $central = in_array($driver, ['redis', 'memcached', 'dynamodb'], true);
+            $repository = Cache::store($storeName);
             $atomic = $repository->getStore() instanceof LockProvider;
         } catch (Throwable) {
             $atomic = false;
@@ -935,10 +933,8 @@ final readonly class MediaDoctor
 
         $gateway = $this->resolve(MultipartUploadGateway::class);
         $scanner = $this->resolve(MediaContentScanner::class);
-        $storeName = config('media.multipart.lock.store') ?: config('cache.default');
-        $driver = is_string($storeName)
-            ? config("cache.stores.{$storeName}.driver")
-            : null;
+        $storeName = PackageOptions::lockStore('media', 'multipart');
+        $driver = config("cache.stores.{$storeName}.driver");
         $centralLock = in_array($driver, ['redis', 'memcached', 'dynamodb'], true);
 
         return [
@@ -1006,7 +1002,7 @@ final readonly class MediaDoctor
         }
 
         return match ($table) {
-            MediaTables::Media => [
+            MediaTables::get(MediaTables::Media) => [
                 'media_hash_idx',
                 'media_visibility_created_idx',
                 'media_uploader_created_idx',
@@ -1014,7 +1010,7 @@ final readonly class MediaDoctor
                 'media_type_created_idx',
                 'media_status_created_idx',
             ],
-            MediaTables::MultipartUploads => [
+            MediaTables::get(MediaTables::MultipartUploads) => [
                 'media_multipart_disk_object_hash_unique',
                 'media_multipart_actor_created_idx',
                 'media_multipart_status_expiry_idx',

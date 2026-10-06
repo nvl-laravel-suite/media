@@ -93,3 +93,27 @@ The supported 2.x production profile is PHP 8.3/8.4, Laravel 13, PostgreSQL, S3-
 - Preserve disabled compatibility and package independence; tenant support never creates an undeclared Auth or Suite dependency.
 - Use registered package-owned resources, adoption adapters, Actions, and lifecycle APIs. Never add a generic tenant delete-all path or raw cross-package cleanup.
 - Treat mapping/configuration hashes, interruption checkpoints, conservation evidence, worker context, tenant-leading queries, and standalone consumption as release contracts.
+
+## Shared owner identities
+
+- Declare canonical owner identity once in `nvl-core.owners`; reference its alias in `media` capability configuration.
+- Owners still implement HasMedia and use InteractsWithMedia. Preserve collection/slot declarations and authorize the configured mutation ability.
+- Keep the package allowlist and authorization independent of Core registration. Never authorize a model merely because Core knows it.
+- Accept legacy class/resolver/handler inputs during the documented one-major compatibility cycle. Report deprecated host identity inputs through `nvl:doctor`; preserve established write-time morph types.
+- Before introducing an alias for historical FQCN-backed data, explicitly convert reviewed package-owned columns and reconcile affected host relations. Never silently rewrite host morph tables or enable `enforceMorphMap()` globally.
+
+## Shared diagnostics and queue inheritance
+
+- Run `php artisan nvl:doctor --strict --format=json` for all loaded package checks; retain `nvl:media:doctor` for Media-specific production diagnostics.
+- Resolve Media queue connection from explicit `media.queue.connection`, then `nvl-core.queue.connection`, then effective `queue.default`. Null inherits; empty strings are invalid; explicit sync remains synchronous.
+- Keep `MEDIA_QUEUE_CONNECTION` in config files, rebuild cached configuration, and restart workers after queue changes.
+
+
+## Shared infrastructure options
+
+- Resolve queue names through `media.queue.name`, Core's queue name, then the selected Laravel connection's queue. Specify `MEDIA_QUEUE=media` when deployment workers consume that dedicated name.
+- Use `locks.store` for a shared cache store and `locks.mutation.store`, `locks.deduplication.store`, or `locks.multipart.store` for explicit independent overrides. Preserve operation duration/wait settings; historical store keys are supported for one major cycle and reported through Doctor.
+
+### Brownfield storage identities
+
+Resolve all package tables through the table helper and canonical `media.tables.*`, connections through `media.connection` with Core/Laravel inheritance. Defaults use `nvl_media_*`; migration filenames include that package slug. Never silently adopt a matching table or generic migration filename. Run shared `nvl:doctor --strict --format=json` and the explicit `nvl:schema:upgrade --package=media --claim-legacy --dry-run --format=json` before upgrading owned legacy storage. Validate the complete plan and choose one migration owner. Preserve host records, constraint names and stored morph values. Deprecated config inputs last one major; canonical options take precedence.

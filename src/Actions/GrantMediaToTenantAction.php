@@ -11,12 +11,12 @@ use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Events\MediaCatalogGrantAudited;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaTenantGrant;
-use Nvl\Tenancy\Contracts\TenantContext;
-use Nvl\Tenancy\Contracts\TenantDirectory;
-use Nvl\Tenancy\Enums\TenantContextMode;
-use Nvl\Tenancy\Enums\TenantStatus;
-use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
-use Nvl\Tenancy\ValueObjects\TenantId;
+use Nvl\Support\Tenancy\Contracts\TenantContext;
+use Nvl\Support\Tenancy\Contracts\TenantDirectory;
+use Nvl\Support\Tenancy\Enums\TenantContextMode;
+use Nvl\Support\Tenancy\Enums\TenantStatus;
+use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Tenancy\ValueObjects\TenantId;
 
 /** Grants one exact platform Media revision to an active recipient tenant. */
 final readonly class GrantMediaToTenantAction
@@ -31,13 +31,13 @@ final readonly class GrantMediaToTenantAction
         }
 
         return DB::transaction(function () use ($mediaId, $recipient, $sourceRevision): MediaTenantGrant {
-            DB::table(MediaTables::TenantGrantLocks)->insertOrIgnore([
+            DB::table(MediaTables::get(MediaTables::TenantGrantLocks))->insertOrIgnore([
                 'tenant_id' => $recipient->value,
                 'media_id' => $mediaId,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            DB::table(MediaTables::TenantGrantLocks)
+            DB::table(MediaTables::get(MediaTables::TenantGrantLocks))
                 ->where('tenant_id', $recipient->value)
                 ->where('media_id', $mediaId)
                 ->lockForUpdate()

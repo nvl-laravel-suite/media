@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\URL;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
-use Nvl\Tenancy\Exceptions\TenantContextMissing;
+use Nvl\Support\Tenancy\Exceptions\TenantContextMissing;
 use RuntimeException;
 use Throwable;
 

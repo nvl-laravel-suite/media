@@ -18,8 +18,8 @@ use Nvl\Media\Enums\MediaOwnerSlotOperationType;
 use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaOwnerSlotOperationClaim;
-use Nvl\Tenancy\Contracts\TenantContext;
-use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Tenancy\Contracts\TenantContext;
 
 /**
  * Owns portable idempotency claims for Media owner-slot mutations.

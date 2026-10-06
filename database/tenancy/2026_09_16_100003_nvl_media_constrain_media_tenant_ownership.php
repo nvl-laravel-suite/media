@@ -11,50 +11,57 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Support\Config\PackageStorage;
 
 return new class extends Migration
 {
+    /** Use the effective package connection for Laravel's migration transaction. */
+    public function getConnection(): ?string
+    {
+        return PackageStorage::connection('media');
+    }
+
     /** Apply verified tenant partitions, indexes, and concrete parent constraints. */
     public function up(): void
     {
         $mixed = config('tenancy.sharing.media') === 'copy';
         $platform = config('tenancy.resources.media') === 'platform';
         $partitioned = $mixed || $platform;
-        $schema = Schema::getFacadeRoot();
+        $schema = Schema::connection(PackageStorage::connection('media'));
 
-        $this->required($schema, MediaTables::Media, 'tenant_id', $mixed || $platform);
-        $this->required($schema, MediaTables::Media, 'storage_path', false, 'path');
+        $this->required($schema, MediaTables::get(MediaTables::Media), 'tenant_id', $mixed || $platform);
+        $this->required($schema, MediaTables::get(MediaTables::Media), 'storage_path', false, 'path');
         if ($partitioned) {
-            $this->required($schema, MediaTables::Media, 'ownership_key', false, 'string');
-            $this->ownershipCheck(DB::connection(), MediaTables::Media);
+            $this->required($schema, MediaTables::get(MediaTables::Media), 'ownership_key', false, 'string');
+            $this->ownershipCheck(DB::connection(), MediaTables::get(MediaTables::Media));
         }
-        $this->unique($schema, MediaTables::Media, [$partitioned ? 'ownership_key' : 'tenant_id', 'id'], 'media_partition_id_unique');
+        $this->unique($schema, MediaTables::get(MediaTables::Media), [$partitioned ? 'ownership_key' : 'tenant_id', 'id'], 'media_partition_id_unique');
         if ($mixed || $platform) {
-            $this->unique($schema, MediaTables::Media, ['tenant_id', 'id'], 'media_tenant_id_unique');
+            $this->unique($schema, MediaTables::get(MediaTables::Media), ['tenant_id', 'id'], 'media_tenant_id_unique');
         }
-        $this->unique($schema, MediaTables::Media, ['tenant_id', 'catalog_import_key'], 'media_tenant_catalog_import_unique');
-        $this->index($schema, MediaTables::Media, ['tenant_id', 'digest', 'disk', 'visibility'], 'media_tenant_digest_disk_visibility_idx');
-        $this->index($schema, MediaTables::Media, ['tenant_id', 'status', 'created_at'], 'media_tenant_status_created_idx');
+        $this->unique($schema, MediaTables::get(MediaTables::Media), ['tenant_id', 'catalog_import_key'], 'media_tenant_catalog_import_unique');
+        $this->index($schema, MediaTables::get(MediaTables::Media), ['tenant_id', 'digest', 'disk', 'visibility'], 'media_tenant_digest_disk_visibility_idx');
+        $this->index($schema, MediaTables::get(MediaTables::Media), ['tenant_id', 'status', 'created_at'], 'media_tenant_status_created_idx');
 
-        foreach ([MediaTables::Associations, MediaTables::ImageVariations, MediaTables::I18n] as $child) {
+        foreach ([MediaTables::get(MediaTables::Associations), MediaTables::get(MediaTables::ImageVariations), MediaTables::get(MediaTables::I18n)] as $child) {
             $this->required($schema, $child, 'tenant_id', $mixed || $platform);
             if ($partitioned) {
                 $this->required($schema, $child, 'ownership_key', false, 'string');
                 $this->ownershipCheck(DB::connection(), $child);
             }
             $partition = $partitioned ? 'ownership_key' : 'tenant_id';
-            $this->foreign($schema, $child, [$partition, 'media_id'], MediaTables::Media, [$partition, 'id'], $child.'_media_partition_foreign');
+            $this->foreign($schema, $child, [$partition, 'media_id'], MediaTables::get(MediaTables::Media), [$partition, 'id'], $child.'_media_partition_foreign');
         }
-        $this->index($schema, MediaTables::Associations, ['tenant_id', 'associable_type', 'associable_id', 'collection'], 'media_assoc_tenant_owner_collection_idx');
-        $this->unique($schema, MediaTables::I18n, [$partitioned ? 'ownership_key' : 'tenant_id', 'media_id', 'locale'], 'media_i18n_partition_locale_unique');
+        $this->index($schema, MediaTables::get(MediaTables::Associations), ['tenant_id', 'associable_type', 'associable_id', 'collection'], 'media_assoc_tenant_owner_collection_idx');
+        $this->unique($schema, MediaTables::get(MediaTables::I18n), [$partitioned ? 'ownership_key' : 'tenant_id', 'media_id', 'locale'], 'media_i18n_partition_locale_unique');
 
-        $this->required($schema, MediaTables::MultipartUploads, 'tenant_id', $platform);
+        $this->required($schema, MediaTables::get(MediaTables::MultipartUploads), 'tenant_id', $platform);
         if ($partitioned) {
-            $this->required($schema, MediaTables::MultipartUploads, 'ownership_key', false, 'string');
-            $this->ownershipCheck(DB::connection(), MediaTables::MultipartUploads);
+            $this->required($schema, MediaTables::get(MediaTables::MultipartUploads), 'ownership_key', false, 'string');
+            $this->ownershipCheck(DB::connection(), MediaTables::get(MediaTables::MultipartUploads));
         }
-        $this->index($schema, MediaTables::MultipartUploads, ['tenant_id', 'status', 'expires_at'], 'media_multipart_tenant_status_expiry_idx');
-        $this->foreign($schema, MediaTables::MultipartUploads, ['tenant_id', 'completed_media_id'], MediaTables::Media, ['tenant_id', 'id'], 'media_multipart_completed_tenant_foreign');
+        $this->index($schema, MediaTables::get(MediaTables::MultipartUploads), ['tenant_id', 'status', 'expires_at'], 'media_multipart_tenant_status_expiry_idx');
+        $this->foreign($schema, MediaTables::get(MediaTables::MultipartUploads), ['tenant_id', 'completed_media_id'], MediaTables::get(MediaTables::Media), ['tenant_id', 'id'], 'media_multipart_completed_tenant_foreign');
 
         $operationConnection = DB::connection(MediaConfiguration::ownerSlotOperationConnection());
         $operationSchema = $operationConnection->getSchemaBuilder();
@@ -71,20 +78,20 @@ return new class extends Migration
     /** Remove final constraints while retaining expanded adoption data. */
     public function down(): void
     {
-        $schema = Schema::getFacadeRoot();
-        foreach ([MediaTables::Associations, MediaTables::ImageVariations, MediaTables::I18n] as $child) {
+        $schema = Schema::connection(PackageStorage::connection('media'));
+        foreach ([MediaTables::get(MediaTables::Associations), MediaTables::get(MediaTables::ImageVariations), MediaTables::get(MediaTables::I18n)] as $child) {
             $this->dropForeign($schema, $child, $child.'_media_partition_foreign');
         }
-        $this->dropForeign($schema, MediaTables::MultipartUploads, 'media_multipart_completed_tenant_foreign');
+        $this->dropForeign($schema, MediaTables::get(MediaTables::MultipartUploads), 'media_multipart_completed_tenant_foreign');
         foreach ([
-            [MediaTables::Media, 'media_partition_id_unique', true],
-            [MediaTables::Media, 'media_tenant_id_unique', true],
-            [MediaTables::Media, 'media_tenant_catalog_import_unique', true],
-            [MediaTables::Media, 'media_tenant_digest_disk_visibility_idx', false],
-            [MediaTables::Media, 'media_tenant_status_created_idx', false],
-            [MediaTables::Associations, 'media_assoc_tenant_owner_collection_idx', false],
-            [MediaTables::I18n, 'media_i18n_partition_locale_unique', true],
-            [MediaTables::MultipartUploads, 'media_multipart_tenant_status_expiry_idx', false],
+            [MediaTables::get(MediaTables::Media), 'media_partition_id_unique', true],
+            [MediaTables::get(MediaTables::Media), 'media_tenant_id_unique', true],
+            [MediaTables::get(MediaTables::Media), 'media_tenant_catalog_import_unique', true],
+            [MediaTables::get(MediaTables::Media), 'media_tenant_digest_disk_visibility_idx', false],
+            [MediaTables::get(MediaTables::Media), 'media_tenant_status_created_idx', false],
+            [MediaTables::get(MediaTables::Associations), 'media_assoc_tenant_owner_collection_idx', false],
+            [MediaTables::get(MediaTables::I18n), 'media_i18n_partition_locale_unique', true],
+            [MediaTables::get(MediaTables::MultipartUploads), 'media_multipart_tenant_status_expiry_idx', false],
         ] as [$table, $name, $unique]) {
             $this->dropIndex($schema, $table, $name, $unique);
         }
@@ -94,16 +101,16 @@ return new class extends Migration
         if ($operationSchema->hasTable($operationTable) && ! $operationSchema->hasIndex($operationTable, 'media_owner_slot_idempotency_unique')) {
             $operationSchema->table($operationTable, static fn (Blueprint $table) => $table->unique('idempotency_key', 'media_owner_slot_idempotency_unique'));
         }
-        $this->dropOwnershipCheck(DB::connection(), MediaTables::Media);
-        foreach ([MediaTables::Associations, MediaTables::ImageVariations, MediaTables::I18n, MediaTables::MultipartUploads] as $table) {
+        $this->dropOwnershipCheck(DB::connection(), MediaTables::get(MediaTables::Media));
+        foreach ([MediaTables::get(MediaTables::Associations), MediaTables::get(MediaTables::ImageVariations), MediaTables::get(MediaTables::I18n), MediaTables::get(MediaTables::MultipartUploads)] as $table) {
             $this->dropOwnershipCheck(DB::connection(), $table);
         }
-        $this->required($schema, MediaTables::Media, 'tenant_id', true);
-        $this->required($schema, MediaTables::Media, 'storage_path', true, 'path');
-        foreach ([MediaTables::Associations, MediaTables::ImageVariations, MediaTables::I18n, MediaTables::MultipartUploads] as $table) {
+        $this->required($schema, MediaTables::get(MediaTables::Media), 'tenant_id', true);
+        $this->required($schema, MediaTables::get(MediaTables::Media), 'storage_path', true, 'path');
+        foreach ([MediaTables::get(MediaTables::Associations), MediaTables::get(MediaTables::ImageVariations), MediaTables::get(MediaTables::I18n), MediaTables::get(MediaTables::MultipartUploads)] as $table) {
             $this->required($schema, $table, 'tenant_id', true);
         }
-        foreach ([MediaTables::Media, MediaTables::Associations, MediaTables::ImageVariations, MediaTables::I18n, MediaTables::MultipartUploads] as $table) {
+        foreach ([MediaTables::get(MediaTables::Media), MediaTables::get(MediaTables::Associations), MediaTables::get(MediaTables::ImageVariations), MediaTables::get(MediaTables::I18n), MediaTables::get(MediaTables::MultipartUploads)] as $table) {
             $this->required($schema, $table, 'ownership_key', true, 'string');
         }
         $this->required($operationSchema, $operationTable, 'tenant_id', true);

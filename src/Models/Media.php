@@ -26,6 +26,7 @@ use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Support\MediaAssetUrl;
 use Nvl\Media\Traits\MediaFilters;
+use Nvl\Support\Config\PackageStorage;
 use Nvl\Translatable\Contracts\TranslatableModel;
 use Nvl\Translatable\Enums\TranslationMutationPolicy;
 use Nvl\Translatable\RelatedTranslationDefinition;
@@ -563,5 +564,17 @@ class Media extends Model implements TranslatableModel
     public static function storagePath(string $folder): string
     {
         return MediaPathResolver::storagePath($folder);
+    }
+
+    /** Resolve the configured package storage table. */
+    public function getTable(): string
+    {
+        return MediaTables::get(MediaTables::Media);
+    }
+
+    /** Resolve the package connection through shared infrastructure defaults. */
+    public function getConnectionName(): ?string
+    {
+        return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('media') ?? parent::getConnectionName());
     }
 }

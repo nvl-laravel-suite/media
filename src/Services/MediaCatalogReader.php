@@ -10,8 +10,8 @@ use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaTenantGrant;
 use Nvl\Media\Models\MediaTranslation;
-use Nvl\Tenancy\Contracts\TenantContext;
-use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Tenancy\Contracts\TenantContext;
+use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 
 /** Narrow authorized scalar reader for one granted platform asset. */
 final readonly class MediaCatalogReader

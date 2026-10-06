@@ -91,10 +91,12 @@ use Nvl\Media\Services\UnsupportedMultipartUploadGateway;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Tenancy\MediaAdoptionAdapter;
 use Nvl\Media\Tenancy\MediaTenancyResources;
+use Nvl\Support\Doctor\PackageDoctorContributor;
+use Nvl\Support\Providers\SupportServiceProvider;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Support\Traits\MergesPackageConfiguration;
 use Nvl\Tenancy\Services\TenantAdoptionRegistry;
-use Nvl\Tenancy\Services\TenantBoundary;
-use Nvl\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Translatable\Services\TranslationResourceRegistry;
 
 /** Registers Media configuration, migrations, contracts, and optional routes. */
@@ -114,7 +116,6 @@ final class MediaServiceProvider extends ServiceProvider
         MediaTransactionRollbackRegistry $rollbackCallbacks,
         MediaTenancyResources $tenancyResources,
         TenantResourceRegistry $tenantResourceRegistry,
-        TenantAdoptionRegistry $tenantAdoptions,
         TenantBoundary $tenantBoundary,
     ): void {
         $events->listen(
@@ -123,7 +124,9 @@ final class MediaServiceProvider extends ServiceProvider
         );
         $typeScriptSources->register(__DIR__.'/..', 'nvl/media');
         $tenancyResources->register($tenantResourceRegistry);
-        $tenantAdoptions->register('media', MediaAdoptionAdapter::class);
+        if ($this->app->bound(TenantAdoptionRegistry::class)) {
+            $this->app->make(TenantAdoptionRegistry::class)->register('media', MediaAdoptionAdapter::class);
+        }
         $this->registerTenantScopes($tenantBoundary);
 
         $this->registerPolicies();
@@ -166,6 +169,9 @@ final class MediaServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->register(SupportServiceProvider::class);
+        PackageDoctorContributor::register($this->app, 'nvl/media', fn (): array => $this->app->make(MediaDoctor::class)->inspect());
+
         $this->mergeConfiguration();
         $this->app->register(RouteServiceProvider::class);
         $this->app->singleton(MediaTransactionRollbackRegistry::class);

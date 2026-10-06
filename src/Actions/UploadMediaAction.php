@@ -31,7 +31,7 @@ use Nvl\Media\Services\MediaVariationDefinitionNormalizer;
 use Nvl\Media\Services\MediaVariationDispatcher;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaHashGenerator;
-use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Throwable;
 
 /**

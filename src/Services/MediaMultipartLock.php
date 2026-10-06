@@ -10,7 +10,8 @@ use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Support\MediaConfiguration;
-use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Support\Config\PackageOptions;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 
 /**
  * Serializes completion and abortion transitions for one multipart session.
@@ -27,10 +28,7 @@ final class MediaMultipartLock
      */
     public function execute(string $sessionId, Closure $callback): mixed
     {
-        $store = config('media.multipart.lock.store');
-        $repository = is_string($store) && $store !== ''
-            ? Cache::store($store)
-            : Cache::store();
+        $repository = Cache::store(PackageOptions::lockStore('media', 'multipart'));
         $provider = $repository->getStore();
 
         if (! $provider instanceof LockProvider) {

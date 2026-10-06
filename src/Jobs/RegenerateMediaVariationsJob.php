@@ -18,8 +18,8 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
 use Nvl\Media\Support\MediaQueueConfiguration;
 use Nvl\Media\Support\MediaQueueEnvelope;
-use Nvl\Tenancy\Contracts\TenantQueuedJob;
-use Nvl\Tenancy\ValueObjects\TenantJobEnvelope;
+use Nvl\Support\Tenancy\Contracts\TenantQueuedJob;
+use Nvl\Support\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
 
 /**

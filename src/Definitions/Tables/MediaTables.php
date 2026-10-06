@@ -4,28 +4,30 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Definitions\Tables;
 
+use Nvl\Support\Config\PackageStorage;
+
 /**
  * Defines the canonical table names owned by the Media package.
  */
 final class MediaTables
 {
-    public const string Media = 'px_media';
+    public const string Media = 'nvl_media_media';
 
-    public const string Associations = 'px_media_associations';
+    public const string Associations = 'nvl_media_associations';
 
-    public const string ImageVariations = 'px_media_image_variations';
+    public const string ImageVariations = 'nvl_media_image_variations';
 
-    public const string I18n = 'px_media_i18n';
+    public const string I18n = 'nvl_media_i18n';
 
-    public const string MultipartUploads = 'px_media_multipart_uploads';
+    public const string MultipartUploads = 'nvl_media_multipart_uploads';
 
-    public const string OwnerSlotOperations = 'px_media_owner_slot_operations';
+    public const string OwnerSlotOperations = 'nvl_media_owner_slot_operations';
 
-    public const string TenantGrants = 'px_media_tenant_grants';
+    public const string TenantGrants = 'nvl_media_tenant_grants';
 
-    public const string TenantGrantLocks = 'px_media_tenant_grant_locks';
+    public const string TenantGrantLocks = 'nvl_media_tenant_grant_locks';
 
-    public const string TenantAdoptionCopies = 'px_media_tenant_adoption_copies';
+    public const string TenantAdoptionCopies = 'nvl_media_tenant_adoption_copies';
 
     public const string MEDIA = self::Media;
 
@@ -44,6 +46,12 @@ final class MediaTables
     public const string MEDIA_TENANT_GRANT_LOCKS = self::TenantGrantLocks;
 
     public const string MEDIA_TENANT_ADOPTION_COPIES = self::TenantAdoptionCopies;
+
+    /** Return one configured logical or historical package table. */
+    public static function get(string $key): string
+    {
+        return PackageStorage::resolveTable('media', $key);
+    }
 
     private function __construct() {}
 }

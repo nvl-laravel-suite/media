@@ -6,16 +6,23 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Nvl\Media\Definitions\Tables\MediaTables;
+use Nvl\Support\Config\PackageStorage;
 
 return new class extends Migration
 {
+    /** Use the effective package connection for Laravel's migration transaction. */
+    public function getConnection(): ?string
+    {
+        return PackageStorage::connection('media');
+    }
+
     public function up(): void
     {
-        if (Schema::hasTable(MediaTables::I18n)) {
-            return;
+        if (Schema::connection(PackageStorage::connection('media'))->hasTable(MediaTables::get(MediaTables::I18n))) {
+            throw new LogicException('Existing package table is not owned by this migration. Run nvl:doctor --strict and use nvl:schema:upgrade for a verified legacy installation.');
         }
 
-        Schema::create(MediaTables::I18n, function (Blueprint $table) {
+        Schema::connection(PackageStorage::connection('media'))->create(MediaTables::get(MediaTables::I18n), function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('media_id');
 
@@ -41,13 +48,13 @@ return new class extends Migration
 
             $table->foreign('media_id')
                 ->references('id')
-                ->on(MediaTables::Media)
+                ->on(MediaTables::get(MediaTables::Media))
                 ->cascadeOnDelete();
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists(MediaTables::I18n);
+        Schema::connection(PackageStorage::connection('media'))->dropIfExists(MediaTables::get(MediaTables::I18n));
     }
 };

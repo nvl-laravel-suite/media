@@ -6,6 +6,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Tests\Fixtures\MediaTenancyScenario;
 use Nvl\Tenancy\Services\TenantBoundary;
@@ -19,11 +20,11 @@ it('rejects an association with a tenant different from its asset', function ():
     $ownerB = $scenario->owner($scenario::B);
 
     expect(array_any(
-        Schema::getForeignKeys('px_media_associations'),
+        Schema::getForeignKeys(MediaTables::get(MediaTables::Associations)),
         static fn (mixed $foreign): bool => is_array($foreign) && ($foreign['columns'] ?? null) === ['tenant_id', 'media_id'],
     ))->toBeTrue();
 
-    expect(fn () => DB::table('px_media_associations')->insert([
+    expect(fn () => DB::table(MediaTables::get(MediaTables::Associations))->insert([
         'id' => (string) Str::uuid(),
         'tenant_id' => $scenario::B,
         'media_id' => $asset->id,
@@ -38,7 +39,7 @@ it('rejects an association with a tenant different from its asset', function ():
 it('requires an authoritative persisted root path after activation', function (): void {
     $scenario = MediaTenancyScenario::install();
 
-    expect(fn () => DB::table('px_media')->insert([
+    expect(fn () => DB::table(MediaTables::get(MediaTables::Media))->insert([
         'id' => (string) Str::uuid(), 'tenant_id' => $scenario::A,
         'filename' => 'missing.txt', 'hash' => 'missing.txt', 'extension' => 'txt',
         'mime_type' => 'text/plain', 'size' => 1, 'disk' => 'tenant-disk', 'folder' => 'fixture',
@@ -49,18 +50,18 @@ it('requires an authoritative persisted root path after activation', function ()
 
 it('reverses and reapplies every final ownership constraint', function (): void {
     MediaTenancyScenario::install();
-    $migration = require dirname(__DIR__, 3).'/database/tenancy/2026_09_16_100003_constrain_media_tenant_ownership.php';
+    $migration = require dirname(__DIR__, 3).'/database/tenancy/2026_09_16_100003_nvl_media_constrain_media_tenant_ownership.php';
 
     $migration->down();
-    $columns = collect(Schema::getColumns('px_media'))->keyBy('name');
+    $columns = collect(Schema::getColumns(MediaTables::get(MediaTables::Media)))->keyBy('name');
     expect($columns['tenant_id']['nullable'])->toBeTrue()
         ->and($columns['storage_path']['nullable'])->toBeTrue()
-        ->and(Schema::hasIndex('px_media', 'media_partition_id_unique'))->toBeFalse()
+        ->and(Schema::hasIndex(MediaTables::get(MediaTables::Media), 'media_partition_id_unique'))->toBeFalse()
         ->and(array_any(
-            Schema::getForeignKeys('px_media_associations'),
-            static fn (array $foreign): bool => $foreign['name'] === 'px_media_associations_media_partition_foreign',
+            Schema::getForeignKeys(MediaTables::get(MediaTables::Associations)),
+            static fn (array $foreign): bool => $foreign['name'] === MediaTables::get(MediaTables::Associations).'_media_partition_foreign',
         ))->toBeFalse();
 
     $migration->up();
-    expect(Schema::hasIndex('px_media', 'media_partition_id_unique'))->toBeTrue();
+    expect(Schema::hasIndex(MediaTables::get(MediaTables::Media), 'media_partition_id_unique'))->toBeTrue();
 });

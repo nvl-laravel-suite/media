@@ -12,7 +12,8 @@ use Illuminate\Support\Facades\Cache;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Support\MediaConfiguration;
-use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Support\Config\PackageOptions;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 
 /**
  * MediaDeduplicationLock serializes shared digest uploads before file storage.
@@ -110,13 +111,7 @@ final class MediaDeduplicationLock
      */
     private function repository(): Repository
     {
-        $store = config('media.deduplication_lock.store');
-
-        if (is_string($store) && $store !== '') {
-            return Cache::store($store);
-        }
-
-        return Cache::store();
+        return Cache::store(PackageOptions::lockStore('media', 'deduplication'));
     }
 
     /**

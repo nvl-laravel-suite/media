@@ -62,6 +62,9 @@ abstract class MediaTestCase extends Orchestra
     protected function defineEnvironment($app): void
     {
         $app['config']->set([
+            'translatable.locales' => ['en', 'bg'],
+            'translatable.default_locale' => 'en',
+            'translatable.fallback_locales' => ['en'],
             'filesystems.default' => 'public',
             'cache.default' => 'array',
             'media.disk' => 'public',

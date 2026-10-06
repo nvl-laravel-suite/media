@@ -45,6 +45,11 @@ abstract class MediaTenancyTestCase extends Orchestra
     protected function defineEnvironment($app): void
     {
         $app['config']->set([
+            'translatable.locales' => ['en', 'bg'],
+            'translatable.default_locale' => 'en',
+            'translatable.fallback_locales' => ['en'],
+        ]);
+        $app['config']->set([
             'app.key' => 'base64:YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=',
             'cache.default' => 'array',
             'filesystems.default' => 'tenant-disk',

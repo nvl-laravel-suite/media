@@ -6,7 +6,6 @@ namespace Nvl\Media\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDiskGuard;
@@ -286,7 +285,7 @@ class MigrateDiskCommand extends Command
                 $folder = (string) $media->folder;
                 $nextFolder = $this->replaceFolderPrefix($folder, $normalizedFrom, $normalizedTo);
 
-                DB::table(Media::TABLE)
+                (new Media)->getConnection()->table((new Media)->getTable())
                     ->where('id', $media->id)
                     ->update(['folder' => $nextFolder]);
 

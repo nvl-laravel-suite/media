@@ -86,7 +86,7 @@ final class MediaTenancyConsumerSetupCommand extends Command
             $table->string('migration');
             $table->integer('batch');
         });
-        $this->runMigration($root.'/packages/nvl/tenancy/database/migrations/tenancy/2026_09_16_000001_create_tenancy_core_tables.php');
+        $this->runMigration($root.'/packages/nvl/tenancy/database/migrations/tenancy/2026_09_16_000001_nvl_tenancy_create_tenancy_core_tables.php');
         foreach (glob($root.'/packages/nvl/media/database/migrations/*.php') ?: [] as $migration) {
             $this->runMigration($migration);
         }

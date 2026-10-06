@@ -6,8 +6,8 @@ namespace Nvl\Media\Tenancy;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
-use Nvl\Tenancy\Contracts\TenantParentResolver;
-use Nvl\Tenancy\Exceptions\TenantConfigurationInvalid;
+use Nvl\Support\Tenancy\Contracts\TenantParentResolver;
+use Nvl\Support\Tenancy\Exceptions\TenantConfigurationInvalid;
 
 /** Resolves the package's explicit canonical Media owner ownership allowlist. */
 final readonly class MediaTenantParentResolver implements TenantParentResolver

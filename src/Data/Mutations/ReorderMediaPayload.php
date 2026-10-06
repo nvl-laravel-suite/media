@@ -43,7 +43,7 @@ class ReorderMediaPayload extends Data
     {
         return [
             'mediaIds' => ['required', 'array', 'min:1'],
-            'mediaIds.*' => ['uuid', 'exists:'.MediaTables::Media.',id'],
+            'mediaIds.*' => ['uuid', 'exists:'.MediaTables::get(MediaTables::Media).',id'],
             'associableType' => ['required', 'string', 'max:255'],
             'associableId' => ['required', 'string', 'max:255'],
             'collection' => ['nullable', 'string', 'max:50'],

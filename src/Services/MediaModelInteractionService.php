@@ -16,7 +16,7 @@ use Nvl\Media\Contracts\UploadMediaContract;
 use Nvl\Media\MediaAdder;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
-use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 
 /**
  * Builds model-facing media adders from supported source inputs.

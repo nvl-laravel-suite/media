@@ -8,12 +8,18 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 use Nvl\Media\Contracts\HasMedia;
+use Nvl\Support\OwnerRegistry;
 
 /** MediaAssociableResolver validates and loads Media-capable associable models for API mutations. */
 final class MediaAssociableResolver
 {
-    public function __construct(private readonly MediaTenantOwnerResolver $owners) {}
+    /** Create the mutation resolver with package ownership and shared identity boundaries. */
+    public function __construct(
+        private readonly MediaTenantOwnerResolver $owners,
+        private readonly OwnerRegistry $identities,
+    ) {}
 
     /**
      * Resolve and authorize a Media-capable associable model for a mutation endpoint.
@@ -45,12 +51,18 @@ final class MediaAssociableResolver
     private function resolveModelClass(string $type): string
     {
         if (! class_exists($type)) {
-            throw ValidationException::withMessages([
-                'associableType' => ["The associable type [{$type}] is not a valid class."],
-            ]);
+            try {
+                $modelClass = $this->identities->model($type);
+            } catch (InvalidArgumentException) {
+                throw ValidationException::withMessages([
+                    'associableType' => ["The associable type [{$type}] is not a valid class or owner alias."],
+                ]);
+            }
+        } else {
+            $modelClass = $type;
         }
 
-        if (! is_subclass_of($type, Model::class)) {
+        if (! is_subclass_of($modelClass, Model::class)) {
             throw ValidationException::withMessages([
                 'associableType' => ["The associable type [{$type}] is not a valid model."],
             ]);
@@ -58,12 +70,24 @@ final class MediaAssociableResolver
 
         $allowed = config('media.allowed_associable_types', []);
 
-        if (! is_array($allowed) || ! in_array($type, $allowed, true)) {
+        $allowedModels = [];
+
+        if (is_array($allowed)) {
+            foreach ($allowed as $index => $reference) {
+                if (! is_string($reference)) {
+                    throw new InvalidArgumentException('media.allowed_associable_types must contain owner references.');
+                }
+
+                $allowedModels[] = $this->identities->reference($reference, "media.allowed_associable_types.{$index}");
+            }
+        }
+
+        if (! in_array($modelClass, $allowedModels, true)) {
             throw new AuthorizationException("The associable type [{$type}] is not allowed.");
         }
 
-        /** @var class-string<Model> $type */
-        return $type;
+        /** @var class-string<Model> $modelClass */
+        return $modelClass;
     }
 
     /**
@@ -92,7 +116,10 @@ final class MediaAssociableResolver
     private function authorizeMutation(Model $model): void
     {
         $abilities = config('media.associable_mutation_abilities', []);
-        $ability = is_array($abilities) ? ($abilities[$model::class] ?? 'update') : 'update';
+        $alias = array_search($model::class, $this->identities->all(), true);
+        $ability = is_array($abilities)
+            ? ($abilities[is_string($alias) ? $alias : $model::class] ?? $abilities[$model::class] ?? 'update')
+            : 'update';
 
         Gate::authorize(is_string($ability) && $ability !== '' ? $ability : 'update', $model);
     }

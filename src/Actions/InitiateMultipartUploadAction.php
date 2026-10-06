@@ -21,7 +21,7 @@ use Nvl\Media\Services\MediaMultipartSessionMapper;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaHashGenerator;
-use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Throwable;
 
 /**

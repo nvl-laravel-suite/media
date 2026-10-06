@@ -150,7 +150,7 @@ function useOwnerSlotLedger(string $connection, string $prefix): string
         'media.owner_slots.idempotency.connection' => $connection,
         'media.owner_slots.idempotency.processing_timeout_minutes' => 5,
     ]);
-    $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_create_media_owner_slot_operations_table.php';
+    $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_nvl_media_create_media_owner_slot_operations_table.php';
     $migration->up();
 
     return $path;
@@ -212,7 +212,7 @@ it('uses configured owner-slot operation storage', function (): void {
     config(['media.owner_slots.idempotency.table' => 'unsafe-name']);
 
     expect(fn (): string => (new MediaOwnerSlotOperation)->getTable())
-        ->toThrow(InvalidArgumentException::class, 'safe table name');
+        ->toThrow(InvalidArgumentException::class, 'safe table identifier');
 
     config(['media.owner_slots.idempotency.table' => MediaTables::Media]);
 
@@ -1865,7 +1865,7 @@ it('preserves and recovers a split-connection checkpoint when completion fails',
         'media.owner_slots.idempotency.connection' => 'owner_slot_ledger',
         'media.owner_slots.idempotency.processing_timeout_minutes' => 5,
     ]);
-    $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_create_media_owner_slot_operations_table.php';
+    $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_nvl_media_create_media_owner_slot_operations_table.php';
     $migration->up();
 
     try {
@@ -1970,7 +1970,7 @@ it('preserves a split checkpoint when an after-commit listener throws', function
         'media.owner_slots.idempotency.connection' => 'owner_slot_listener',
         'media.owner_slots.idempotency.processing_timeout_minutes' => 5,
     ]);
-    $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_create_media_owner_slot_operations_table.php';
+    $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_nvl_media_create_media_owner_slot_operations_table.php';
     $migration->up();
 
     try {
@@ -2048,7 +2048,7 @@ it('recovers a split clear checkpoint without clearing a newer attachment', func
         'media.owner_slots.idempotency.connection' => 'owner_slot_clear',
         'media.owner_slots.idempotency.processing_timeout_minutes' => 5,
     ]);
-    $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_create_media_owner_slot_operations_table.php';
+    $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_nvl_media_create_media_owner_slot_operations_table.php';
     $migration->up();
 
     try {

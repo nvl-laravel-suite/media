@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
+use Nvl\Support\Config\PackageStorage;
 
 /**
  * Records a recipient tenant's revocable permission to inspect and copy one platform asset.
@@ -54,5 +55,17 @@ final class MediaTenantGrant extends Model
             'created_at' => 'immutable_datetime',
             'updated_at' => 'immutable_datetime',
         ];
+    }
+
+    /** Resolve the configured package storage table. */
+    public function getTable(): string
+    {
+        return MediaTables::get(MediaTables::TenantGrants);
+    }
+
+    /** Resolve the package connection through shared infrastructure defaults. */
+    public function getConnectionName(): ?string
+    {
+        return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('media') ?? parent::getConnectionName());
     }
 }

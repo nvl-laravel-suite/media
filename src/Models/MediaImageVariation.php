@@ -14,6 +14,7 @@ use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Support\MediaAssetUrl;
 use Nvl\Media\Support\MediaMimeResolver;
 use Nvl\Media\Support\MediaVariationFileNamer;
+use Nvl\Support\Config\PackageStorage;
 
 /**
  * MediaImageVariation: a generated image conversion (thumbnail, optimized, etc.) for a media record.
@@ -161,5 +162,17 @@ class MediaImageVariation extends Model
     public function getMimeType(): string
     {
         return MediaMimeResolver::extensionToMime($this->format);
+    }
+
+    /** Resolve the configured package storage table. */
+    public function getTable(): string
+    {
+        return MediaTables::get(MediaTables::ImageVariations);
+    }
+
+    /** Resolve the package connection through shared infrastructure defaults. */
+    public function getConnectionName(): ?string
+    {
+        return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('media') ?? parent::getConnectionName());
     }
 }

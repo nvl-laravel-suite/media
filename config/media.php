@@ -249,14 +249,14 @@ return [
     |--------------------------------------------------------------------------
     | Queue Settings
     |--------------------------------------------------------------------------
-    | Production should use Redis, SQS, or another durable queue. The sync
-    | connection remains the safe local-development fallback. Worker timeout
+    | Production should use Redis, SQS, or another durable queue. A null
+    | connection inherits Core's queue connection, then queue.default. Worker timeout
     | must remain below retry_after (or SQS visibility timeout).
     */
     'queue' => [
         'enabled' => env('MEDIA_QUEUE_ENABLED', true),
-        'connection' => env('MEDIA_QUEUE_CONNECTION', env('QUEUE_CONNECTION', 'sync')),
-        'name' => env('MEDIA_QUEUE', 'media'),
+        'connection' => env('MEDIA_QUEUE_CONNECTION'),
+        'name' => env('MEDIA_QUEUE'),
         'jobs' => [
             'generate' => [
                 'tries' => 3,
@@ -584,7 +584,8 @@ return [
     |--------------------------------------------------------------------------
     | Allowed Associable Types (Security)
     |--------------------------------------------------------------------------
-    | Only these model classes can be used in API attach/detach operations.
+    | Only these nvl-core owner aliases or compatibility model classes can be
+    | used in API attach/detach operations.
     | An empty list intentionally denies every associable type.
     */
     'allowed_associable_types' => [],
@@ -594,7 +595,8 @@ return [
     | Associable Mutation Abilities
     |--------------------------------------------------------------------------
     | Ability map used by the Media API when attaching, detaching, or reordering
-    | media on a target model. Types not listed here default to `update`.
+    | media on a target model. Shared alias keys precede compatibility class
+    | keys; types not listed here default to `update`.
     */
     'associable_mutation_abilities' => [],
 

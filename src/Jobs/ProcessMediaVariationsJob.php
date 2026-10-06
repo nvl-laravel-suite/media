@@ -15,9 +15,9 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
 use Nvl\Media\Support\MediaQueueConfiguration;
 use Nvl\Media\Support\MediaQueueEnvelope;
-use Nvl\Tenancy\Contracts\TenantQueuedJob;
-use Nvl\Tenancy\Enums\TenantContextMode;
-use Nvl\Tenancy\ValueObjects\TenantJobEnvelope;
+use Nvl\Support\Tenancy\Contracts\TenantQueuedJob;
+use Nvl\Support\Tenancy\Enums\TenantContextMode;
+use Nvl\Support\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
 
 /** ProcessMediaVariationsJob: dispatches all configured variation jobs for a freshly uploaded media record. */

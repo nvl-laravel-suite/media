@@ -228,7 +228,7 @@ it('registers timestamp-aware migration publishing and warns about duplicate own
         ->and($publishableMigrationPaths)->toContain($migrationPath);
 
     $published = database_path(
-        'migrations/2099_01_01_000000_create_media_table.php',
+        'migrations/2099_01_01_000000_nvl_media_create_media_table.php',
     );
     file_put_contents($published, "<?php\n");
 
@@ -386,7 +386,7 @@ it('reports invalid owner-slot operation storage configuration', function (): vo
     expect($check)->not->toBeNull()
         ->and($check->passed)->toBeFalse()
         ->and($check->severity)->toBe('error')
-        ->and($check->message)->toContain('safe table name');
+        ->and($check->message)->toContain('safe table identifier');
 });
 
 it('rejects a non-string owner-slot operation connection', function (): void {
@@ -395,7 +395,7 @@ it('rejects a non-string owner-slot operation connection', function (): void {
     ]);
 
     expect(fn (): ?string => MediaConfiguration::ownerSlotOperationConnection())
-        ->toThrow(InvalidArgumentException::class, 'must be a string or null');
+        ->toThrow(InvalidArgumentException::class, 'must be a connection name or null');
 });
 
 it('reports invalid owner-slot idempotency lifecycle bounds', function (): void {
@@ -582,7 +582,7 @@ it('falls back to the default mutation cache and fails closed for an unknown sto
 
     config([
         'cache.default' => [],
-        'media.mutation_lock.store' => '',
+        'media.mutation_lock.store' => null,
     ]);
 
     $malformedDefaultCheck = collect(app(MediaDoctor::class)->inspect())

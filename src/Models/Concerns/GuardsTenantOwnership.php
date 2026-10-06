@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Models\Concerns;
 
-use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 
 /** Prevents persisted tenant partition identity from changing through model writes. */
 trait GuardsTenantOwnership

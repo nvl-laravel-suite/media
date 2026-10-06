@@ -602,3 +602,7 @@ Actions own their database transactions. New objects are removed on rollback; su
 - [Image variations and queues](images-and-queues.md)
 - [S3 and object storage](s3.md)
 - [Command reference](commands.md)
+
+## Runtime storage identities
+
+Media models expose Laravel's `getTable()` and `getConnectionName()` methods using the effective canonical `media.tables.*`, `media.connection` and Core defaults. `MediaOwnerSlotOperation::getConnectionName()` also honors `media.connections.owner_slot_operations`; null inherits the Media/Core connection. An explicit model `setConnection()` takes precedence. Use the model's connection and table when building custom queries.

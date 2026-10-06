@@ -7,8 +7,8 @@ namespace Nvl\Media\Actions;
 use Nvl\Media\Contracts\MediaCatalogImport;
 use Nvl\Media\Data\Mutations\ImportPlatformMediaData;
 use Nvl\Media\Models\Media;
-use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
-use Nvl\Tenancy\Services\EffectiveTenantConnection;
+use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Tenancy\Services\EffectiveTenantConnection;
 use Throwable;
 
 /** Standalone facade around Media's staged catalog transaction port. */

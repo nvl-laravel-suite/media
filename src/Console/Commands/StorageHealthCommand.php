@@ -19,9 +19,9 @@ use Nvl\Media\Services\MediaFileOperator;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\MediaUrlResolver;
 use Nvl\Media\Support\MediaConfiguration;
-use Nvl\Tenancy\Contracts\TenantContext;
-use Nvl\Tenancy\Enums\TenantContextMode;
-use Nvl\Tenancy\Exceptions\TenantContextMissing;
+use Nvl\Support\Tenancy\Contracts\TenantContext;
+use Nvl\Support\Tenancy\Enums\TenantContextMode;
+use Nvl\Support\Tenancy\Exceptions\TenantContextMissing;
 use Throwable;
 
 /**

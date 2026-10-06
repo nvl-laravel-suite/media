@@ -610,3 +610,53 @@ The documentation coverage test keeps facade, trait, adder, slot, conversion, mo
 ## License
 
 Released under the [MIT License](LICENSE).
+
+## Shared owner identity
+
+Declare a model once in `config/nvl-core.php`:
+
+```php
+'owners' => ['article' => Article::class],
+```
+
+Enable this package capability separately in `config/media.php`:
+
+```php
+'allowed_associable_types' => ['article'],
+'associable_mutation_abilities' => ['article' => 'update'],
+```
+
+Owners still implement HasMedia and use InteractsWithMedia. Preserve collection/slot declarations and authorize the configured mutation ability. Core registration does not add the model to this package's allowlist.
+
+Existing package class/resolver/handler registrations remain accepted for one major cycle. Run `php artisan nvl:doctor --strict --format=json` to inspect compatibility diagnostics. See [UPGRADING.md](UPGRADING.md) before changing a persisted morph type.
+
+## Queue inheritance and shared diagnostics
+
+`media.queue.connection` defaults to `null`. Media jobs use an explicit Media value first, then `nvl-core.queue.connection`, then Laravel's effective `queue.default`. `MEDIA_QUEUE_CONNECTION` remains an explicit configuration input. An explicit `sync` at the selected layer keeps synchronous processing; an empty string is invalid. Runtime configuration and cached configuration use the same resolution.
+
+Run `php artisan nvl:doctor --strict --format=json` to aggregate the checks from loaded package providers, or `php artisan nvl:media:doctor --strict --format=json` for the Media-specific report. Production workers still require an appropriate host deployment and queue configuration.
+
+
+## Shared infrastructure options
+
+`media.queue.name` also defaults to null: it inherits `nvl-core.queue.name`, then the queue name configured for the selected Laravel connection. Set `MEDIA_QUEUE=media` or `media.queue.name = 'media'` when workers intentionally consume a dedicated Media queue. Existing explicit published names remain overrides.
+
+Media locks use `media.locks.store`, then `nvl-core.locks.store`, then `cache.default`. Independent `locks.mutation.store`, `locks.deduplication.store`, and `locks.multipart.store` overrides preserve operation-specific stores. Historical `mutation_lock.store`, `deduplication_lock.store`, and `multipart.lock.store` remain supported for one major cycle and are reported by Doctor. Their duration/wait settings remain operation-specific.
+
+## Next major: isolated schema identities
+
+Use `media.tables.<logical-key>` for every table and `media.connection` for its database connection. Null connection inherits `nvl-core.connection`, then Laravel's default. Tables are resolved at runtime by the package table definition helper.
+
+| Logical key | New default | Previous name |
+| --- | --- | --- |
+| `media` | `nvl_media_media` | `px_media` |
+| `associations` | `nvl_media_associations` | `px_media_associations` |
+| `image_variations` | `nvl_media_image_variations` | `px_media_image_variations` |
+| `i18n` | `nvl_media_i18n` | `px_media_i18n` |
+| `multipart_uploads` | `nvl_media_multipart_uploads` | `px_media_multipart_uploads` |
+| `owner_slot_operations` | `nvl_media_owner_slot_operations` | `px_media_owner_slot_operations` |
+| `tenant_grants` | `nvl_media_tenant_grants` | `px_media_tenant_grants` |
+| `tenant_grant_locks` | `nvl_media_tenant_grant_locks` | `px_media_tenant_grant_locks` |
+| `tenant_adoption_copies` | `nvl_media_tenant_adoption_copies` | `px_media_tenant_adoption_copies` |
+
+Migration filenames contain `nvl_media_`. Existing installations must complete the upgrade in `UPGRADING.md` before running new migrations. A pending creator rejects an existing target before any migration in the batch runs; legacy storage with old history needs an ownership decision.

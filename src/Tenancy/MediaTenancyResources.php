@@ -12,10 +12,10 @@ use Nvl\Media\Models\MediaMultipartUpload;
 use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Models\MediaTenantGrant;
 use Nvl\Media\Models\MediaTranslation;
-use Nvl\Tenancy\Enums\TenantResourceKind;
-use Nvl\Tenancy\Exceptions\TenantConfigurationInvalid;
-use Nvl\Tenancy\Services\TenantResourceRegistry;
-use Nvl\Tenancy\ValueObjects\TenantResourceDefinition;
+use Nvl\Support\Tenancy\Enums\TenantResourceKind;
+use Nvl\Support\Tenancy\Exceptions\TenantConfigurationInvalid;
+use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
+use Nvl\Support\Tenancy\ValueObjects\TenantResourceDefinition;
 
 /** Registers Media's immutable complete tenant ownership graph. */
 final readonly class MediaTenancyResources

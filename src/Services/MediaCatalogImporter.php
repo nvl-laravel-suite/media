@@ -17,13 +17,13 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaTenantGrant;
 use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Support\MediaHashGenerator;
-use Nvl\Tenancy\Contracts\TenantContext;
-use Nvl\Tenancy\Contracts\TenantDirectory;
-use Nvl\Tenancy\Enums\TenantStatus;
-use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
-use Nvl\Tenancy\Services\EffectiveTenantConnection;
-use Nvl\Tenancy\Services\TenantBoundary;
-use Nvl\Tenancy\ValueObjects\TenantId;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Tenancy\Contracts\TenantContext;
+use Nvl\Support\Tenancy\Contracts\TenantDirectory;
+use Nvl\Support\Tenancy\Enums\TenantStatus;
+use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Tenancy\Services\EffectiveTenantConnection;
+use Nvl\Support\Tenancy\ValueObjects\TenantId;
 
 /** Stages and persists independent tenant copies of authorized platform Media. */
 final class MediaCatalogImporter implements MediaCatalogImport
@@ -106,13 +106,13 @@ final class MediaCatalogImporter implements MediaCatalogImport
             throw new TenantBoundaryViolation('The Media catalog recipient is no longer active.');
         }
 
-        $connection->table(MediaTables::TenantGrantLocks)->insertOrIgnore([
+        $connection->table(MediaTables::get(MediaTables::TenantGrantLocks))->insertOrIgnore([
             'tenant_id' => $tenant->value,
             'media_id' => $source->sourceId,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        $connection->table(MediaTables::TenantGrantLocks)
+        $connection->table(MediaTables::get(MediaTables::TenantGrantLocks))
             ->where('tenant_id', $tenant->value)
             ->where('media_id', $source->sourceId)
             ->lockForUpdate()

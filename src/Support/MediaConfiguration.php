@@ -6,6 +6,7 @@ namespace Nvl\Media\Support;
 
 use InvalidArgumentException;
 use Nvl\Media\Definitions\Tables\MediaTables;
+use Nvl\Support\Config\PackageStorage;
 
 /**
  * Provides strict, reusable access to untyped Laravel configuration values.
@@ -17,19 +18,7 @@ final class MediaConfiguration
      */
     public static function ownerSlotOperationConnection(): ?string
     {
-        $connection = config('media.owner_slots.idempotency.connection');
-
-        if ($connection === null || $connection === '') {
-            return null;
-        }
-
-        if (! is_string($connection)) {
-            throw new InvalidArgumentException(
-                'media.owner_slots.idempotency.connection must be a string or null.',
-            );
-        }
-
-        return $connection;
+        return PackageStorage::tableConnection('media', 'owner_slot_operations');
     }
 
     /**
@@ -37,21 +26,14 @@ final class MediaConfiguration
      */
     public static function ownerSlotOperationTable(): string
     {
-        $table = config('media.owner_slots.idempotency.table');
-
-        if (! is_string($table)
-            || preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/D', $table) !== 1) {
-            throw new InvalidArgumentException(
-                'media.owner_slots.idempotency.table must be a safe table name.',
-            );
-        }
+        $table = MediaTables::get(MediaTables::OwnerSlotOperations);
 
         if (in_array($table, [
-            MediaTables::Media,
-            MediaTables::Associations,
-            MediaTables::ImageVariations,
-            MediaTables::I18n,
-            MediaTables::MultipartUploads,
+            MediaTables::get(MediaTables::Media),
+            MediaTables::get(MediaTables::Associations),
+            MediaTables::get(MediaTables::ImageVariations),
+            MediaTables::get(MediaTables::I18n),
+            MediaTables::get(MediaTables::MultipartUploads),
         ], true)) {
             throw new InvalidArgumentException(
                 'media.owner_slots.idempotency.table must not collide with another Media table.',

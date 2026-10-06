@@ -109,3 +109,36 @@ Replacement now re-applies the policies of every persisted association slot. Cop
 The clean 1.0 API has no pre-release compatibility controller. Multipart signing/completion/abort requests use only the server-issued upload ID, scan finalization requires `MediaScanResultData`, dynamic asset transformations are unsupported, and tag writes go through `MutateMediaTagsAction` or `BulkTagMediaAction`.
 
 Review the dedicated [PHP API](docs/php-api.md), [HTTP API](docs/http-api.md), [configuration reference](docs/configuration.md), and [extension/event reference](docs/extending.md) during adoption. These references distinguish trusted PHP mutation calls from authorized HTTP entry points and document every supported 2.x public surface. Documentation coverage tests fail when a public facade, trait, fluent-adder, slot, conversion, model-helper, management-route, contract, event, or top-level configuration surface is added without corresponding reference documentation.
+
+## Shared owner registry compatibility
+
+Move model identity declarations to `nvl-core.owners` and reference the alias from `media` capability configuration as described in the [README](README.md#shared-owner-identity). Preserve package contracts, resolvers/handlers, visibility scopes, and mutation authorization. Core does not grant package capabilities. Conflicting aliases or multiple canonical aliases for one model fail before use.
+
+Legacy class inputs remain accepted for one major cycle and are reported through Core diagnostics. Existing Content, Taxonomy, and Metafields mappings keep their established aliases. Legacy SEO, Media, Comments, Templates, Pages, and Translatable class-backed behavior does not automatically create a new morph alias. Existing host morph mappings are respected.
+
+Adding a canonical Core alias changes Laravel's write-time morph type for that model. Before adding it to an existing class-backed deployment, explicitly convert the known package-owned morph columns and reconcile every other affected host relationship. Keep unrelated rows and host-owned morph tables unchanged. This release performs no automatic owner-data conversion and does not ship `nvl:owners:upgrade`. Preserve existing aliases when no conversion is required, rebuild configuration caches, and restart workers after the cutover.
+
+## Queue default inheritance
+
+Remove a published queue connection only when you intend to inherit `nvl-core.queue.connection` or the effective Laravel `queue.default`. Retain an explicit `sync` to keep synchronous behavior. `MEDIA_QUEUE_CONNECTION` remains supported; `QUEUE_CONNECTION` is read by Laravel configuration, while Media resolves its effective runtime configuration. Rebuild configuration caches and restart workers after changing these settings. This change does not migrate data.
+
+
+## Infrastructure option inheritance
+
+Fresh Media queue names now inherit Core or the selected Laravel connection's queue. Keep an explicit `MEDIA_QUEUE=media` or `media.queue.name = 'media'` when existing workers use that dedicated name. Move operation lock stores to `locks.mutation.store`, `locks.deduplication.store`, and `locks.multipart.store`, or share `locks.store`; keep existing operation duration/wait values. Historical store keys remain supported for one major cycle and appear in Core diagnostics. Rebuild configuration caches and restart workers.
+
+## Next major: isolated schema identities
+
+This is a breaking schema identity change. Back up storage and migration history, pause writes/workers, install this code with automatic package migrations disabled, and select one owner for migrations (vendor or published).
+
+```sh
+php artisan nvl:doctor --strict --format=json
+php artisan nvl:schema:upgrade --package=media --claim-legacy --dry-run --format=json
+php artisan nvl:schema:upgrade --package=media --claim-legacy --format=json
+```
+
+The command validates released columns and relational keys plus creating migration history, renames owned legacy tables to the effective `tables.*` targets and rewrites exact package migration identities while retaining batches and unrelated host records. It refuses foreign/incomplete shapes and conflicting targets. Explicit old table mappings retain those names; remove them when choosing new defaults. A second run is empty.
+
+Unmodified published files, including changed timestamps, map by verified checksum to the exact vendor migration identity and current package migration implementation. Modified host copies remain host-owned. Disable vendor loading when retaining a published owner; duplicate ownership fails before migration. No migration files or stored morph types are rewritten.
+
+DDL transactions are driver dependent and per connection. Inspect dry-run warnings for MySQL/MariaDB or split storage; after a failure, inspect completed steps before resuming. Schema-qualified rename targets require an explicit host schema move first. Re-enable your selected migration owner, migrate remaining package changes and rerun Doctor before resuming writes. See the suite upgrade guide for shared owner/locale inputs, Core option defaults and one-major deprecation rules.

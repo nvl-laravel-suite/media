@@ -12,6 +12,7 @@ use Nvl\Media\Enums\MediaOwnerSlotOperationStatus;
 use Nvl\Media\Enums\MediaOwnerSlotOperationType;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Support\Config\PackageStorage;
 
 /**
  * Durable idempotency state for one Media owner-slot mutation.
@@ -65,8 +66,7 @@ final class MediaOwnerSlotOperation extends Model
 
     public function getConnectionName(): ?string
     {
-        return MediaConfiguration::ownerSlotOperationConnection()
-            ?? parent::getConnectionName();
+        return PackageStorage::connectionName($this->connection ?? MediaConfiguration::ownerSlotOperationConnection() ?? parent::getConnectionName());
     }
 
     /**

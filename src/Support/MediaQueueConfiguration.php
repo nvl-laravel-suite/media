@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Support;
 
+use Nvl\Support\Config\PackageOptions;
+
 /**
  * Provides typed access to Media queue and per-job runtime configuration.
  */
@@ -23,7 +25,7 @@ final class MediaQueueConfiguration
      */
     public static function connection(): string
     {
-        return MediaConfiguration::string('media.queue.connection', 'sync');
+        return PackageOptions::queueConnection('media');
     }
 
     /**
@@ -31,7 +33,7 @@ final class MediaQueueConfiguration
      */
     public static function name(): string
     {
-        return MediaConfiguration::string('media.queue.name', 'media');
+        return PackageOptions::queueName('media');
     }
 
     /**

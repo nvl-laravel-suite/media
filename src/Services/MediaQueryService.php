@@ -20,7 +20,7 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Support\MediaConfiguration;
-use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 use Spatie\LaravelData\Optional;
 
 /** MediaQueryService: read-only queries for media listing, detail, and usage lookups. */

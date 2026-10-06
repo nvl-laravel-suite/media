@@ -114,7 +114,7 @@ trait InteractsWithMedia
             $related->newQuery(),
             $this,
             'associable',
-            MediaTables::Associations,
+            MediaTables::get(MediaTables::Associations),
             'associable_id',
             'media_id',
             $this->getKeyName(),
@@ -123,7 +123,7 @@ trait InteractsWithMedia
         ))
             ->withPivot('collection', 'locale', 'order', 'metadata')
             ->withTimestamps()
-            ->orderBy(MediaTables::Associations.'.order');
+            ->orderBy(MediaTables::get(MediaTables::Associations).'.order');
     }
 
     /**

@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Support\MediaConfiguration;
-use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Support\Config\PackageOptions;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Throwable;
 
 /**
@@ -196,13 +197,7 @@ final class MediaMutationLock
      */
     private function repository(): Repository
     {
-        $store = config('media.mutation_lock.store');
-
-        if (is_string($store) && $store !== '') {
-            return Cache::store($store);
-        }
-
-        return Cache::store();
+        return Cache::store(PackageOptions::lockStore('media', 'mutation'));
     }
 
     /**

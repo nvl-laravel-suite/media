@@ -14,11 +14,11 @@ use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Jobs\RegenerateMediaVariationsJob;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
-use Nvl\Tenancy\Contracts\TenantContext;
-use Nvl\Tenancy\Services\TenantRunner;
-use Nvl\Tenancy\ValueObjects\PlatformOperation;
-use Nvl\Tenancy\ValueObjects\TenantId;
-use Nvl\Tenancy\ValueObjects\TenantJobEnvelope;
+use Nvl\Support\Tenancy\Contracts\TenantContext;
+use Nvl\Support\Tenancy\Contracts\TenantRunner;
+use Nvl\Support\Tenancy\ValueObjects\PlatformOperation;
+use Nvl\Support\Tenancy\ValueObjects\TenantId;
+use Nvl\Support\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
 
 /**

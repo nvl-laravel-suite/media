@@ -6,11 +6,10 @@ namespace Nvl\Media\Services;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
-use Nvl\Media\Contracts\HasMedia;
-use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
-use Nvl\Tenancy\Services\EffectiveTenantConnection;
-use Nvl\Tenancy\Services\TenantBoundary;
-use Nvl\Tenancy\Services\TenantResourceRegistry;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Tenancy\Services\EffectiveTenantConnection;
+use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Throwable;
 
 /** Reloads Media owners through their registered domain ownership boundary. */
@@ -30,7 +29,7 @@ final readonly class MediaTenantOwnerResolver
         if ($this->configuration->get('tenancy.enabled') !== true) {
             return $owner;
         }
-        if (! $owner instanceof HasMedia || (! is_int($key) && ! is_string($key))) {
+        if (! is_int($key) && ! is_string($key)) {
             throw new TenantBoundaryViolation('A canonical persisted Media owner is required.');
         }
 
@@ -46,7 +45,7 @@ final readonly class MediaTenantOwnerResolver
             throw new TenantBoundaryViolation('The Media owner is not registered for tenant ownership.');
         }
 
-        if (! $canonical instanceof HasMedia
+        if (! $canonical instanceof Model
             || $canonical->getConnection() !== $this->connections->core()) {
             throw new TenantBoundaryViolation('The Media owner is unavailable in the active tenant.');
         }

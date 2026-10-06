@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Nvl\Support\Contracts\LocaleCatalog;
 use Nvl\Translatable\Services\ContentLocale;
-use Nvl\Translatable\Services\LocaleRegistry;
 
 /**
  * Provides a Media-facing adapter to the shared content-locale registry.
@@ -17,7 +17,7 @@ final readonly class MediaLocaleResolver
      */
     public function __construct(
         private ContentLocale $contentLocale,
-        private LocaleRegistry $locales,
+        private LocaleCatalog $locales,
     ) {}
 
     /**
@@ -37,6 +37,6 @@ final readonly class MediaLocaleResolver
      */
     public function fallback(): string
     {
-        return $this->locales->fallbacks()[0] ?? $this->locales->supported()[0] ?? 'en';
+        return $this->locales->fallbacks()[0] ?? $this->locales->default();
     }
 }

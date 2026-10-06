@@ -12,6 +12,7 @@ use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\MediaMultipartStatus;
 use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
+use Nvl\Support\Config\PackageStorage;
 
 /**
  * Server-authoritative multipart upload state.
@@ -119,5 +120,17 @@ final class MediaMultipartUpload extends Model
     public function completedMedia(): BelongsTo
     {
         return $this->belongsTo(Media::class, 'completed_media_id');
+    }
+
+    /** Resolve the configured package storage table. */
+    public function getTable(): string
+    {
+        return MediaTables::get(MediaTables::MultipartUploads);
+    }
+
+    /** Resolve the package connection through shared infrastructure defaults. */
+    public function getConnectionName(): ?string
+    {
+        return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('media') ?? parent::getConnectionName());
     }
 }

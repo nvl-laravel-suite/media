@@ -13,8 +13,8 @@ use Nvl\Media\Jobs\GenerateImageVariationJob;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaQueueConfiguration;
-use Nvl\Tenancy\Contracts\TenantContext;
-use Nvl\Tenancy\ValueObjects\TenantJobEnvelope;
+use Nvl\Support\Tenancy\Contracts\TenantContext;
+use Nvl\Support\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
 
 /** MediaVariationDispatcher resolves and dispatches variation definitions for existing media records. */

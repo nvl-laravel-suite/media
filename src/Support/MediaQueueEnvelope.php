@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Support;
 
-use Nvl\Tenancy\Enums\TenantContextMode;
-use Nvl\Tenancy\ValueObjects\TenantContextSnapshot;
-use Nvl\Tenancy\ValueObjects\TenantJobEnvelope;
+use Nvl\Support\Tenancy\Enums\TenantContextMode;
+use Nvl\Support\Tenancy\ValueObjects\TenantContextSnapshot;
+use Nvl\Support\Tenancy\ValueObjects\TenantJobEnvelope;
 
 /** Supplies only a fail-closed or disabled fallback when a producer omits context. */
 final class MediaQueueEnvelope

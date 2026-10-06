@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\DB;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Events\MediaCatalogGrantAudited;
 use Nvl\Media\Models\MediaTenantGrant;
-use Nvl\Tenancy\Contracts\TenantContext;
-use Nvl\Tenancy\Enums\TenantContextMode;
-use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Tenancy\Contracts\TenantContext;
+use Nvl\Support\Tenancy\Enums\TenantContextMode;
+use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 
 /** Revokes future imports without affecting committed tenant copies. */
 final readonly class RevokeMediaTenantGrantAction
@@ -28,13 +28,13 @@ final readonly class RevokeMediaTenantGrantAction
             if (! $identity instanceof MediaTenantGrant) {
                 throw new TenantBoundaryViolation('The Media grant revision is unavailable.');
             }
-            DB::table(MediaTables::TenantGrantLocks)->insertOrIgnore([
+            DB::table(MediaTables::get(MediaTables::TenantGrantLocks))->insertOrIgnore([
                 'tenant_id' => $identity->tenant_id,
                 'media_id' => $identity->media_id,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            DB::table(MediaTables::TenantGrantLocks)
+            DB::table(MediaTables::get(MediaTables::TenantGrantLocks))
                 ->where('tenant_id', $identity->tenant_id)
                 ->where('media_id', $identity->media_id)
                 ->lockForUpdate()

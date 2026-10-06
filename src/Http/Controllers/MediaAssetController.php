@@ -18,7 +18,8 @@ use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Support\MediaAssetUrl;
 use Nvl\Media\Support\MediaAssetVersion;
 use Nvl\Media\Support\MediaConfiguration;
-use Nvl\Tenancy\ValueObjects\TenantSiteContext;
+use Nvl\Support\Tenancy\Services\TenantSiteAttributes;
+use Nvl\Support\Tenancy\ValueObjects\TenantSiteContext;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -162,7 +163,7 @@ final class MediaAssetController extends Controller
             return;
         }
 
-        $site = $request->attributes->get(TenantSiteContext::class);
+        $site = TenantSiteAttributes::read($request);
         $tenant = $request->query('tenant');
         $revision = $request->query('revision');
         abort_unless(

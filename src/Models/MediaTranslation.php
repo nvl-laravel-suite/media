@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
+use Nvl\Support\Config\PackageStorage;
 
 /**
  * MediaTranslation: locale-specific accessible metadata for a media record.
@@ -77,5 +78,17 @@ class MediaTranslation extends Model
     public function scopeForLocale(Builder $query, string $locale): void
     {
         $query->where('locale', $locale);
+    }
+
+    /** Resolve the configured package storage table. */
+    public function getTable(): string
+    {
+        return MediaTables::get(MediaTables::I18n);
+    }
+
+    /** Resolve the package connection through shared infrastructure defaults. */
+    public function getConnectionName(): ?string
+    {
+        return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('media') ?? parent::getConnectionName());
     }
 }

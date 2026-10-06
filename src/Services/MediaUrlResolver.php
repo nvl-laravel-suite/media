@@ -10,9 +10,10 @@ use Illuminate\Http\Request;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Support\MediaAssetUrl;
-use Nvl\Tenancy\Contracts\TenantContext;
-use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
-use Nvl\Tenancy\ValueObjects\TenantSiteContext;
+use Nvl\Support\Tenancy\Contracts\TenantContext;
+use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Tenancy\Services\TenantSiteAttributes;
+use Nvl\Support\Tenancy\ValueObjects\TenantSiteContext;
 
 /** MediaUrlResolver: injected URL boundary for cache-aware media and variation URL generation. */
 final class MediaUrlResolver
@@ -204,7 +205,7 @@ final class MediaUrlResolver
             return null;
         }
 
-        $site = $this->request->attributes->get(TenantSiteContext::class);
+        $site = TenantSiteAttributes::read($this->request);
         if (! $site instanceof TenantSiteContext
             || $site->tenantId->value !== $this->tenantContext->requireTenant()->value) {
             throw new TenantBoundaryViolation('A verified tenant site is required for private Media URLs.');

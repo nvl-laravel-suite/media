@@ -7,7 +7,7 @@ namespace Nvl\Media\Services;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Str;
 use Nvl\Media\Contracts\MediaTenantWorklist;
-use Nvl\Tenancy\Exceptions\TenantConfigurationInvalid;
+use Nvl\Support\Tenancy\Exceptions\TenantConfigurationInvalid;
 
 /** Conservative default worklist populated only by reviewed host configuration. */
 final readonly class ConfiguredMediaTenantWorklist implements MediaTenantWorklist

@@ -17,7 +17,7 @@ use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaTenantOwnerResolver;
 use Nvl\Media\Services\MediaVariationDispatcher;
-use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 
 /**
  * Attaches a media record to a model via a polymorphic pivot with deduplication.

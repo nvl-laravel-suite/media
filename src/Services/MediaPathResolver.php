@@ -12,9 +12,9 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaConfiguration;
-use Nvl\Tenancy\Contracts\TenantContext;
-use Nvl\Tenancy\Enums\TenantContextMode;
-use Nvl\Tenancy\Exceptions\TenantContextMissing;
+use Nvl\Support\Tenancy\Contracts\TenantContext;
+use Nvl\Support\Tenancy\Enums\TenantContextMode;
+use Nvl\Support\Tenancy\Exceptions\TenantContextMissing;
 use Stringable;
 use UnitEnum;
 
