@@ -587,11 +587,11 @@ describe('replace', function () {
 
         Storage::disk('public')->put($media->buildPath(), 'old-content');
 
-        $connection = DB::connection();
-        DB::shouldReceive('connection')->andReturn($connection);
-        DB::shouldReceive('transaction')
-            ->once()
-            ->andThrow(new RuntimeException('replace transaction failed'));
+        DB::connection()->beforeExecuting(static function (string $sql): void {
+            if (str_starts_with(strtolower($sql), 'update')) {
+                throw new RuntimeException('replace transaction failed');
+            }
+        });
 
         $service = mediaMutationHarness();
         $replacement = UploadedFile::fake()->createWithContent('replacement.txt', 'replacement-content');
@@ -858,11 +858,11 @@ describe('bulkMove', function () {
 
         Storage::disk('public')->put($media->buildPath(), 'move-content');
 
-        $connection = DB::connection();
-        DB::shouldReceive('connection')->andReturn($connection);
-        DB::shouldReceive('transaction')
-            ->once()
-            ->andThrow(new RuntimeException('bulk move transaction failed'));
+        DB::connection()->beforeExecuting(static function (string $sql): void {
+            if (str_starts_with(strtolower($sql), 'update')) {
+                throw new RuntimeException('bulk move transaction failed');
+            }
+        });
 
         $service = mediaMutationHarness();
 

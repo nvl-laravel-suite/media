@@ -173,20 +173,15 @@ final class BulkMoveMediaAction implements BulkMoveMediaContract
                     $this->eventCommits->afterCommit((new Media)->getConnection(), static function () use (&$writeCommitted): void {
                         $writeCommitted = true;
                     });
-                    foreach ($completedCopies as $copy) {
-                        $this->fileEffects->deleteNow(
-                            $copy['disk'],
-                            [$copy['new']],
-                            'bulk_move_pre_commit_failure',
-                        );
-                    }
                     foreach ($mediaIds as $mediaId) {
                         $this->domainEvents->dispatch(new MediaMutated($mediaId, 'moved'), (new Media)->getConnection());
                     }
                 });
             } catch (Throwable $exception) {
-                if ($writeCommitted) {
-                    throw $exception;
+                if (! $writeCommitted) {
+                    foreach ($completedCopies as $copy) {
+                        $this->fileEffects->deleteNow($copy['disk'], [$copy['new']], 'bulk_move_pre_commit_failure');
+                    }
                 }
 
                 throw $exception;

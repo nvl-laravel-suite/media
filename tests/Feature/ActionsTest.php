@@ -24,7 +24,7 @@ use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Events\MediaAttached;
-use Nvl\Media\Events\MediaUploadedEvent;
+use Nvl\Media\Events\MediaUploaded;
 use Nvl\Media\Exceptions\FileUnacceptableForCollection;
 use Nvl\Media\Exceptions\MediaInUseException;
 use Nvl\Media\Exceptions\MediaNotReusableException;
@@ -152,9 +152,11 @@ describe('UploadMediaAction', function () {
     it('preserves the upload failure when stored-object cleanup cannot complete', function (bool $throwOnDelete) {
         $user = createTestUser();
         failActionPublicDiskDeletes($throwOnDelete);
-        DB::shouldReceive('transaction')
-            ->once()
-            ->andThrow(new RuntimeException('upload transaction failed'));
+        DB::connection()->beforeExecuting(static function (string $sql): void {
+            if (str_starts_with(strtolower($sql), 'insert')) {
+                throw new RuntimeException('upload transaction failed');
+            }
+        });
 
         expect(fn () => app(UploadMediaAction::class)->execute(
             file: UploadedFile::fake()->createWithContent(
@@ -192,7 +194,7 @@ describe('UploadMediaAction', function () {
     });
 
     it('dispatches the upload event when a deduplicated upload creates its media row', function () {
-        Event::fake([MediaUploadedEvent::class]);
+        Event::fake([MediaUploaded::class]);
 
         $user = createTestUser();
 
@@ -206,8 +208,8 @@ describe('UploadMediaAction', function () {
         );
 
         Event::assertDispatched(
-            MediaUploadedEvent::class,
-            static fn (MediaUploadedEvent $event): bool => $event->media->is($media),
+            MediaUploaded::class,
+            static fn (MediaUploaded $event): bool => $event->mediaId === $media->id,
         );
     });
 
@@ -1125,11 +1127,11 @@ describe('DeleteMediaAction', function () {
         Storage::disk('public')->put($media->buildPath(), 'file contents');
         Storage::disk('public')->assertExists($media->buildPath());
 
-        $connection = DB::connection();
-        DB::shouldReceive('connection')->andReturn($connection);
-        DB::shouldReceive('transaction')
-            ->once()
-            ->andThrow(new RuntimeException('delete transaction failed'));
+        DB::connection()->beforeExecuting(static function (string $sql): void {
+            if (str_starts_with(strtolower($sql), 'update')) {
+                throw new RuntimeException('delete transaction failed');
+            }
+        });
 
         $action = app(DeleteMediaAction::class);
 
