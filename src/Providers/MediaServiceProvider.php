@@ -392,7 +392,6 @@ final class MediaServiceProvider extends ServiceProvider
         ];
 
         $this->publishes($config, 'media-config');
-        $this->publishes($config, 'config');
     }
 
     protected function registerPolicies(): void
