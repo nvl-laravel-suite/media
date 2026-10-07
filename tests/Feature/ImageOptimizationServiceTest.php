@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Http\UploadedFile;
+use Illuminate\Log\Logger;
 use Illuminate\Support\Facades\Log;
 use Nvl\Media\Enums\MimeType;
 use Nvl\Media\Exceptions\FileUnacceptableForCollection;
@@ -11,7 +12,6 @@ use Nvl\Media\Services\MediaImageTransformer;
 use Nvl\Media\Services\MediaTemporaryFileRegistry;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Support\Logging\PackageLogger;
-use Psr\Log\LoggerInterface;
 
 function createOptimizationService(?MediaImageTransformer $imageTransformer = null): ImageOptimizationService
 {
@@ -212,7 +212,7 @@ describe('optimize', function () {
         $file = UploadedFile::fake()->image('photo.jpg', 100, 100);
         $slot = createSlotWithOptimization(['convertFormat' => 'webp']);
 
-        $log = Mockery::mock(LoggerInterface::class);
+        $log = Mockery::mock(Logger::class);
         Log::shouldReceive('channel')->with('nvl')->andReturn($log);
         $log->shouldReceive('log')->once()->withArgs(
             fn (string $level, string $message, array $context): bool => $level === 'warning'

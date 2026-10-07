@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Log\Logger;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Nvl\Media\Conversions\ConversionDefinition;
@@ -10,7 +11,6 @@ use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Jobs\GenerateImageVariationJob;
 use Nvl\Media\Jobs\ProcessMediaVariationsJob;
 use Nvl\Media\Models\Media;
-use Psr\Log\LoggerInterface;
 
 beforeEach(function () {
     config([
@@ -41,7 +41,7 @@ describe('GenerateImageVariationJob', function () {
     });
 
     it('skips when media not found', function () {
-        $log = Mockery::mock(LoggerInterface::class);
+        $log = Mockery::mock(Logger::class);
         Log::shouldReceive('channel')->with('nvl')->andReturn($log);
         $log->shouldReceive('log')->once()->withArgs(
             static fn (string $level, string $message, array $context): bool => $level === 'warning'
