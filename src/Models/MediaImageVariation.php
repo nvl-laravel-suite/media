@@ -47,6 +47,7 @@ class MediaImageVariation extends Model
 
     /** @use HasFactory<MediaImageVariationFactory> */
     use HasFactory;
+
     use HasUuids;
 
     public const string TABLE = MediaTables::ImageVariations;

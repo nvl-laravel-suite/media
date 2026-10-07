@@ -40,6 +40,7 @@ class MediaTranslation extends Model
 
     /** @use HasFactory<MediaTranslationFactory> */
     use HasFactory;
+
     use HasUuids;
 
     public const string TABLE = MediaTables::I18n;

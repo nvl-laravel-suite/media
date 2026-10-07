@@ -42,6 +42,7 @@ class MediaAssociation extends Model
 
     /** @use HasFactory<MediaAssociationFactory> */
     use HasFactory;
+
     use HasUuids;
 
     public const string TABLE = MediaTables::Associations;

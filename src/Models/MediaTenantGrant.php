@@ -36,6 +36,7 @@ final class MediaTenantGrant extends Model
 
     /** @use HasFactory<MediaTenantGrantFactory> */
     use HasFactory;
+
     use HasUuids;
 
     public const string TABLE = MediaTables::TenantGrants;
