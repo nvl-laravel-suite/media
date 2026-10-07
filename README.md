@@ -68,7 +68,7 @@ See [batched slots](docs/php-api.md#batched-owner-slots) and [SQL authorization]
 ## Requirements and installation
 
 - PHP 8.4+
-- Laravel 13
+- Laravel 12–13
 - `ext-curl` for DNS-pinned remote ingestion
 - `nvl/translatable` for localized media copy
 - an image driver supported by `spatie/image`
@@ -107,7 +107,7 @@ English and Bulgarian media copy ships with the package. Publish conventional La
 
 ### Production support boundary
 
-The supported 2.x production path is PHP 8.4+, Laravel 13, PostgreSQL, an S3-compatible private bucket, Redis-backed cache/locks/queues, and a real `MediaContentScanner`. Multipart remains opt-in; when enabled, production additionally requires a recoverable gateway, central multipart locks, scanner attestation, and the PostgreSQL/Redis/S3 integration gate. Run `php artisan nvl:media:doctor --production --strict` against the deployed configuration before accepting traffic.
+The major-five production path is PHP 8.4+, Laravel 12–13, PostgreSQL, an S3-compatible private bucket, Redis-backed cache/locks/queues, and a real `MediaContentScanner`. Multipart remains opt-in; when enabled, production additionally requires a recoverable gateway, central multipart locks, scanner attestation, and the PostgreSQL/Redis/S3 integration gate. Run `php artisan nvl:media:doctor --production --strict` against the deployed configuration before accepting traffic.
 
 SQLite, local disks, array locks, and synchronous queues remain supported for development and the fast test suite. They do not prove the multi-node production guarantees.
 
@@ -642,7 +642,7 @@ composer install
 composer quality
 ```
 
-`composer quality` verifies the manifest, Pint formatting, PHPStan at maximum strictness, direct dependency declarations, generated TypeScript freshness and compilation, and the isolated Testbench/Pest suite. Run Composer and npm security audits separately against their lockfiles. Compatibility verification covers Laravel 13/Testbench 11 on the suite's PHP 8.4+ runtime. The local production integration command additionally requires PostgreSQL, Redis, and MinIO or equivalent S3-compatible storage.
+`composer quality` verifies the manifest, Pint formatting, PHPStan at maximum strictness, direct dependency declarations, generated TypeScript freshness and compilation, and the isolated Testbench/Pest suite. Run Composer and npm security audits separately against their lockfiles. Compatibility verification covers Laravel 12/Testbench 10 and Laravel 13/Testbench 11 on the suite's PHP 8.4+ runtime. The local production integration command additionally requires PostgreSQL, Redis, and MinIO or equivalent S3-compatible storage.
 
 The documentation coverage test keeps facade, trait, adder, slot, conversion, model-helper, management-route, contract, event, and top-level configuration references synchronized with their public source surfaces.
 
