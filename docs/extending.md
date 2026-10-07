@@ -633,3 +633,7 @@ return `MediaUploadBuilder` from the eight source methods. `FakeMediaLibrary` an
 orchestration tests; see [the fake API](php-api.md#replaceable-workflows-and-scripted-uploads).
 A source method's script is a builder, and a terminal's script is a Media handle.
 Never use a synthetic library `upload` script or a partially initialized real adder.
+
+`MediaUploaded` is the canonical upload event with immutable `mediaId` and `schemaVersion` fields. `MediaUploadedEvent` remains a deprecated PHP alias; event fakes should use the canonical class.
+
+The focused contract catalog also includes `AbortMultipartUploadContract`, `AdoptSpatieMediaContract`, `BulkDeleteMediaContract`, `BulkMoveMediaContract`, `BulkTagMediaContract`, `ClearOwnerMediaSlotContract`, `CompleteMultipartUploadContract`, `CopyOwnerMediaSlotContract`, `FinalizeMediaScanContract`, `GenerateImageVariationContract`, `GetOwnerMediaSlotContract`, `GrantMediaToTenantContract`, `ImportPlatformMediaContract`, `InitiateMultipartUploadContract`, `MutateMediaTagsContract`, `RelocateMediaContract`, `RenameMediaContract`, `ReplaceMediaFileContract`, `RevokeMediaTenantGrantContract`, `SignMultipartPartContract`, `UpdateMediaMetadataContract`. Each operation delegates to its bound implementation and preserves the package ownership and lifecycle checks.

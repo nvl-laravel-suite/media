@@ -29,6 +29,7 @@ use Nvl\Media\Services\S3MultipartUploadGateway;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Tests\Stubs\NonLockingMediaDoctorStore;
 use Nvl\Media\Tests\Stubs\OwnerSlotWorkflowModel;
+use Nvl\Support\Logging\PackageLogger;
 
 function createMediaDoctorPathSample(array $overrides = []): Media
 {
@@ -339,7 +340,7 @@ it('accepts the supported production multipart safety contract', function () {
     ]);
     app()->instance(
         MultipartUploadGateway::class,
-        new S3MultipartUploadGateway(app(MediaDiskGateway::class)),
+        new S3MultipartUploadGateway(app(MediaDiskGateway::class), app(PackageLogger::class)),
     );
     app()->instance(MediaContentScanner::class, new class implements MediaContentScanner
     {

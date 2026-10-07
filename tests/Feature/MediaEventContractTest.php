@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Nvl\Media\Events\MediaAttached;
 use Nvl\Media\Events\MediaDetached;
 use Nvl\Media\Events\MediaMutated;
 use Nvl\Media\Events\MediaUploadedEvent;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Support\MediaAssociationSnapshot;
+use Nvl\Support\Contracts\DomainEvent;
 
 test('media public mutation events dispatch after commit', function (): void {
-    expect(is_subclass_of(MediaAttached::class, ShouldDispatchAfterCommit::class))->toBeTrue()
-        ->and(is_subclass_of(MediaDetached::class, ShouldDispatchAfterCommit::class))->toBeTrue()
-        ->and(is_subclass_of(MediaMutated::class, ShouldDispatchAfterCommit::class))->toBeTrue()
-        ->and(is_subclass_of(MediaUploadedEvent::class, ShouldDispatchAfterCommit::class))->toBeTrue();
+    expect(is_subclass_of(MediaAttached::class, DomainEvent::class))->toBeTrue()
+        ->and(is_subclass_of(MediaDetached::class, DomainEvent::class))->toBeTrue()
+        ->and(is_subclass_of(MediaMutated::class, DomainEvent::class))->toBeTrue()
+        ->and(is_subclass_of(MediaUploadedEvent::class, DomainEvent::class))->toBeTrue();
 });
 
 test('media association snapshots expose stable generic owner metadata', function (): void {

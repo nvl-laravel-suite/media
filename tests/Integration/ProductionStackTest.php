@@ -21,6 +21,7 @@ use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\S3MultipartUploadGateway;
 use Nvl\Media\Tests\Fixtures\MediaTenancyScenario;
+use Nvl\Support\Logging\PackageLogger;
 use Nvl\Tenancy\Services\TenantBoundary;
 
 it('proves PostgreSQL, Redis locking, and S3-compatible multipart recovery together', function (): void {
@@ -142,7 +143,7 @@ it('proves PostgreSQL, Redis locking, and S3-compatible multipart recovery toget
         'maximum_parts' => 1,
         'status' => MediaMultipartStatus::Initiated,
     ]));
-    $gateway = new S3MultipartUploadGateway(app(MediaDiskGateway::class));
+    $gateway = new S3MultipartUploadGateway(app(MediaDiskGateway::class), app(PackageLogger::class));
     $completed = false;
 
     try {

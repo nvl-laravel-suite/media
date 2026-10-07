@@ -10,12 +10,15 @@ use Nvl\Media\Services\ImageOptimizationService;
 use Nvl\Media\Services\MediaImageTransformer;
 use Nvl\Media\Services\MediaTemporaryFileRegistry;
 use Nvl\Media\Slots\MediaSlot;
+use Nvl\Support\Logging\PackageLogger;
+use Psr\Log\LoggerInterface;
 
 function createOptimizationService(?MediaImageTransformer $imageTransformer = null): ImageOptimizationService
 {
     return new ImageOptimizationService(
         $imageTransformer ?? app(MediaImageTransformer::class),
         app(MediaTemporaryFileRegistry::class),
+        app(PackageLogger::class),
     );
 }
 
@@ -209,9 +212,14 @@ describe('optimize', function () {
         $file = UploadedFile::fake()->image('photo.jpg', 100, 100);
         $slot = createSlotWithOptimization(['convertFormat' => 'webp']);
 
-        Log::shouldReceive('warning')
-            ->once()
-            ->withArgs(fn (string $msg) => str_contains($msg, 'Image optimization failed'));
+        $log = Mockery::mock(LoggerInterface::class);
+        Log::shouldReceive('channel')->with('nvl')->andReturn($log);
+        $log->shouldReceive('log')->once()->withArgs(
+            fn (string $level, string $message, array $context): bool => $level === 'warning'
+                && $message === 'nvl.media.image_optimization.failed'
+                && $context['package'] === 'media'
+                && ! array_key_exists('error', $context),
+        );
 
         $result = $service->optimize($file, $slot);
 

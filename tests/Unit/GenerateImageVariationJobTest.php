@@ -10,6 +10,7 @@ use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Jobs\GenerateImageVariationJob;
 use Nvl\Media\Jobs\ProcessMediaVariationsJob;
 use Nvl\Media\Models\Media;
+use Psr\Log\LoggerInterface;
 
 beforeEach(function () {
     config([
@@ -40,18 +41,15 @@ describe('GenerateImageVariationJob', function () {
     });
 
     it('skips when media not found', function () {
-        Log::spy();
-
+        $log = Mockery::mock(LoggerInterface::class);
+        Log::shouldReceive('channel')->with('nvl')->andReturn($log);
+        $log->shouldReceive('log')->once()->withArgs(
+            static fn (string $level, string $message, array $context): bool => $level === 'warning'
+                && $message === 'nvl.media.variation.missing'
+                && $context['media_id'] === '00000000-0000-0000-0000-000000000000',
+        );
         $job = new GenerateImageVariationJob('00000000-0000-0000-0000-000000000000', 'thumb', ['width' => 150]);
-
         app()->call([$job, 'handle']);
-
-        Log::shouldHaveReceived('warning')
-            ->once()
-            ->withArgs(function (string $message, array $context): bool {
-                return $message === 'GenerateImageVariationJob: media not found, skipping.'
-                    && $context['media_id'] === '00000000-0000-0000-0000-000000000000';
-            });
     });
 
     it('provides meaningful tags', function () {

@@ -16,6 +16,7 @@ use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Models\MediaMultipartUpload;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\S3MultipartUploadGateway;
+use Nvl\Support\Logging\PackageLogger;
 
 const MULTIPART_S3_TEST_DISK = 'multipart-s3-test';
 const MULTIPART_S3_TEST_BUCKET = 'multipart-test-bucket';
@@ -128,7 +129,7 @@ it('streams the object to verify a composite AWS SHA-256 checksum as a full chec
     $disk = configureMultipartS3TestDisk($handler);
     [$session] = createMultipartS3TestSession($disk, $contents);
 
-    $object = (new S3MultipartUploadGateway(app(MediaDiskGateway::class)))
+    $object = (new S3MultipartUploadGateway(app(MediaDiskGateway::class), app(PackageLogger::class)))
         ->inspect($session);
 
     expect($object)->not->toBeNull()
@@ -160,7 +161,7 @@ it('treats AWS NoSuchUpload as an idempotent abort success', function () {
         ],
     ])->save();
 
-    (new S3MultipartUploadGateway(app(MediaDiskGateway::class)))->abort($session);
+    (new S3MultipartUploadGateway(app(MediaDiskGateway::class), app(PackageLogger::class)))->abort($session);
 
     expect($commands)->toBe(['AbortMultipartUpload'])
         ->and(count($handler))->toBe(0);
@@ -195,7 +196,7 @@ it('discovers and aborts only exact-key provider uploads when provider state was
     $disk = configureMultipartS3TestDisk($handler);
     [$session] = createMultipartS3TestSession($disk, 'orphan-provider-state');
 
-    (new S3MultipartUploadGateway(app(MediaDiskGateway::class)))->abort($session);
+    (new S3MultipartUploadGateway(app(MediaDiskGateway::class), app(PackageLogger::class)))->abort($session);
 
     expect($commands)->toBe(['ListMultipartUploads', 'AbortMultipartUpload'])
         ->and($abortedUploadId)->toBe('orphan-provider-upload')
@@ -221,7 +222,7 @@ it('compensates immediately when the provider upload id cannot be persisted', fu
     [$session] = createMultipartS3TestSession($disk, 'provider-state-persistence');
 
     expect(
-        fn () => (new S3MultipartUploadGateway(app(MediaDiskGateway::class)))
+        fn () => (new S3MultipartUploadGateway(app(MediaDiskGateway::class), app(PackageLogger::class)))
             ->initiate($session),
     )->toThrow(ModelNotFoundException::class);
 

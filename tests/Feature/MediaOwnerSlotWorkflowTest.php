@@ -147,7 +147,7 @@ function useOwnerSlotLedger(string $connection, string $prefix): string
             'prefix' => '',
             'foreign_key_constraints' => true,
         ],
-        'nvl-media.owner_slots.idempotency.connection' => $connection,
+        'nvl-media.connections.owner_slot_operations' => $connection,
         'nvl-media.owner_slots.idempotency.processing_timeout_minutes' => 5,
     ]);
     $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_nvl_media_create_media_owner_slot_operations_table.php';
@@ -200,7 +200,7 @@ it('uses configured owner-slot operation storage', function (): void {
     $connection = (string) config('database.default');
 
     config([
-        'nvl-media.owner_slots.idempotency.connection' => $connection,
+        'nvl-media.connections.owner_slot_operations' => $connection,
         'nvl-media.owner_slots.idempotency.table' => 'custom_media_owner_slot_operations',
     ]);
 
@@ -1862,7 +1862,7 @@ it('preserves and recovers a split-connection checkpoint when completion fails',
             'prefix' => '',
             'foreign_key_constraints' => true,
         ],
-        'nvl-media.owner_slots.idempotency.connection' => 'owner_slot_ledger',
+        'nvl-media.connections.owner_slot_operations' => 'owner_slot_ledger',
         'nvl-media.owner_slots.idempotency.processing_timeout_minutes' => 5,
     ]);
     $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_nvl_media_create_media_owner_slot_operations_table.php';
@@ -1967,7 +1967,7 @@ it('preserves a split checkpoint when an after-commit listener throws', function
             'prefix' => '',
             'foreign_key_constraints' => true,
         ],
-        'nvl-media.owner_slots.idempotency.connection' => 'owner_slot_listener',
+        'nvl-media.connections.owner_slot_operations' => 'owner_slot_listener',
         'nvl-media.owner_slots.idempotency.processing_timeout_minutes' => 5,
     ]);
     $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_nvl_media_create_media_owner_slot_operations_table.php';
@@ -2045,7 +2045,7 @@ it('recovers a split clear checkpoint without clearing a newer attachment', func
             'prefix' => '',
             'foreign_key_constraints' => true,
         ],
-        'nvl-media.owner_slots.idempotency.connection' => 'owner_slot_clear',
+        'nvl-media.connections.owner_slot_operations' => 'owner_slot_clear',
         'nvl-media.owner_slots.idempotency.processing_timeout_minutes' => 5,
     ]);
     $migration = require __DIR__.'/../../database/migrations/2026_08_28_000000_nvl_media_create_media_owner_slot_operations_table.php';

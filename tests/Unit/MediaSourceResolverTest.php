@@ -12,6 +12,7 @@ use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaSourceResolver;
 use Nvl\Media\Services\MediaTemporaryFileRegistry;
+use Nvl\Support\Logging\PackageLogger;
 
 beforeEach(function () {
     config(['nvl-media.sources.remote.enabled' => true]);
@@ -199,6 +200,7 @@ describe('fromUrl SSRF validation', function () {
                 }
             },
             app(MediaTemporaryFileRegistry::class),
+            app(PackageLogger::class),
         );
 
         expect(fn () => $resolver->fromUrl('https://uploads.example.test/file.jpg'))
