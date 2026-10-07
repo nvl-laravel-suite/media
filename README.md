@@ -871,3 +871,5 @@ The table lists enum discriminators, including any successful codes retained for
 ## License
 
 Released under the [MIT License](LICENSE).
+
+Owner capability relations `metafields()`, `comments()`, `nvlMediaAssociations()` and `termables()` are enforced statically, not at runtime. They remain ordinary Eloquent relations for package internals. Enable `vendor/nvl/core/support/consumer-audit.neon` in the host PHPStan configuration, and use public workflow contracts and batch readers in consumer code. The static rules do not replace runtime authorization.
