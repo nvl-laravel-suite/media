@@ -3,7 +3,9 @@
 
 All notable changes to `nvl/media` are documented here.
 
-## [5.0.0] — release candidate (unpublished)
+## [Unreleased]
+
+## [5.0.0] - 2026-10-08
 
 ### Added
 
@@ -23,7 +25,7 @@ All notable changes to `nvl/media` are documented here.
 
 - Isolate owned cache and lock keys under `nvl:media:`; preserve generic host entries and explicit store choices.
 
-- Prepare lockstep major 5 with required and development NVL peer floors of `^5.0`. This candidate has not been tagged or published.
+- Adopt lockstep major 5 with required and development NVL peer floors of `^5.0`.
 - Introduce HasNvlMedia and InteractsWithNvlMedia with an owner API and independent eager-loadable association relation.
 - Retain legacy forwarding for one major and verify coexistence with the real Spatie Media library.
 - Gate generic permission bridging and namespace asset routes, lock keys and presentation.
