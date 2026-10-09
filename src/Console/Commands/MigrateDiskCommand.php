@@ -7,10 +7,12 @@ namespace Nvl\Media\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDiskGuard;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaFileOperator;
+use Nvl\Media\Services\MediaPathResolver;
 use RuntimeException;
 use Throwable;
 
@@ -23,6 +25,8 @@ use Throwable;
  */
 class MigrateDiskCommand extends Command
 {
+    private readonly MediaPathResolver $paths;
+
     /** @var string */
     protected $signature = 'nvl:media:migrate-disk
         {--from=media : Source value to migrate from}
@@ -43,7 +47,9 @@ class MigrateDiskCommand extends Command
         private readonly MediaDiskGuard $diskGuard,
         private readonly MediaFileExistence $existence,
         private readonly MediaFileOperator $files,
+        ?MediaPathResolver $paths = null,
     ) {
+        $this->paths = $paths ?? new MediaPathResolver;
         parent::__construct();
     }
 
@@ -148,28 +154,28 @@ class MigrateDiskCommand extends Command
         $completedMoves = [];
 
         foreach ($records as $media) {
-            foreach ($this->pathsForMedia($media) as $path) {
+            foreach ($this->pathsForMedia($media, $to) as $sourcePath => $targetPath) {
                 if ($dryRun) {
-                    $this->line("  [dry-run] {$from}:{$path} → {$to}:{$path}");
+                    $this->line("  [dry-run] {$from}:{$sourcePath} → {$to}:{$targetPath}");
                     $moved++;
 
                     continue;
                 }
 
                 try {
-                    $destinationExisted = $this->moveDiskObject($from, $path, $to, $path);
+                    $destinationExisted = $this->moveDiskObject($from, $sourcePath, $to, $targetPath);
                     $message = $destinationExisted
-                        ? "  Verified existing destination and removed source: {$path}"
-                        : "  Moved: {$path}";
+                        ? "  Verified existing destination and removed source: {$targetPath}"
+                        : "  Moved: {$sourcePath} → {$targetPath}";
                     $this->line($message);
                     $completedMoves[] = [
-                        'old' => $path,
-                        'new' => $path,
+                        'old' => $sourcePath,
+                        'new' => $targetPath,
                         'destination_existed' => $destinationExisted,
                     ];
                     $moved++;
                 } catch (Throwable $error) {
-                    $this->error("  Failed: {$path} ({$error->getMessage()})");
+                    $this->error("  Failed: {$sourcePath} ({$error->getMessage()})");
                     $failed++;
                 }
             }
@@ -312,7 +318,24 @@ class MigrateDiskCommand extends Command
     {
         $this->info('Updating database records...');
 
-        $updated = (clone $query)->update(['disk' => $to]);
+        $updated = $query->getModel()->getConnection()->transaction(function () use ($query, $from, $to): int {
+            $rewritePaths = MediaPathResolver::rootFolder($from) !== MediaPathResolver::rootFolder($to);
+            if ($rewritePaths) {
+                foreach ((clone $query)->with('imageVariations')->get() as $media) {
+                    $paths = $this->pathsForMedia($media, $to);
+                    if (config('nvl-tenancy.enabled') === true) {
+                        (clone $query)->whereKey($media->id)->update(['storage_path' => $paths[$media->buildPath()]]);
+                    }
+                    foreach ($media->imageVariations as $variation) {
+                        MediaImageVariation::query()->whereKey($variation->id)->update([
+                            'storage_path' => $paths[$variation->getPath()],
+                        ]);
+                    }
+                }
+            }
+
+            return (clone $query)->update(['disk' => $to]);
+        });
 
         $this->info("Updated {$updated} records: disk '{$from}' → '{$to}'");
     }
@@ -527,17 +550,23 @@ class MigrateDiskCommand extends Command
      * Build the relative object paths that must move with a media record.
      *
      * @param  Media  $media  Media record being migrated
-     * @return list<string> Relative object paths for the original and variations
+     * @param  string  $targetDisk  Destination disk whose configured root must be used
+     * @return array<string, string> Source-to-destination object paths for the original and variations
      */
-    private function pathsForMedia(Media $media): array
+    private function pathsForMedia(Media $media, string $targetDisk): array
     {
-        $paths = [$media->buildPath()];
+        $rewritePaths = MediaPathResolver::rootFolder($media->disk) !== MediaPathResolver::rootFolder($targetDisk);
+        $paths = [$media->buildPath() => $rewritePaths
+            ? $this->paths->mediaPathForFolder($media, $media->folder ?? '', $targetDisk)
+            : $media->buildPath()];
 
         foreach ($media->imageVariations as $variation) {
-            $paths[] = $variation->getPath();
+            $paths[$variation->getPath()] = $rewritePaths
+                ? $this->paths->variationPathForFolder($media, $variation, $media->folder ?? '', $targetDisk)
+                : $variation->getPath();
         }
 
-        return array_values(array_unique($paths));
+        return $paths;
     }
 
     /**

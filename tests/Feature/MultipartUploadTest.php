@@ -229,6 +229,24 @@ it('initiates and completes a verified direct upload', function () {
         ->and($gateway->completionCount)->toBe(1);
 });
 
+it('keeps multipart paths and logical folders consistent with a per-disk root', function (string $root, string $prefix): void {
+    config(['nvl-media.root_folder' => 'fallback', 'nvl-media.root_folders' => ['public' => $root]]);
+    [$session, $gateway, $checksum] = initiateMultipartSession('per-disk multipart');
+
+    expect($session->objectKey)->toStartWith($prefix.'pending/');
+    app(SignMultipartPartAction::class)->execute(
+        new SignMultipartPartData($session->uploadId, 1, $checksum, strlen('per-disk multipart')),
+        multipartActor(),
+    );
+    $media = app(CompleteMultipartUploadAction::class)->execute(
+        new CompleteMultipartUploadData($session->uploadId, [new CompletedMultipartPartData(1, 'etag')]),
+        multipartActor(),
+    );
+
+    expect($media->folder)->toBe('pending')
+        ->and($media->buildPath())->toBe($session->objectKey);
+})->with(['custom root' => ['assets/uploads', 'assets/uploads/'], 'disk root' => ['', '']]);
+
 it('deletes and aborts a completed object when verification differs from its session', function () {
     $checksum = hash('sha256', 'expected');
     $reportedObjectPath = 'untrusted/reported-object.pdf';

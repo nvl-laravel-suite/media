@@ -11,13 +11,16 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\MediaVisibility;
+use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaFileOperator;
+use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaVariationFileNamer;
 use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 use Nvl\Support\Tenancy\Exceptions\TenantConfigurationInvalid;
@@ -307,7 +310,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
         $variations = $connection->table(MediaTables::get(MediaTables::ImageVariations))->where('media_id', $assignment->recordId)->get();
         $prepared = [];
         foreach ($destinations as $tenant => $destinationId) {
-            $targetPath = $this->tenantPath($tenant, $source['folder'], $source['hash']);
+            $targetPath = $this->tenantPath($tenant, $source['folder'], $source['hash'], $source['disk']);
             $this->recordCopy($plan, $source, $tenant, $destinationId, $targetPath);
             $this->copyVerified($source['disk'], $sourcePath, $targetPath, $source['digest'], $source['size']);
             $variationPaths = [];
@@ -361,25 +364,19 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
             return $source['storage_path'];
         }
 
-        return $this->legacyFolder($source['folder']).'/'.$source['hash'];
+        return implode('/', array_filter([$this->legacyFolder($source['folder'], $source['disk']), $source['hash']], static fn (string $part): bool => $part !== ''));
     }
 
-    private function legacyFolder(string $folder): string
+    private function legacyFolder(string $folder, string $disk): string
     {
-        $root = $this->configuration->get('nvl-media.root_folder', 'media');
-        if (! is_string($root)) {
-            throw new TenantConfigurationInvalid('media.root_folder must be a string.');
-        }
+        $root = $this->storageRoot($disk);
 
         return implode('/', array_filter([trim($root, '/'), trim($folder, '/')], static fn (string $part): bool => $part !== ''));
     }
 
-    private function tenantPath(string $tenant, string $folder, string $filename): string
+    private function tenantPath(string $tenant, string $folder, string $filename, string $disk): string
     {
-        $root = $this->configuration->get('nvl-media.root_folder', 'media');
-        if (! is_string($root)) {
-            throw new TenantConfigurationInvalid('media.root_folder must be a string.');
-        }
+        $root = $this->storageRoot($disk);
 
         return implode('/', array_filter([trim($root, '/'), 'tenants', $tenant, trim($folder, '/'), $filename], static fn (string $part): bool => $part !== ''));
     }
@@ -392,6 +389,23 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
         }
 
         return trim($folder, '/');
+    }
+
+    /**
+     * Resolve the reviewed disk prefix while retaining the adoption configuration failure contract.
+     *
+     * @param  string  $disk  Reviewed source or destination disk
+     * @return string Safe disk-relative root prefix
+     *
+     * @throws TenantConfigurationInvalid When the reviewed root configuration is invalid
+     */
+    private function storageRoot(string $disk): string
+    {
+        try {
+            return MediaConfiguration::storageRoot($disk, $this->configuration);
+        } catch (InvalidArgumentException|MediaUploadException $exception) {
+            throw new TenantConfigurationInvalid($exception->getMessage());
+        }
     }
 
     /** @return array{id: string, digest: string, hash: string, disk: string, folder: string, size: int, storage_path: string|null} */
@@ -656,7 +670,7 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
 
             return;
         }
-        $path = $this->tenantPath($assignment->tenantId->value, 'multipart', basename($row->object_key));
+        $path = $this->tenantPath($assignment->tenantId->value, 'multipart', basename($row->object_key), $row->disk);
         $this->copyVerified($row->disk, $row->object_key, $path, $row->expected_checksum, $size);
         $connection->table(MediaTables::get(MediaTables::MultipartUploads))->where('id', $assignment->recordId)->update([
             ...$this->ownership($assignment->tenantId->value),

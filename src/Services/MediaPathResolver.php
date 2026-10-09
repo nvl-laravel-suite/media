@@ -52,7 +52,7 @@ final readonly class MediaPathResolver
     {
         $base_path = $this->resolve($model, $slot);
 
-        return $base_path.'/'.self::conversionsFolder();
+        return $base_path !== '' ? $base_path.'/'.self::conversionsFolder() : self::conversionsFolder();
     }
 
     /**
@@ -110,7 +110,7 @@ final readonly class MediaPathResolver
             return $media->storage_path;
         }
 
-        $parts = array_filter([self::rootFolder(), $media->folder, $media->hash]);
+        $parts = array_filter([self::rootFolder($media->disk), $media->folder, $media->hash], static fn (?string $part): bool => $part !== null && $part !== '');
 
         return implode('/', $parts);
     }
@@ -120,11 +120,12 @@ final readonly class MediaPathResolver
      *
      * @param  Media  $media  Media record being planned
      * @param  string  $folder  Target clean folder without the root prefix
+     * @param  string|null  $disk  Destination disk override, or null for the media disk
      * @return string Relative storage path for the media object
      */
-    public function mediaPathForFolder(Media $media, string $folder): string
+    public function mediaPathForFolder(Media $media, string $folder, ?string $disk = null): string
     {
-        $parts = array_filter([$this->storageFolder($folder), $media->hash]);
+        $parts = array_filter([$this->storageFolder($folder, $disk ?? $media->disk), $media->hash], static fn (?string $part): bool => $part !== null && $part !== '');
 
         return implode('/', $parts);
     }
@@ -136,7 +137,8 @@ final readonly class MediaPathResolver
     {
         $baseFolder = is_string($media->storage_path) && $media->storage_path !== ''
             ? dirname($media->storage_path)
-            : $this->storageFolder($media->folder ?? '');
+            : $this->storageFolder($media->folder ?? '', $media->disk);
+        $baseFolder = $baseFolder === '.' ? '' : $baseFolder;
         $convFolder = self::conversionsFolder();
 
         return $baseFolder !== '' ? $baseFolder.'/'.$convFolder : $convFolder;
@@ -156,17 +158,18 @@ final readonly class MediaPathResolver
      * @param  Media  $media  Parent media record being planned
      * @param  MediaImageVariation  $variation  Variation record being planned
      * @param  string  $folder  Target clean folder without the root prefix
+     * @param  string|null  $disk  Destination disk override, or null for the parent media disk
      * @return string Relative storage path for the variation object
      */
-    public function variationPathForFolder(Media $media, MediaImageVariation $variation, string $folder): string
+    public function variationPathForFolder(Media $media, MediaImageVariation $variation, string $folder, ?string $disk = null): string
     {
-        $baseFolder = $this->storageFolder($folder);
+        $baseFolder = $this->storageFolder($folder, $disk ?? $media->disk);
 
         return implode('/', array_filter([
             $baseFolder,
             self::conversionsFolder(),
             $variation->getFilename(),
-        ]));
+        ], static fn (string $part): bool => $part !== ''));
     }
 
     /* ---------------------------------------------------------------
@@ -174,19 +177,31 @@ final readonly class MediaPathResolver
      * ------------------------------------------------------------- */
 
     /**
-     * Get the configured root folder prefix for all media storage paths.
+     * Resolve the selected disk's folder prefix with the global folder as fallback.
+     *
+     * @param  string|null  $disk  Disk name, or null for the generic Media default
+     * @return string Relative folder prefix, including an empty string for the disk root
+     *
+     * @throws MediaUploadException When the configured folder is unsafe
      */
-    public static function rootFolder(): string
+    public static function rootFolder(?string $disk = null): string
     {
-        return trim(MediaConfiguration::string('nvl-media.root_folder', ''), '/');
+        return MediaConfiguration::storageRoot($disk);
     }
 
     /**
      * Prepend the root folder to a given folder path (for pre-persist storage operations).
+     *
+     * @param  string  $folder  Relative logical folder
+     * @param  string|null  $disk  Disk name, or null for the generic Media default
+     * @return string Disk-relative storage folder
+     *
+     * @throws MediaUploadException When a path is unsafe
      */
-    public static function storagePath(string $folder): string
+    public static function storagePath(string $folder, ?string $disk = null): string
     {
-        $root = self::rootFolder();
+        self::assertSafe($folder);
+        $root = self::rootFolder($disk);
 
         if ($root === '') {
             return $folder;
@@ -195,12 +210,21 @@ final readonly class MediaPathResolver
         return $folder !== '' ? $root.'/'.$folder : $root;
     }
 
-    /** Build a write-time storage folder inside the active ownership partition. */
-    public function storageFolder(string $folder): string
+    /**
+     * Build a write-time folder inside the selected disk root and active ownership partition.
+     *
+     * @param  string  $folder  Logical folder, including an empty string for no subfolder
+     * @param  string|null  $disk  Disk name, or null for the generic Media default
+     * @return string Disk-relative physical folder
+     *
+     * @throws MediaUploadException When a path is unsafe
+     * @throws TenantContextMissing When tenant-aware storage has no active ownership context
+     */
+    public function storageFolder(string $folder, ?string $disk = null): string
     {
         $folder = $this->normalizeFolder($folder);
         if (config('nvl-tenancy.enabled') !== true) {
-            return self::storagePath($folder);
+            return self::storagePath($folder, $disk);
         }
 
         if (! $this->tenantContext instanceof TenantContext) {
@@ -213,15 +237,24 @@ final readonly class MediaPathResolver
             default => throw new TenantContextMissing,
         };
 
-        return implode('/', array_filter([self::rootFolder(), $partition, $folder]));
+        return implode('/', array_filter([self::rootFolder($disk), $partition, $folder], static fn (string $part): bool => $part !== ''));
     }
 
-    /** Strip the exact active physical partition and return a reusable logical folder. */
-    public function logicalFolderFromStoragePath(string $storagePath): string
+    /**
+     * Strip the selected disk prefix and active ownership partition from a physical object path.
+     *
+     * @param  string  $storagePath  Disk-relative object path
+     * @param  string|null  $disk  Source disk, or null for the generic Media default
+     * @return string Reusable logical folder
+     *
+     * @throws MediaUploadException When a path is unsafe
+     * @throws TenantContextMissing When the active ownership context is missing
+     */
+    public function logicalFolderFromStoragePath(string $storagePath, ?string $disk = null): string
     {
         self::assertSafe($storagePath);
         $folder = dirname(trim($storagePath, '/'));
-        $root = self::rootFolder();
+        $root = self::rootFolder($disk);
         $prefix = $root;
         if (config('nvl-tenancy.enabled') === true) {
             $snapshot = $this->tenantContext?->snapshot() ?? throw new TenantContextMissing;
@@ -230,7 +263,7 @@ final readonly class MediaPathResolver
                 TenantContextMode::Platform => 'platform',
                 default => throw new TenantContextMissing,
             };
-            $prefix = implode('/', array_filter([$root, $partition]));
+            $prefix = implode('/', array_filter([$root, $partition], static fn (string $part): bool => $part !== ''));
         }
         if ($prefix !== '' && ($folder === $prefix || str_starts_with($folder, $prefix.'/'))) {
             $folder = ltrim(substr($folder, strlen($prefix)), '/');

@@ -566,23 +566,30 @@ class Media extends Model implements TranslatableModel
             return $this->storage_path;
         }
 
-        return implode('/', array_filter([self::rootFolder(), $this->folder, $this->hash]));
+        return implode('/', array_filter([self::rootFolder($this->disk), $this->folder, $this->hash], static fn (?string $part): bool => $part !== null && $part !== ''));
     }
 
     /**
-     * Get the configured root folder prefix for all media storage paths.
+     * Get the selected disk's folder prefix, falling back to the global root.
+     *
+     * @param  string|null  $disk  Selected disk or the generic Media default
+     * @return string Relative folder prefix, including an empty disk root
      */
-    public static function rootFolder(): string
+    public static function rootFolder(?string $disk = null): string
     {
-        return MediaPathResolver::rootFolder();
+        return MediaPathResolver::rootFolder($disk);
     }
 
     /**
      * Prepend the root folder to a given folder path (for pre-persist storage operations).
+     *
+     * @param  string  $folder  Relative logical folder
+     * @param  string|null  $disk  Selected disk or the generic Media default
+     * @return string Disk-relative storage folder
      */
-    public static function storagePath(string $folder): string
+    public static function storagePath(string $folder, ?string $disk = null): string
     {
-        return MediaPathResolver::storagePath($folder);
+        return MediaPathResolver::storagePath($folder, $disk);
     }
 
     /** Resolve the configured package storage table. */

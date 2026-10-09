@@ -331,8 +331,8 @@ class MediaAdder implements MediaUploadBuilder
      */
     private function executeUpload(UploadedFile $uploaded_file, MediaSlot $slot_config, string $slotName): Media
     {
-        $resolved_disk = $this->diskOverride ?? $slot_config->disk;
         $is_public = $this->publicOverride ?? $slot_config->isPublic;
+        $resolved_disk = $this->diskOverride ?? $slot_config->resolveDisk($is_public);
         $all_tags = array_values(array_unique(array_merge(
             $slot_config->defaultTags,
             $this->tags,

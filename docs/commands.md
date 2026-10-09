@@ -59,7 +59,7 @@ php artisan nvl:media:reconcile --production --disk=s3 --cleanup-orphans --older
 - `--sample=50`: maximum media records to inspect; must be positive.
 - `--public-private-routes` / `--routes`: verify both route-backed delivery contracts.
 - `--include-trashed`: include soft-deleted media.
-- `--orphans`: inventory paginated objects below `nvl-media.root_folder` that are not referenced by live media.
+- `--orphans`: inventory paginated objects below the selected disk prefix (`root_folders[disk]`, then `root_folder`) and active tenant partition that are not referenced by live media.
 - `--cleanup-orphans`: explicitly delete only age-eligible orphan candidates.
 - `--older-than=1440`: minimum candidate age in minutes; recent objects remain protected.
 - `--force`: required with `--cleanup-orphans` in production.
@@ -68,6 +68,8 @@ php artisan nvl:media:reconcile --production --disk=s3 --cleanup-orphans --older
 - `--live-write`: create/read/delete a temporary health object. Never combine with production.
 - `--cleanup`: explicitly remove the temporary probe.
 - `--no-write`: assert read-only operation; incompatible with `--live-write`.
+
+Whole-disk orphan deletion is always refused when no disk/tenant prefix exists. Root-level Media still supports record-based checks and deletion. `restrict_to_root=false` permits read-only whole-disk orphan inventory.
 
 Use live writes only in a controlled non-production probe. Reconciliation remains read-only unless `--live-write` or `--cleanup-orphans` is explicit. Objects with unavailable/unreliable age metadata are always retained and reported. Objects referenced only by soft-deleted media are cleanup candidates, but their database tombstones remain for diagnosis.
 
@@ -186,6 +188,8 @@ php artisan nvl:media:migrate-disk --column=folder --from=legacy --to=library --
 - `--from-path=`: retained as a rejected legacy option; physical moves require a configured source disk.
 
 Cross-disk copies stream data and verify the copied object before changing database metadata. Association filters select media rows, not individual associations; shared rows move globally. Back up metadata, run dry-run, reconcile the source, perform the migration, then reconcile the destination.
+
+Disk migration applies the destination disk root to originals and variations when roots differ, verifies copied bytes, and updates path metadata together with the disk. Equal roots preserve existing paths. Keep the source root configured until migration completes; `--records-only` assumes an external copy into the destination layout.
 
 ## Safe production sequence
 

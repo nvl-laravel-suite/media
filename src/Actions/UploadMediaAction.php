@@ -230,7 +230,7 @@ final class UploadMediaAction implements UploadMediaContract
         }
 
         // Prepend root folder for actual storage path; DB keeps the clean folder value
-        $storageFolder = $this->pathResolver->storageFolder($folder);
+        $storageFolder = $this->pathResolver->storageFolder($folder, $disk);
 
         // Store file on disk first — cleaned up on any failure below
         $visibility = $isPublic ? MediaVisibility::Public : MediaVisibility::Private;

@@ -155,7 +155,7 @@ final readonly class CompleteMultipartUploadAction implements CompleteMultipartU
             }
 
             $pathInfo = pathinfo($locked->object_key);
-            $folder = $this->paths->logicalFolderFromStoragePath($locked->object_key);
+            $folder = $this->paths->logicalFolderFromStoragePath($locked->object_key, $locked->disk);
 
             $media = Media::query()->firstOrNew([
                 'upload_session_id' => $locked->id,

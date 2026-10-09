@@ -284,6 +284,30 @@ describe('interpolate', function () {
 
 describe('static utilities', function () {
 
+    it('resolves per-disk roots including an explicit empty root and a global fallback', function (): void {
+        config(['nvl-media.root_folder' => 'shared', 'nvl-media.root_folders' => ['public' => 'images', 'private' => '', 'archive' => '0']]);
+
+        expect(MediaPathResolver::rootFolder('public'))->toBe('images')
+            ->and(MediaPathResolver::rootFolder('private'))->toBe('')
+            ->and(MediaPathResolver::storagePath('invoices', 'private'))->toBe('invoices')
+            ->and(MediaPathResolver::storagePath('', 'archive'))->toBe('0')
+            ->and(MediaPathResolver::rootFolder('local'))->toBe('shared');
+    });
+
+    it('rejects unsafe configured disk roots', function (string $root): void {
+        config(['nvl-media.root_folders' => ['public' => $root]]);
+
+        expect(fn () => MediaPathResolver::rootFolder('public'))->toThrow(MediaUploadException::class);
+    })->with(['../outside', '%2e%2e/outside', "media\0files", 'C:/outside', 's3://bucket', '.', './', 'assets/./uploads', 'assets/.', '%2e']);
+
+    it('round trips a physical path using its own disk prefix', function (): void {
+        config(['nvl-media.root_folder' => 'shared', 'nvl-media.root_folders' => ['archive' => 'assets/uploads']]);
+        $paths = new MediaPathResolver;
+
+        expect($paths->logicalFolderFromStoragePath('assets/uploads/documents/report.pdf', 'archive'))->toBe('documents')
+            ->and($paths->storageFolder('documents', 'archive'))->toBe('assets/uploads/documents');
+    });
+
     it('rootFolder reads from config', function () {
         config(['nvl-media.root_folder' => 'media-files']);
         expect(MediaPathResolver::rootFolder())->toBe('media-files');

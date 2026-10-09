@@ -47,6 +47,12 @@ return [
     |   4. 'local' (hardcoded safety net — should never be reached)
     */
     'disk' => PackageEnvironment::get('NVL_MEDIA_FILESYSTEM_DISK', env('FILESYSTEM_DISK', 'local')),
+    // Optional visibility defaults; explicit upload and slot disk selections win.
+    // Define and allowlist these disks in the host before selecting them.
+    'public_disk' => null,
+    'private_disk' => null,
+    // An explicit empty string stores below the disk root without a base folder.
+    'root_folders' => [],
     'sources' => ['remote' => [
         // URL ingestion is an explicit capability. Ordinary request, local,
         // disk, and base64 uploads do not incur its DNS/cURL boundary.

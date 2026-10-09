@@ -15,6 +15,7 @@ use Nvl\Media\Services\MediaFileEffectScheduler;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaFileOperator;
 use Nvl\Media\Services\MediaMutationLock;
+use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Support\Events\ConnectionCommitCallbacks;
 use Nvl\Support\Events\DomainEventDispatcher;
 use Throwable;
@@ -26,6 +27,8 @@ use Throwable;
  */
 final readonly class RelocateMediaAction implements RelocateMediaContract
 {
+    private MediaPathResolver $paths;
+
     /**
      * Create the single-media relocation action.
      */
@@ -38,7 +41,10 @@ final readonly class RelocateMediaAction implements RelocateMediaContract
         private MediaMutationLock $mutationLock,
         private DomainEventDispatcher $domainEvents,
         private ConnectionCommitCallbacks $eventCommits,
-    ) {}
+        ?MediaPathResolver $paths = null,
+    ) {
+        $this->paths = $paths ?? new MediaPathResolver;
+    }
 
     /**
      * Copy, verify, and atomically swap one media record to a different disk.
@@ -89,38 +95,48 @@ final readonly class RelocateMediaAction implements RelocateMediaContract
         }
 
         $sourceDisk = $media->disk;
-        $paths = [$media->buildPath()];
+        $rewritePaths = MediaPathResolver::rootFolder($sourceDisk) !== MediaPathResolver::rootFolder($disk);
+        $sourceOriginal = $media->buildPath();
+        $targetOriginal = $rewritePaths
+            ? $this->paths->mediaPathForFolder($media, $media->folder ?? '', $disk)
+            : $sourceOriginal;
+        $paths = [$sourceOriginal => $targetOriginal];
+        $variationPaths = [];
 
         foreach ($media->imageVariations as $variation) {
-            $paths[] = $variation->getPath();
+            $targetPath = $rewritePaths
+                ? $this->paths->variationPathForFolder($media, $variation, $media->folder ?? '', $disk)
+                : $variation->getPath();
+            $paths[$variation->getPath()] = $targetPath;
+            $variationPaths[$variation->id] = $targetPath;
         }
 
         $staged = [];
 
         $writeCommitted = false;
         try {
-            foreach (array_values(array_unique($paths)) as $path) {
-                if (! $this->existence->existsFresh($sourceDisk, $path)) {
+            foreach ($paths as $sourcePath => $targetPath) {
+                if (! $this->existence->existsFresh($sourceDisk, $sourcePath)) {
                     throw new MediaUploadException(
-                        "Media relocation source is missing [{$sourceDisk}:{$path}].",
+                        "Media relocation source is missing [{$sourceDisk}:{$sourcePath}].",
                     );
                 }
 
-                if ($this->existence->existsFresh($disk, $path)) {
+                if ($this->existence->existsFresh($disk, $targetPath)) {
                     throw new MediaUploadException(
-                        "Media relocation destination already exists [{$disk}:{$path}].",
+                        "Media relocation destination already exists [{$disk}:{$targetPath}].",
                     );
                 }
 
-                $staged[] = $path;
+                $staged[] = $targetPath;
 
-                if (! $this->files->copy($sourceDisk, $path, $disk, $path, $visibility)) {
+                if (! $this->files->copy($sourceDisk, $sourcePath, $disk, $targetPath, $visibility)) {
                     throw new MediaUploadException(
-                        "Media relocation copy failed [{$sourceDisk}:{$path}] to [{$disk}:{$path}].",
+                        "Media relocation copy failed [{$sourceDisk}:{$sourcePath}] to [{$disk}:{$targetPath}].",
                     );
                 }
 
-                $this->assertIntegrity($sourceDisk, $disk, $path);
+                $this->assertIntegrity($sourceDisk, $sourcePath, $disk, $targetPath);
             }
 
             $relocated = (new Media)->getConnection()->transaction(function () use (
@@ -130,6 +146,10 @@ final readonly class RelocateMediaAction implements RelocateMediaContract
                 $expectedRevision,
                 $staged,
                 $sourceDisk,
+                $targetOriginal,
+                $paths,
+                $variationPaths,
+                $rewritePaths,
                 &$writeCommitted,
             ): Media {
                 $locked = Media::query()->with('imageVariations')->lockForUpdate()->findOrFail($mediaId);
@@ -153,13 +173,19 @@ final readonly class RelocateMediaAction implements RelocateMediaContract
                     'disk' => $disk,
                     'visibility' => $visibility,
                     'revision' => $nextRevision,
+                    ...(config('nvl-tenancy.enabled') === true ? ['storage_path' => $targetOriginal] : []),
                 ])->save();
                 $locked->imageVariations()->update(['source_revision' => $nextRevision]);
+                if ($rewritePaths) {
+                    foreach ($variationPaths as $variationId => $targetPath) {
+                        $locked->imageVariations()->whereKey($variationId)->update(['storage_path' => $targetPath]);
+                    }
+                }
 
                 $this->eventCommits->afterCommit((new Media)->getConnection(), static function () use (&$writeCommitted): void {
                     $writeCommitted = true;
                 });
-                $this->fileEffects->deleteAfterCommit($sourceDisk, $staged, 'relocate_source');
+                $this->fileEffects->deleteAfterCommit($sourceDisk, array_keys($paths), 'relocate_source');
                 $this->domainEvents->dispatch(new MediaMutated($locked->id, 'relocated'), $locked->getConnection());
 
                 return $locked->refresh()->load('imageVariations');
@@ -182,15 +208,15 @@ final readonly class RelocateMediaAction implements RelocateMediaContract
      *
      * @throws MediaUploadException
      */
-    private function assertIntegrity(string $sourceDisk, string $targetDisk, string $path): void
+    private function assertIntegrity(string $sourceDisk, string $sourcePath, string $targetDisk, string $targetPath): void
     {
-        if ($this->disks->size($sourceDisk, $path) !== $this->disks->size($targetDisk, $path)
+        if ($this->disks->size($sourceDisk, $sourcePath) !== $this->disks->size($targetDisk, $targetPath)
             || ! hash_equals(
-                $this->disks->checksum($sourceDisk, $path),
-                $this->disks->checksum($targetDisk, $path),
+                $this->disks->checksum($sourceDisk, $sourcePath),
+                $this->disks->checksum($targetDisk, $targetPath),
             )) {
             throw new MediaUploadException(
-                "Media relocation integrity verification failed [{$targetDisk}:{$path}].",
+                "Media relocation integrity verification failed [{$targetDisk}:{$targetPath}].",
             );
         }
     }

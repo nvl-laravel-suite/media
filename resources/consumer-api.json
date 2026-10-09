@@ -2006,6 +2006,7 @@
                 "path",
                 "privateExclusive",
                 "publicReusable",
+                "resolveDisk",
                 "shared",
                 "shouldConvertOriginal",
                 "singleFile",

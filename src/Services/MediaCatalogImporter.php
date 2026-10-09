@@ -60,7 +60,7 @@ final class MediaCatalogImporter implements MediaCatalogImport
         $tenant = $this->context->requireTenant();
         $operationId = (string) Str::uuid();
         $hash = MediaHashGenerator::generateForExtension($source->extension);
-        $path = $this->paths->storageFolder('catalog').'/'.$hash;
+        $path = $this->paths->storageFolder('catalog', $source->disk).'/'.$hash;
         if (! $this->files->copy($source->disk, $source->storagePath, $source->disk, $path, MediaVisibility::Private)
             || $this->disks->size($source->disk, $path) !== $source->size
             || ! hash_equals($source->sourceDigest, $this->disks->checksum($source->disk, $path))) {

@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Support;
 
+use Illuminate\Contracts\Config\Repository;
 use InvalidArgumentException;
 use Nvl\Media\Definitions\Tables\MediaTables;
+use Nvl\Media\Exceptions\MediaUploadException;
+use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Support\Config\PackageStorage;
 
 /**
@@ -13,6 +16,42 @@ use Nvl\Support\Config\PackageStorage;
  */
 final class MediaConfiguration
 {
+    /**
+     * Resolve a safe relative folder prefix for one disk, preserving an explicit empty root.
+     *
+     * @param  string|null  $disk  Disk name, or null for the generic Media default
+     * @param  Repository|null  $configuration  Explicit adoption configuration or the active host configuration
+     * @return string Normalized relative prefix, including an empty string for the disk root
+     *
+     * @throws InvalidArgumentException When folder configuration has an invalid type
+     * @throws MediaUploadException When the configured prefix is unsafe
+     */
+    public static function storageRoot(?string $disk = null, ?Repository $configuration = null): string
+    {
+        $roots = $configuration !== null
+            ? $configuration->get('nvl-media.root_folders', [])
+            : config('nvl-media.root_folders', []);
+        if (! is_array($roots)) {
+            throw new InvalidArgumentException('nvl-media.root_folders must be a disk-to-folder map.');
+        }
+        $disk ??= MediaDiskResolver::resolve();
+        $root = array_key_exists($disk, $roots)
+            ? $roots[$disk]
+            : ($configuration !== null ? $configuration->get('nvl-media.root_folder', '') : config('nvl-media.root_folder', ''));
+        if (! is_string($root)) {
+            throw new InvalidArgumentException("The media root folder for disk [{$disk}] must be a string; use an empty string for the disk root.");
+        }
+        MediaPathResolver::assertSafe($root);
+        $root = str_replace('\\', '/', rawurldecode($root));
+        if (preg_match('/^[A-Za-z][A-Za-z0-9+.-]*:/', $root) === 1
+            || preg_match('#(?:^|/)\.(?:/|$)#', $root) === 1
+            || ($root !== '' && trim($root, '/') === '')) {
+            throw new MediaUploadException('Media root folders must be relative; use an empty string for the disk root.');
+        }
+
+        return trim((string) preg_replace('#/{2,}#', '/', $root), '/');
+    }
+
     /**
      * Resolve the optional owner-slot operation ledger connection.
      */

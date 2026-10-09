@@ -549,6 +549,26 @@ describe('GET /nvl/api/v1/media/{id} (show)', function () {
 
 describe('POST /nvl/api/v1/media (store)', function () {
 
+    it('maps omitted upload disks through the requested visibility default', function (): void {
+        config([
+            'filesystems.disks.private' => ['driver' => 'local', 'root' => storage_path('framework/testing/disks/private')],
+            'nvl-media.allowed_disks' => ['public', 'private'],
+            'nvl-media.private_disk' => 'private',
+            'nvl-media.root_folders' => ['private' => ''],
+            'nvl-media.auto_generate_variations' => false,
+            'nvl-media.output_conversion.enabled' => false,
+        ]);
+        Storage::fake('private');
+        $user = createApiUser();
+
+        $response = $this->actingAs($user)->postJson('/nvl/api/v1/media', [
+            'files' => [UploadedFile::fake()->createWithContent('upload.txt', 'HTTP private bytes')],
+            'isPublic' => false,
+        ]);
+
+        $response->assertCreated()->assertJsonPath('data.items.0.disk', 'private');
+    });
+
     beforeEach(function () {
         Storage::fake('public');
 

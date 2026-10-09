@@ -279,6 +279,8 @@ Content type: `multipart/form-data`.
 | `isPublic` | boolean | no | Default `false` |
 | `tags[]` | string list | no | Each maximum 50 |
 
+When an ordinary upload omits `disk`, its `isPublic` value selects the optional `nvl-media.public_disk` or `nvl-media.private_disk`, followed by the generic disk fallback. Explicit disks still require allowlisting. Multipart requests keep their explicit required disk. Visibility updates do not relocate existing objects.
+
 The authenticated user must be an Eloquent model because its morph type and identifier establish uploader ownership.
 
 ```bash
@@ -539,7 +541,7 @@ Move:
 }
 ```
 
-`action` must be `delete`, `tag`, or `move`; `ids` is a non-empty UUID list. Tags are required for `tag`. Folder is required for `move`, maximum 255 characters, must remain a safe relative path, and resolves beneath `nvl-media.root_folder`.
+`action` must be `delete`, `tag`, or `move`; `ids` is a non-empty UUID list. Tags are required for `tag`. Folder is required for `move`, maximum 255 characters, must remain a safe relative path, and resolves beneath the selected disk prefix (`nvl-media.root_folders[disk]`, then `root_folder`).
 
 Bulk locks are acquired in sorted UUID order. Move performs copy–verify–database-swap–delete for originals and variations.
 

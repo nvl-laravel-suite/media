@@ -124,6 +124,11 @@ return [
     */
     'disk' => PackageEnvironment::get('NVL_MEDIA_FILESYSTEM_DISK', env('FILESYSTEM_DISK', 'local')),
 
+    // Optional visibility defaults. Explicit upload and slot disks take precedence.
+    // These disks must also be defined in filesystems.php and allowed_disks.
+    'public_disk' => null,
+    'private_disk' => null,
+
     /*
     |--------------------------------------------------------------------------
     | S3-Compatible Object Storage
@@ -141,12 +146,16 @@ return [
     |--------------------------------------------------------------------------
     | Root Folder
     |--------------------------------------------------------------------------
-    | All media files are stored under this folder within the selected disk.
+    | The fallback folder within the selected disk; an empty string omits it.
     | Models define their own subfolder structure via collection path templates.
     | During in-place adoption, set this to an empty string when persisted folder
     | values already contain the complete path below the disk root.
     */
     'root_folder' => PackageEnvironment::get('NVL_MEDIA_ROOT_FOLDER', 'media'),
+
+    // Disk-specific relative roots override root_folder, including empty strings.
+    // Example: ['public' => 'media', 'private' => '', 's3' => 'assets/uploads'].
+    'root_folders' => [],
 
     'adoption' => [
         'path_sample_size' => 25,

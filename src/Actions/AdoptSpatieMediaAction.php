@@ -240,7 +240,7 @@ final readonly class AdoptSpatieMediaAction implements AdoptSpatieMediaContract
         $this->assertLength($hash, 255, 'hash');
         $this->assertLength($folder, 255, 'folder');
         $this->assertLength($disk, 25, 'disk');
-        $path = implode('/', array_filter([MediaPathResolver::storagePath($folder), $hash]));
+        $path = implode('/', array_filter([MediaPathResolver::storagePath($folder, $disk), $hash], static fn (string $part): bool => $part !== ''));
         MediaPathResolver::assertSafe($path);
         $exists = $this->existence->existsFresh($disk, $path);
         $digest = $this->firstString($row, ['digest']);

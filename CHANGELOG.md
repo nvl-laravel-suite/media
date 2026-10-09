@@ -5,6 +5,15 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Add disk-specific `root_folders` with explicit empty roots, and optional public/private upload disk defaults that preserve explicit selections and the existing single-disk fallback.
+
+### Changed
+
+- Resolve uploads, variations, replacements, multipart, owner-slot copies, catalog imports and adoption against the selected disk root.
+- Relocate and migrate originals and variations into destination roots with verified copies and rollback; validate storage configuration through Doctor and refuse whole-disk orphan deletion.
+
 ## [5.0.1] - 2026-10-08
 
 ### Changed

@@ -395,7 +395,8 @@ Soft-deleting an owner preserves associations for restoration. Force deletion fo
 
 | Method | Behavior |
 | --- | --- |
-| `useDisk(string $disk)` | Select a configured and allowlisted disk |
+| `useDisk(string $disk)` | Explicitly select a configured and allowlisted disk, ahead of visibility defaults |
+| `resolveDisk(?bool $isPublic = null)` | Resolve explicit slot selection or effective public/private upload default |
 | `path(string $template)` | Set a folder template |
 | `isPublic(bool $public = true)` | Set visibility |
 | `publicReusable()` | Public + shared |
@@ -425,7 +426,7 @@ Soft-deleting an owner preserves associations for restoration. Force deletion fo
 | `shouldConvertOriginal()` | Test whether original conversion is configured |
 | `getConversionDefinitions()` | Return named slot conversions |
 
-Path templates support `{model_type}`, `{model_id}`, `{id}`, `{collection}`, `{slug}`, `{date}`, `{year}`, `{month}`, `{day}`, and model attributes. The resolved folder remains constrained beneath `nvl-media.root_folder`.
+Path templates support `{model_type}`, `{model_id}`, `{id}`, `{collection}`, `{slug}`, `{date}`, `{year}`, `{month}`, `{day}`, and model attributes. The resolved logical folder stays below the selected disk root from `nvl-media.root_folders`, with `root_folder` as fallback. Empty templates are supported.
 
 ## `ConversionDefinition`
 
@@ -522,8 +523,8 @@ Consumers use Actions and authorized readers/scopes. The model exposes only the 
 | `humanReadableSize()` | Human-readable byte size |
 | `fileExistsOnDisk()` | Cached physical existence check |
 | `buildPath()` | Relative original object path |
-| `rootFolder()` | Configured root prefix |
-| `storagePath(string $folder)` | Safe root-prefixed path |
+| `rootFolder(?string $disk = null)` | Selected disk root prefix; null selects the generic Media default |
+| `storagePath(string $folder, ?string $disk = null)` | Disk-relative path with the selected root prefix |
 | `setIsPublicAttribute(bool $value)` | Synchronize boolean and enum visibility |
 | `setVisibilityAttribute(MediaVisibility|string $visibility)` | Synchronize enum and boolean visibility |
 | `newEloquentBuilder($query)` | Return the package `MediaBuilder` |

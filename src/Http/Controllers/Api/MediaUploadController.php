@@ -42,6 +42,7 @@ final class MediaUploadController extends Controller
         $slot = new MediaSlot($data->collection ?? 'default');
         $slot->useDisk($this->diskGuard->resolveAllowed(
             is_string($data->disk) ? $data->disk : null,
+            $data->isPublic,
         ));
         $slot->isPublic($data->isPublic);
 

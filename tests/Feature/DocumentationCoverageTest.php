@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Arr;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\MediaLibraryContract;
 use Nvl\Media\Conversions\ConversionDefinition;
@@ -141,6 +142,16 @@ test('the configuration reference covers every top-level key and environment var
     foreach (array_unique($environmentVariables[1]) as $environmentVariable) {
         expect($reference)
             ->toContain($environmentVariable);
+    }
+});
+
+test('the published common configuration includes every declared installation option', function (): void {
+    $root = dirname(__DIR__, 2);
+    $sections = json_decode(file_get_contents($root.'/resources/config/sections.json'), true, flags: JSON_THROW_ON_ERROR);
+    $published = require $root.'/resources/config/nvl-media.php';
+
+    foreach ($sections['configs']['nvl-media']['common'] as $key) {
+        expect(Arr::has($published, $key))->toBeTrue("Missing common published config: {$key}");
     }
 });
 

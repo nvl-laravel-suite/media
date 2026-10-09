@@ -100,9 +100,9 @@ final readonly class InitiateMultipartUploadAction implements InitiateMultipartU
 
         $folder = $this->paths->normalizeFolder($data->folder ?? 'pending');
         $objectKey = implode('/', array_filter([
-            $this->paths->storageFolder($folder),
+            $this->paths->storageFolder($folder, $data->disk),
             MediaHashGenerator::generateForExtension($fileType->extension),
-        ]));
+        ], static fn (string $part): bool => $part !== ''));
         $session = MediaMultipartUpload::query()->forceCreate([
             ...$this->tenantBoundary->attributes('media.multipart'),
             'disk' => $data->disk,

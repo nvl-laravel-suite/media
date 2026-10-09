@@ -138,9 +138,12 @@ class MediaImageVariation extends Model
         }
 
         $media = $this->resolveMedia();
-        $baseFolder = Media::storagePath($media->folder ?? '');
+        $baseFolder = is_string($media->storage_path) && $media->storage_path !== ''
+            ? dirname($media->storage_path)
+            : Media::storagePath($media->folder ?? '', $media->disk);
+        $baseFolder = $baseFolder === '.' ? '' : $baseFolder;
 
-        return implode('/', array_filter([$baseFolder, MediaPathResolver::conversionsFolder(), $this->getFilename()]));
+        return implode('/', array_filter([$baseFolder, MediaPathResolver::conversionsFolder(), $this->getFilename()], static fn (string $part): bool => $part !== ''));
     }
 
     /**

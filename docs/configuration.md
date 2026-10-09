@@ -122,7 +122,10 @@ redaction/workflow state, storage paths/hashes, or association metadata.
 | --- | --- | --- |
 | `nvl-media.disk` | `NVL_MEDIA_FILESYSTEM_DISK`, then `FILESYSTEM_DISK`, then `local` | Default media disk |
 | `nvl-media.s3.use_acl_visibility` | `false` | Apply per-object ACL visibility on intentionally ACL-enabled S3 buckets |
-| `nvl-media.root_folder` | `media` | Storage prefix and reconciliation boundary; may be empty only for a dedicated adoption disk whose persisted folders are already complete |
+| `nvl-media.public_disk` | `null` | Optional public-upload default; explicit upload/slot disks take precedence |
+| `nvl-media.private_disk` | `null` | Optional private-upload default; explicit upload/slot disks take precedence |
+| `nvl-media.root_folder` | `media` | Fallback disk-relative folder prefix; an empty string omits the prefix |
+| `nvl-media.root_folders` | `[]` | Disk-name-to-folder overrides; an explicit empty string means the disk root |
 | `nvl-media.adoption.path_sample_size` | `25` | Maximum live Media rows Doctor samples against physical storage; soft-deleted tombstones are excluded |
 | `nvl-media.default_path` | `misc` | Fallback folder template |
 | `nvl-media.conversions_folder` | `conversions` | Variation subdirectory |
@@ -138,7 +141,43 @@ NVL_MEDIA_ROOT_FOLDER=media
 
 Production S3-compatible disks should use `throw=true` and private objects at rest. Public media is delivered publicly by package policy; it does not require a `public-read` object ACL.
 
-Every resolved path is restricted beneath `nvl-media.root_folder`. The normal production value is a non-empty prefix on a shared disk. During controlled in-place adoption, an empty root is required when each persisted `folder` already contains the complete disk-relative path; use it only on a dedicated disk, and never use `/` or an untrusted value. Doctor compares representative live Media paths using `nvl-media.adoption.path_sample_size` so prefix drift fails before cutover. Soft-deleted tombstones are excluded because their canonical objects may have been intentionally removed after deletion commits.
+Laravel owns each disk's physical root, bucket and credentials in `config/filesystems.php`. Media folders are relative to that disk; Media never adds its physical root twice. Configure any number of disks independently:
+
+```php
+// config/nvl-media.php
+'disk' => 'private',
+'public_disk' => 'public',
+'private_disk' => 'private',
+'allowed_disks' => ['public', 'private', 's3'],
+'root_folder' => 'media',
+'root_folders' => [
+    'public' => 'media',
+    'private' => '',
+    's3' => 'assets/uploads',
+],
+```
+
+Define `private` and `s3` in `filesystems.php` before selecting them. Disk names do not determine visibility: the host must keep its private disk inaccessible through public web/CDN paths, while S3 can keep even public Media objects private at rest for route-backed delivery.
+
+Upload disk precedence is an explicit builder/terminal disk, an explicit slot `useDisk()` selection, the configured visibility default, then `nvl-media.disk` / `filesystems.default` / `local`. Null visibility defaults preserve existing single-disk behavior. They do not extend `allowed_disks`, move existing records, or automatically relocate an asset when its metadata visibility changes. Lower-level Actions and multipart requests with a required disk use that explicit disk.
+
+An absent disk entry inherits `root_folder`; `''` overrides it and omits the base folder. Null, non-string roots, dot segments, traversal, null bytes, drive letters and URL roots are rejected. Nested relative folders are supported on local and object-storage disks. Use `''`, not `/`, for a disk root. Slot templates and `toFolder()` remain subfolders below that prefix:
+
+```php
+$private = $owner->nvlMedia()->add($file)
+    ->asPublic(false)->toFolder('')->withoutVariations()->upload();
+// On the private disk: <opaque-name>.<extension>
+
+$invoice = $owner->nvlMedia()->add($file)
+    ->toDisk('s3')->toFolder('invoices')->withoutVariations()->upload();
+// On s3: assets/uploads/invoices/<opaque-name>.<extension>
+```
+
+Both the base prefix and the logical folder must be empty for originals directly at the disk root. Use an empty slot `path('')` or set `default_path` to `''` to make that the host default. Variations still use the configured conversions subfolder. Enabled tenancy always retains its `tenants/<tenant-id>` or `platform` partition, even when the base prefix is empty.
+
+Reconciliation uses the selected disk's prefix and active tenant partition. Whole-disk orphan deletion is always refused. With an empty standalone prefix, default `restrict_to_root=true` also refuses orphan inventory; explicit `restrict_to_root=false` permits read-only whole-disk inventory. Record-based verification, replacement and deletion still work at the disk root.
+
+Folder configuration describes existing physical layout; changing it does not move files. Keep the source disk's existing prefix until a controlled move completes. Configure a destination disk name and its desired prefix, preview `nvl:media:migrate-disk --from=<source> --to=<destination> --dry-run`, then run the move. Originals and variations use the destination prefix with checksum verification and rollback; identical prefixes retain existing paths. `--records-only` expects objects already copied to the displayed destination layout. Rebuild configuration caches and restart workers after changes; drain active multipart sessions before changing their disk prefix. Doctor validates `storage.configuration` and samples live persisted paths using `adoption.path_sample_size`; deleted tombstones are excluded.
 
 See [S3 and object storage](s3.md).
 
@@ -253,7 +292,7 @@ The portable driver performs moderate-dataset substring and JSON search. Bind or
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `nvl-media.reconciliation.orphan_age_minutes` | `1440` | Minimum orphan age |
-| `nvl-media.reconciliation.restrict_to_root` | `true` | Refuse inventory outside `nvl-media.root_folder` |
+| `nvl-media.reconciliation.restrict_to_root` | `true` | Require a selected disk/tenant prefix for orphan inventory; whole-disk orphan deletion is always refused |
 | `nvl-media.reconciliation.page_size` | `500` | Object inventory page size |
 
 Keep root restriction enabled. Cleanup remains opt-in at the command boundary and requires `--force` in production. Objects whose adapter cannot report reliable age remain report-only.

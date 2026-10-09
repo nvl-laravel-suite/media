@@ -56,3 +56,24 @@ it('round trips a multipart physical path through one logical tenant folder', fu
     expect($folder)->toBe('media/tenants/'.$scenario::A.'/multipart/session')
         ->not->toContain('/tenants/'.$scenario::A.'/tenants/');
 });
+
+it('preserves tenant partitions with a per-disk empty root and bounds orphan cleanup', function (): void {
+    $scenario = MediaTenancyScenario::install();
+    config(['nvl-media.root_folders' => ['tenant-disk' => '']]);
+    $mediaA = $scenario->upload($scenario::A, 'rootless tenant A');
+    $mediaB = $scenario->upload($scenario::B, 'rootless tenant B');
+    $pathA = $scenario->run($scenario::A, fn (): string => $mediaA->buildPath());
+    $pathB = $scenario->run($scenario::B, fn (): string => $mediaB->buildPath());
+    $orphanA = 'tenants/'.$scenario::A.'/orphan.txt';
+    Storage::disk('tenant-disk')->put($orphanA, 'orphan A');
+    Storage::disk('tenant-disk')->put('host.txt', 'host bytes');
+
+    $exitCode = $scenario->run($scenario::A, fn (): int => $this->artisan('nvl:media:reconcile', [
+        '--disk' => 'tenant-disk', '--orphans' => true, '--cleanup-orphans' => true, '--older-than' => 0,
+    ])->run());
+
+    expect($exitCode)->toBe(0)
+        ->and($pathA)->toStartWith('tenants/'.$scenario::A.'/')
+        ->and(Storage::disk('tenant-disk')->exists($orphanA))->toBeFalse();
+    Storage::disk('tenant-disk')->assertExists([$pathA, $pathB, 'host.txt']);
+});

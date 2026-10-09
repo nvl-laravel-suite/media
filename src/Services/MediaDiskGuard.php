@@ -37,13 +37,14 @@ final class MediaDiskGuard
      * Resolve a requested disk through Media defaults and assert it is allowed.
      *
      * @param  string|null  $disk  Explicit disk request, or null for the Media default
+     * @param  bool|null  $isPublic  Upload visibility when selecting a public/private default
      * @return string Resolved and allowed Media disk name
      *
      * @throws ValidationException When the resolved disk is not allowed for Media
      */
-    public function resolveAllowed(?string $disk = null): string
+    public function resolveAllowed(?string $disk = null, ?bool $isPublic = null): string
     {
-        $resolved = MediaDiskResolver::resolve($disk);
+        $resolved = MediaDiskResolver::resolve($disk, $isPublic);
 
         $this->assertAllowed($resolved);
 

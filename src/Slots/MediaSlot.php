@@ -7,7 +7,6 @@ namespace Nvl\Media\Slots;
 use Closure;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Enums\MimeType;
-use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaDiskResolver;
 
 /**
@@ -27,6 +26,10 @@ class MediaSlot
 
     /** @var string Storage disk name */
     public string $disk;
+
+    private string $defaultDisk;
+
+    private bool $hasExplicitDisk = false;
 
     /** @var string Path template with token interpolation (e.g. 'users/{id}/avatar') */
     public string $pathTemplate;
@@ -82,7 +85,9 @@ class MediaSlot
         public readonly string $name,
     ) {
         $this->disk = MediaDiskResolver::resolve();
-        $this->pathTemplate = MediaConfiguration::string('nvl-media.default_path', 'misc');
+        $this->defaultDisk = $this->disk;
+        $defaultPath = config('nvl-media.default_path', 'misc');
+        $this->pathTemplate = is_string($defaultPath) ? $defaultPath : 'misc';
         $this->sharingMode = self::SHARING_SHARED;
     }
 
@@ -94,8 +99,22 @@ class MediaSlot
     public function useDisk(string $disk): static
     {
         $this->disk = $disk;
+        $this->hasExplicitDisk = true;
 
         return $this;
+    }
+
+    /**
+     * Resolve this slot's explicit disk or the effective upload visibility default.
+     *
+     * @param  bool|null  $isPublic  Upload override, or null for this slot's visibility
+     * @return string Effective disk name, preserving explicit slot and direct property selections
+     */
+    public function resolveDisk(?bool $isPublic = null): string
+    {
+        return $this->hasExplicitDisk || $this->disk !== $this->defaultDisk
+            ? $this->disk
+            : MediaDiskResolver::resolve(null, $isPublic ?? $this->isPublic);
     }
 
     /**

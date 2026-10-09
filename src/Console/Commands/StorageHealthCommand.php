@@ -40,7 +40,7 @@ final class StorageHealthCommand extends Command
         {--public-private-routes : Verify public/private route-backed URL contracts}
         {--routes : Alias for --public-private-routes}
         {--include-trashed : Include soft-deleted media records}
-        {--orphans : Inventory unreferenced originals and variations under media.root_folder}
+        {--orphans : Inventory unreferenced objects beneath the selected disk media root}
         {--cleanup-orphans : Delete eligible orphan objects after inventory}
         {--older-than=1440 : Minimum orphan age in minutes}
         {--force : Required with --cleanup-orphans in production}
@@ -595,7 +595,7 @@ final class StorageHealthCommand extends Command
     }
 
     /**
-     * Inventory or explicitly clean unreferenced objects beneath media.root_folder.
+     * Inventory or explicitly clean unreferenced objects beneath the selected disk's Media root.
      *
      * @return array{
      *   candidates: int,
@@ -610,7 +610,7 @@ final class StorageHealthCommand extends Command
         int $olderThanMinutes,
         bool $cleanup,
     ): array {
-        $root = $this->orphanInventoryRoot();
+        $root = $this->orphanInventoryRoot($disk);
         $restrictToRoot = (bool) config('nvl-media.reconciliation.restrict_to_root', true);
         $report = [
             'candidates' => 0,
@@ -620,8 +620,8 @@ final class StorageHealthCommand extends Command
             'warnings' => [],
         ];
 
-        if ($restrictToRoot && $root === '') {
-            $report['failures'][] = 'Orphan reconciliation requires a non-empty media.root_folder.';
+        if ($root === '' && ($restrictToRoot || $cleanup)) {
+            $report['failures'][] = 'Orphan reconciliation requires a non-empty media root folder for the selected disk; whole-disk cleanup is refused.';
 
             return $report;
         }
@@ -697,10 +697,15 @@ final class StorageHealthCommand extends Command
 
     /**
      * Resolve the only storage prefix this execution may inventory destructively.
+     *
+     * @param  string  $disk  Selected filesystem disk
+     * @return string Disk-specific root restricted to the active tenant when enabled
+     *
+     * @throws TenantContextMissing When tenant reconciliation has no active tenant
      */
-    private function orphanInventoryRoot(): string
+    private function orphanInventoryRoot(string $disk): string
     {
-        $root = trim(MediaConfiguration::string('nvl-media.root_folder', 'media'), '/');
+        $root = MediaPathResolver::rootFolder($disk);
         if (config('nvl-tenancy.enabled') !== true) {
             return $root;
         }
@@ -710,7 +715,7 @@ final class StorageHealthCommand extends Command
             throw new TenantContextMissing('Tenant orphan reconciliation requires one active tenant context.');
         }
 
-        return implode('/', array_filter([$root, 'tenants', $snapshot->tenantId->value]));
+        return implode('/', array_filter([$root, 'tenants', $snapshot->tenantId->value], static fn (string $part): bool => $part !== ''));
     }
 
     /**

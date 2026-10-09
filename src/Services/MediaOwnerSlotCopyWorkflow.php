@@ -294,7 +294,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
                 null,
                 true,
             ),
-            disk: $slotDefinition->disk,
+            disk: $slotDefinition->resolveDisk(),
             model: $owner,
             slot: $slotDefinition,
             fileName: $source->filename,
@@ -414,7 +414,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
             || ! hash_equals(Str::lower($source->digest), Str::lower($copy->digest))
             || $source->size !== $copy->size
             || $source->filename !== $copy->filename
-            || $copy->disk !== $slot->disk
+            || $copy->disk !== $slot->resolveDisk()
             || (bool) $copy->is_public !== $slot->isPublic) {
             throw new MediaUploadException(
                 'Canonical owner-slot copy ingestion returned an invalid Media identity.',

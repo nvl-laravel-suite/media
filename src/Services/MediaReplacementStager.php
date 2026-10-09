@@ -70,7 +70,7 @@ final class MediaReplacementStager
         );
 
         $hash = MediaHashGenerator::generateForExtension($validatedFile->extension);
-        $storageFolder = $this->pathResolver->storageFolder($media->folder ?? '');
+        $storageFolder = $this->pathResolver->storageFolder($media->folder ?? '', $media->disk);
         $stored = $this->files->store(
             $file,
             $media->disk,

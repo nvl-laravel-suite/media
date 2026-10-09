@@ -480,6 +480,28 @@ S3 objects are private at rest by default—even when the Media record is public
 
 See [S3 and object storage](docs/s3.md) for IAM, bucket, endpoint, URL, cache/CDN, checksum, multipart, and operational guidance.
 
+## Multiple disks and optional folders
+
+Define filesystem disks in the host's `config/filesystems.php`. In `config/nvl-media.php`, keep `root_folder` as the fallback and override it per disk:
+
+```php
+'public_disk' => 'public',
+'private_disk' => 'private',
+'allowed_disks' => ['public', 'private', 's3'],
+'root_folder' => 'media',
+'root_folders' => [
+    'public' => 'media',
+    'private' => '',
+    's3' => 'assets/uploads',
+],
+```
+
+Configure the named disks in Laravel first. A missing override inherits the global prefix; `''` means no base folder. For originals directly at the private disk root, use `asPublic(false)->toFolder('')->upload()` or an empty slot path. A public upload uses `public_disk`; explicit builder, terminal and slot disk selections win. Both visibility defaults are null unless the host enables them, preserving existing behavior.
+
+Uploads, replacements, variations, multipart completion, owner-slot copies, adoption, relocation and reconciliation use the selected disk's path rules. Tenant partitions remain mandatory. Whole-disk orphan deletion is refused; ordinary record-based deletion still works. Changing root configuration does not move existing objects. Use the controlled disk migration workflow before changing a live layout.
+
+See [Storage configuration](docs/configuration.md#storage) for complete examples, precedence and migration guidance.
+
 ## URLs and delivery
 
 Use media URL/path APIs rather than concatenating disk paths:
@@ -565,7 +587,7 @@ php artisan nvl:media:owner-slots:prune --days=7 --chunk=500
 
 Run storage health before and after a disk migration. Back up metadata and verify target-disk credentials before production moves.
 
-`nvl:media:reconcile` is read-only by default. `--orphans` inventories paginated unreferenced objects below `nvl-media.root_folder`; `--cleanup-orphans` is the explicit deletion switch, `--older-than` protects recent work, and production cleanup additionally requires `--force`. Objects with unreliable age remain report-only. Files referenced only by soft-deleted media are candidates while their database tombstones remain. Disk migration supports dry run, association scopes, records-only moves, and copy verification.
+`nvl:media:reconcile` is read-only by default. `--orphans` inventories paginated unreferenced objects below the selected disk prefix and active tenant partition; `--cleanup-orphans` is the explicit deletion switch, `--older-than` protects recent work, and production cleanup additionally requires `--force`. Objects with unreliable age remain report-only. Files referenced only by soft-deleted media are candidates while their database tombstones remain. Disk migration supports dry run, association scopes, records-only moves, and copy verification.
 
 Every option, safety rule, exit status, and production sequence is documented in [Command reference](docs/commands.md).
 

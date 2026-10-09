@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use InvalidArgumentException;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\MediaAuthorization;
@@ -21,10 +22,12 @@ use Nvl\Media\Data\MediaDoctorCheckData;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\ImageFormat;
 use Nvl\Media\Enums\MediaImageDriver;
+use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Media\Support\MediaDiskResolver;
 use Nvl\Media\Support\MediaImageConfiguration;
 use Nvl\Media\Support\MediaQueueConfiguration;
 use Nvl\Support\Config\PackageOptions;
@@ -58,6 +61,7 @@ final readonly class MediaDoctor
             ...$this->tenancyChecks(),
             $this->migrationOwnershipCheck(),
             ...$this->diskChecks($production),
+            $this->storageConfigurationCheck(),
             $this->representativeStoragePathCheck($production),
             ...$this->integrityChecks($production),
             ...$this->imageChecks(),
@@ -69,6 +73,39 @@ final readonly class MediaDoctor
             ...$this->bindingChecks($production),
             ...$this->multipartChecks($production),
         ];
+    }
+
+    /**
+     * Validate visibility disks and per-disk prefixes without creating files or adapters.
+     *
+     * @return MediaDoctorCheckData Machine-readable storage configuration result
+     */
+    private function storageConfigurationCheck(): MediaDoctorCheckData
+    {
+        try {
+            $guard = new MediaDiskGuard;
+            foreach ([true, false] as $isPublic) {
+                $disk = MediaDiskResolver::resolve(null, $isPublic);
+                if (! $guard->isAllowed($disk) || config("filesystems.disks.{$disk}") === null) {
+                    throw new InvalidArgumentException("Visibility disk [{$disk}] must be defined and allowlisted.");
+                }
+                MediaPathResolver::rootFolder($disk);
+            }
+            $roots = config('nvl-media.root_folders', []);
+            if (! is_array($roots)) {
+                throw new InvalidArgumentException('nvl-media.root_folders must be a disk-to-folder map.');
+            }
+            foreach ($roots as $disk => $root) {
+                if (! is_string($disk) || $disk === '' || config("filesystems.disks.{$disk}") === null) {
+                    throw new InvalidArgumentException('Every root_folders key must name a defined filesystem disk.');
+                }
+                MediaPathResolver::rootFolder($disk);
+            }
+
+            return new MediaDoctorCheckData('storage.configuration', 'error', true, 'Visibility disks and disk-relative media roots are valid.');
+        } catch (InvalidArgumentException|MediaUploadException $exception) {
+            return new MediaDoctorCheckData('storage.configuration', 'error', false, $exception->getMessage());
+        }
     }
 
     /** Report optional S3 readiness from declared feature selection without resolving an adapter. */
@@ -632,18 +669,28 @@ final readonly class MediaDoctor
         $missing = [];
 
         foreach ($samples as $media) {
+            $path = null;
             try {
-                if (! $this->existence->existsFresh($media->disk, $media->buildPath())) {
-                    $missing[] = $media->disk.':'.$media->buildPath();
+                $path = $media->buildPath();
+                if (! $this->existence->existsFresh($media->disk, $path)) {
+                    $missing[] = $media->disk.':'.$path;
                 }
             } catch (Throwable $exception) {
-                $missing[] = $media->disk.':'.$media->buildPath().' ('.$exception->getMessage().')';
+                $missing[] = $media->disk.':'.($path ?? 'media-'.$media->id).' ('.$exception->getMessage().')';
             }
         }
 
         $passed = $missing === [];
-        $root = MediaPathResolver::rootFolder();
-        $rootLabel = $root === '' ? '<empty>' : $root;
+        try {
+            $roots = [];
+            foreach ($samples as $media) {
+                $root = MediaPathResolver::rootFolder($media->disk);
+                $roots[$media->disk] = $media->disk.'='.($root === '' ? '<empty>' : $root);
+            }
+            $rootLabel = implode(', ', $roots);
+        } catch (InvalidArgumentException|MediaUploadException $exception) {
+            return new MediaDoctorCheckData('storage.persisted_paths', 'error', false, $exception->getMessage());
+        }
 
         return new MediaDoctorCheckData(
             'storage.persisted_paths',
