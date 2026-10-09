@@ -1,6 +1,6 @@
 ---
 name: nvl-media
-description: Implement, integrate, test, or review nvl/media in Laravel 13. Use for private single-file media, reusable public assets, uploads, multipart object storage, scanning, checksum deduplication, associations, delivery, ranges, localized metadata, image variations, reconciliation, or media authorization.
+description: Use when implementing, integrating, testing, or reviewing nvl/media in Laravel 13, including multiple disks, optional folders, private files, reusable public assets, uploads, multipart storage, associations, delivery, localized metadata, image variations, reconciliation, or authorization.
 ---
 
 # NVL Media
@@ -54,6 +54,33 @@ The supported major 5 production profile is PHP 8.3/8.4, Laravel 13, PostgreSQL,
 - Return only the nine approved original-asset item fields and object maps, including requested empty slots and numeric names. Private URLs remain null; obtain Download links separately through existing explicitly authorized delivery.
 - Load no variations. Resolve localized title/alt/caption through pure `TranslationResolver` on bounded preloaded rows; full-model translated accessors and `MediaAssetService::resolve` do not preserve this batch query budget.
 - Verify fixed total query counts at 1/25/100, dense storage transfer ceilings, nested OR containment, canonical forged-owner denial, supported native drivers, and actual Spatie coexistence.
+
+## Configure disks and folders
+
+Laravel's `config/filesystems.php` owns disk roots, buckets and credentials. In `config/nvl-media.php`, choose relative Media prefixes independently of those physical roots. Merge these entries into the host config after defining the named disks:
+
+```php
+return [
+    'disk' => 'private',
+    'public_disk' => 'public',
+    'private_disk' => 'private',
+    'allowed_disks' => ['public', 'private', 's3'],
+    'root_folder' => 'media',
+    'root_folders' => [
+        'public' => 'media',
+        'private' => '',
+        's3' => 'assets/uploads',
+    ],
+    'default_path' => '',
+];
+```
+
+- Upload disk precedence: explicit builder/terminal disk, explicit slot `useDisk()`, selected `public_disk`/`private_disk`, then `disk` / `filesystems.default` / `local`. Visibility defaults ship as null; they do not extend `allowed_disks`. Required Action/multipart disks stay explicit. Use `MediaSlot::resolveDisk()` for the effective slot disk.
+- A missing `root_folders[disk]` entry inherits `root_folder`; `''` omits the base prefix. Use safe relative folders, never `/`, dot segments, traversal, null bytes, drive letters or URLs. Disk names do not grant visibility; keep private disks inaccessible through public web/CDN paths.
+- Originals sit directly at the disk root only when the base prefix and logical folder are both empty. Use `toFolder('')`, slot `path('')`, or `default_path => ''`; variations retain `conversions_folder`. Enabled tenancy retains `tenants/<tenant-id>` or `platform` even with an empty prefix.
+- Use package path/URL helpers with the actual disk; never concatenate prefixes in consumers. Uploads, variations, replacement, multipart, owner-slot copies and adoption use that disk's layout. Metadata visibility updates do not relocate existing files.
+- Configuration changes do not move objects. Keep source roots aligned with existing files, define a destination disk/prefix, then preview and run `nvl:media:migrate-disk --from=<source> --to=<destination>`; different roots rewrite original/variation paths, equal roots preserve them. `--records-only` expects an external copy into the destination layout. Drain multipart sessions before prefix changes, rebuild config caches and restart workers.
+- Reconcile each actual disk explicitly with `--disk`. Whole-disk orphan cleanup is refused. An empty standalone prefix with `restrict_to_root=true` also refuses orphan inventory; `false` permits read-only inventory. Record-based checks/deletion and bounded tenant cleanup remain available. Doctor's `storage.configuration` and `storage.persisted_paths` checks validate configuration and live objects. See `configuration.md#storage` and `commands.md` before rollout.
 
 ## Upload and finalize
 

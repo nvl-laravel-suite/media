@@ -13,6 +13,7 @@ All notable changes to `nvl/media` are documented here.
 
 - Resolve uploads, variations, replacements, multipart, owner-slot copies, catalog imports and adoption against the selected disk root.
 - Relocate and migrate originals and variations into destination roots with verified copies and rollback; validate storage configuration through Doctor and refuse whole-disk orphan deletion.
+- Teach per-disk configuration, empty logical folders, migration and reconciliation safeguards in the shipped agent skill and operational references.
 
 ## [5.0.1] - 2026-10-08
 

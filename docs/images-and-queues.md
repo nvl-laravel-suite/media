@@ -160,7 +160,7 @@ Changing content or replacing a source increments the media version/revision. UR
 4. Regenerate one preset and disk first.
 5. Verify output dimensions, MIME, file size, URL, ETag, and visibility.
 6. Regenerate the remaining catalog through the durable queue.
-7. Run `nvl:media:reconcile --production --orphans`.
+7. Run `nvl:media:reconcile --production --disk=<disk>` for each disk used by the affected media. Add `--orphans` only when that disk has a bounded prefix, or after deliberately enabling read-only whole-disk inventory. See [Storage configuration](configuration.md#storage) for empty-prefix safeguards.
 
 Never change a naming pattern and delete old objects in the same irreversible deployment.
 

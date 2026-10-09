@@ -80,10 +80,11 @@ permission to delete database records. Start with read-only diagnostics:
 
 ```bash
 php artisan nvl:media:doctor --strict --format=json
-php artisan nvl:media:reconcile --production --orphans
+php artisan nvl:media:reconcile --production --disk=private
 ```
 
-Verify the configured disk and `root_folder`, the row's persisted folder and
+Replace `private` with the affected row's disk. Verify that disk's
+`root_folders` entry or `root_folder` fallback, the row's persisted folder and
 hash, backups or object-store history, and every association/current use. Restore
 the original object whenever possible. An intentional relocation must use the
 Media relocation or migration API; never update a persisted path directly. If

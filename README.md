@@ -658,6 +658,7 @@ php artisan nvl:data:types:check
 ```
 
 `nvl-media-skills` publishes current agent guidance into `.agents/skills/nvl-media`.
+After upgrading Media, review local skill customizations and refresh that copy with `php artisan vendor:publish --tag=nvl-media-skills --force`. Suite-managed installations should use the Suite's managed skill publisher to update unchanged owned skills while retaining local edits. The skill covers per-disk prefixes, empty folders, visibility defaults and controlled migration.
 
 ```bash
 composer install

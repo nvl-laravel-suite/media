@@ -11,6 +11,7 @@ use Nvl\Media\MediaOwner;
 use Nvl\Media\MediaRegistration;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Slots\MediaSlot;
+use Nvl\Media\Support\MediaDiskResolver;
 use Nvl\Media\Traits\InteractsWithMedia;
 use Nvl\Media\Traits\InteractsWithNvlMedia;
 
@@ -33,6 +34,27 @@ test('canonical documentation files exist and are linked from the readme', funct
         expect($root.'/'.$document)->toBeFile()
             ->and($readme)->toContain("]({$document})");
     }
+});
+
+test('the packaged storage skill example uses supported configuration and resolves its disk layouts', function (): void {
+    $root = dirname(__DIR__, 2);
+    $skill = (string) file_get_contents($root.'/resources/boost/skills/nvl-media/SKILL.md');
+    expect(preg_match('/```php\n(.*?)\n```/s', $skill, $example))->toBe(1);
+
+    $configuration = eval($example[1]);
+    $defaults = require $root.'/config/nvl-media.php';
+    expect($configuration)->toBeArray();
+    foreach (array_keys($configuration) as $key) {
+        expect($defaults)->toHaveKey($key);
+        config(['nvl-media.'.$key => $configuration[$key]]);
+    }
+
+    expect(MediaDiskResolver::resolve(null, true))->toBe('public')
+        ->and(MediaDiskResolver::resolve(null, false))->toBe('private')
+        ->and(Media::storagePath('', 'private'))->toBe('')
+        ->and(Media::storagePath('invoices', 's3'))->toBe('assets/uploads/invoices')
+        ->and(Media::storagePath('avatars', 'public'))->toBe('media/avatars')
+        ->and((new MediaSlot('documents'))->pathTemplate)->toBe('');
 });
 
 test('the PHP reference covers every public integration method', function (): void {

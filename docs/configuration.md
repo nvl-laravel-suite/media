@@ -127,7 +127,7 @@ redaction/workflow state, storage paths/hashes, or association metadata.
 | `nvl-media.root_folder` | `media` | Fallback disk-relative folder prefix; an empty string omits the prefix |
 | `nvl-media.root_folders` | `[]` | Disk-name-to-folder overrides; an explicit empty string means the disk root |
 | `nvl-media.adoption.path_sample_size` | `25` | Maximum live Media rows Doctor samples against physical storage; soft-deleted tombstones are excluded |
-| `nvl-media.default_path` | `misc` | Fallback folder template |
+| `nvl-media.default_path` | `misc` | Fallback logical folder template; an empty string omits the subfolder |
 | `nvl-media.conversions_folder` | `conversions` | Variation subdirectory |
 | `nvl-media.allowed_disks` | `['local', 'public']` | Security allowlist for HTTP and direct uploads |
 

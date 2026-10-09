@@ -6,6 +6,8 @@ The new `root_folders` map defaults to empty; `public_disk` and `private_disk` d
 
 Keep roots aligned with existing objects: changing a prefix does not move files. Configure a separate destination disk/prefix and use the migration dry run, verified move and reconciliation before cutover. Equal prefixes retain original paths; different prefixes relocate originals and variations. Drain multipart sessions, rebuild configuration caches and restart workers before applying a layout change. Whole-disk orphan cleanup is refused; tenant cleanup remains bounded to its active partition.
 
+For originals directly at a standalone disk root, both the selected root prefix and logical folder must be empty; `default_path => ''` is now honored. Variations and enabled tenant partitions retain their subfolders. Refresh the published `nvl-media` agent skill after upgrading; review local edits before using `vendor:publish --tag=nvl-media-skills --force`, or let the Suite skill manager safely update its owned copy.
+
 ## Consumer contracts, committed events and runtime policy (5.x)
 
 Prefer focused public interfaces in constructor injection; native implementations remain container defaults and host prebindings win. Returned models are documented identity/data handles: use package contracts for reads/writes and capability-specific batch readers instead of direct package queries. Enable the shipped Core PHPStan include in your host; do not invoke the suite workbench static audit command in a consumer.
