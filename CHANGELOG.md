@@ -5,6 +5,8 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-10-09
+
 ### Added
 
 - Add disk-specific `root_folders` with explicit empty roots, and optional public/private upload disk defaults that preserve explicit selections and the existing single-disk fallback.

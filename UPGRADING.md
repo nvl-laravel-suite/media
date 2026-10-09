@@ -1,6 +1,6 @@
 # Upgrading NVL Media
 
-## Per-disk folders and visibility defaults
+## Per-disk folders and visibility defaults (5.1.0)
 
 The new `root_folders` map defaults to empty; `public_disk` and `private_disk` default to null. Existing disk and folder behavior remains unchanged until configured. An explicit empty per-disk folder omits the base prefix. See [Storage configuration](docs/configuration.md#storage).
 
