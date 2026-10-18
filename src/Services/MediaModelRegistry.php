@@ -21,13 +21,15 @@ final class MediaModelRegistry
     /** @var class-string<Media>|null */
     private ?string $media = null;
 
+    private bool $validated = false;
+
     /** Retain deployment configuration and the shared identity registry. */
     public function __construct(private readonly Repository $configuration, private readonly OwnerRegistry $identities) {}
 
-    /** Resolve and freeze the validated concrete Media class before resource compilation.
+    /** Resolve and freeze the concrete Media class before resource compilation. @internal
      * @return class-string<Media>
      */
-    public function mediaClass(): string
+    public function prepare(): string
     {
         if ($this->media !== null) {
             return $this->media;
@@ -39,6 +41,21 @@ final class MediaModelRegistry
         $class = (new ConfiguredModelResolver)->resolve($configured, Media::class);
         if (! in_array($class::ownershipDefinition()->strategy, ['unscoped', 'column', 'pivot'], true)) {
             throw new OwnershipConfigurationInvalid('Media roots require a native column or concrete primary pivot.');
+        }
+        $this->identities->registerReplacement('media.assets', Media::class, $class);
+        $this->media = $class;
+
+        return $class;
+    }
+
+    /** Validate native capabilities after Laravel installs Eloquent's dispatcher.
+     * @return class-string<Media>
+     */
+    public function mediaClass(): string
+    {
+        $class = $this->prepare();
+        if ($this->validated) {
+            return $class;
         }
         $model = new $class;
         $base = new Media;
@@ -53,11 +70,10 @@ final class MediaModelRegistry
             }
         }
         if (! $model->hasGlobalScope(OwnershipScope::class)
-            || $model->getKeyType() !== 'string' || $model->getIncrementing()) {
+            || $model->getKeyName() !== $base->getKeyName() || $model->getKeyType() !== 'string' || $model->getIncrementing()) {
             throw new OwnershipConfigurationInvalid('Configured Media models must retain the builder, UUID and ownership capabilities.');
         }
-        $this->identities->registerReplacement('media.assets', Media::class, $class);
-        $this->media = $class;
+        $this->validated = true;
 
         return $class;
     }

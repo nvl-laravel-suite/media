@@ -22,7 +22,7 @@ it('uses the exact configured subclass in uploads relations and translation decl
     Storage::fake('public');
     $owner = TestMediaModel::query()->create(['name' => 'Consumer']);
     $media = app(UploadMediaAction::class)->execute(UploadedFile::fake()->createWithContent('private.txt', 'private content'), 'public', $owner, new MediaSlot('documents'), 'private.txt', skipAutoVariations: true, uploadedBy: '1');
-    expect($media::class)->toBe(ConfiguredConsumerMedia::class)
+    expect($media->filename)->toBe('configured:private.txt')->and($media::class)->toBe(ConfiguredConsumerMedia::class)
         ->and(app(MediaModelRegistry::class)->mediaClass())->toBe(ConfiguredConsumerMedia::class)
         ->and(Media::factory()->make()::class)->toBe(ConfiguredConsumerMedia::class)
         ->and((new Media)->resolveRouteBinding($media->id)::class)->toBe(ConfiguredConsumerMedia::class)

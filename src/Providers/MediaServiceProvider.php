@@ -240,7 +240,7 @@ final class MediaServiceProvider extends ServiceProvider implements OwnershipInt
 
         $this->mergeConfiguration();
         $this->app->singleton(MediaModelRegistry::class);
-        $this->app->booting(fn () => $this->app->make(MediaModelRegistry::class)->mediaClass());
+        $this->app->booting(fn () => $this->app->make(MediaModelRegistry::class)->prepare());
         $this->app->register(RouteServiceProvider::class);
         $this->app->singleton(MediaTransactionRollbackRegistry::class);
         $this->app->bind(MediaOwnerFactory::class, fn (): MediaOwnerFactory => new MediaOwnerFactory(
