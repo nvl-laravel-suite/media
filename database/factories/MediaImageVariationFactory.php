@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use InvalidArgumentException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
+use Nvl\Media\Services\MediaModelRegistry;
 
 /**
  * Builds MediaImageVariation fixture rows and their declared package parents.
@@ -39,7 +40,7 @@ final class MediaImageVariationFactory extends Factory
             }
 
             if ($model->getAttribute('media_id') !== null) {
-                $parent = Media::query()->findOrFail(FactoryGuard::identifier($model->getAttribute('media_id')));
+                $parent = MediaModelRegistry::query()->findOrFail(FactoryGuard::identifier($model->getAttribute('media_id')));
                 FactoryGuard::parent($parent, $model);
                 FactoryGuard::inherit($model, $parent, true);
                 if ($model->source_revision !== $parent->revision) {
@@ -57,7 +58,7 @@ final class MediaImageVariationFactory extends Factory
     public function definition(): array
     {
         return [
-            'media_id' => Media::factory()->state(['extension' => 'jpg', 'mime_type' => 'image/jpeg', 'type' => 'image']),
+            'media_id' => MediaModelRegistry::newInstance()::factory()->state(['extension' => 'jpg', 'mime_type' => 'image/jpeg', 'type' => 'image']),
             'label' => 'thumbnail',
             'width' => 100,
             'height' => 100,
@@ -65,7 +66,7 @@ final class MediaImageVariationFactory extends Factory
             'format' => 'jpg',
             'quality' => 80,
             'status' => 'pending',
-            'source_revision' => fn (array $attributes): int => $attributes['media_id'] === null ? 1 : Media::query()->findOrFail(FactoryGuard::identifier($attributes['media_id']))->revision,
+            'source_revision' => fn (array $attributes): int => $attributes['media_id'] === null ? 1 : MediaModelRegistry::query()->findOrFail(FactoryGuard::identifier($attributes['media_id']))->revision,
         ];
     }
 

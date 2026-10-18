@@ -16,7 +16,8 @@ use Nvl\Media\Contracts\UploadMediaContract;
 use Nvl\Media\MediaAdder;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Media\Ownership\MediaOwnershipParentResolver;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 
 /**
  * Builds model-facing media adders from supported source inputs.
@@ -35,8 +36,8 @@ final readonly class MediaModelInteractionService
         private MediaMutationLock $mutationLock,
         private MediaOwnedSourceLifecycle $ownedSourceLifecycle,
         private MediaTemporaryFileRegistry $temporaryFiles,
-        private MediaTenantOwnerResolver $tenantOwners,
-        private TenantBoundary $tenantBoundary,
+        private MediaOwnershipParentResolver $tenantOwners,
+        private OwnershipBoundary $tenantBoundary,
     ) {}
 
     /** Assert that the model and loaded asset belong to the active boundary. */

@@ -13,10 +13,14 @@ use Nvl\Media\Enums\MediaOwnerSlotOperationType;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Ownership\Contracts\Ownable;
+use Nvl\Support\Ownership\Traits\HasOwnership;
 
 /**
- * Durable idempotency state for one Media owner-slot mutation.
+ * @property-read string|null $owner_scope_key Technical immutable partition.
+ * @property-read string|null $owner_reference Captured scalar reference on operational roots.
  *
+ * Durable idempotency state for one Media owner-slot mutation.
  * @property string $id
  * @property string|null $tenant_id Canonical tenant UUID inherited from owner.
  * @property string $idempotency_key
@@ -36,9 +40,10 @@ use Nvl\Support\Config\PackageStorage;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-final class MediaOwnerSlotOperation extends Model
+final class MediaOwnerSlotOperation extends Model implements Ownable
 {
     use GuardsTenantOwnership;
+    use HasOwnership;
     use HasUuids;
 
     /** @var list<string> */

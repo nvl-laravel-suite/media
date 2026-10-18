@@ -637,3 +637,12 @@ Never use a synthetic library `upload` script or a partially initialized real ad
 `MediaUploaded` is the canonical upload event with immutable `mediaId` and `schemaVersion` fields. `MediaUploadedEvent` remains a deprecated PHP alias; event fakes should use the canonical class.
 
 The focused contract catalog also includes `AbortMultipartUploadContract`, `AdoptSpatieMediaContract`, `BulkDeleteMediaContract`, `BulkMoveMediaContract`, `BulkTagMediaContract`, `ClearOwnerMediaSlotContract`, `CompleteMultipartUploadContract`, `CopyOwnerMediaSlotContract`, `FinalizeMediaScanContract`, `GenerateImageVariationContract`, `GetOwnerMediaSlotContract`, `GrantMediaToTenantContract`, `ImportPlatformMediaContract`, `InitiateMultipartUploadContract`, `MutateMediaTagsContract`, `RelocateMediaContract`, `RenameMediaContract`, `ReplaceMediaFileContract`, `RevokeMediaTenantGrantContract`, `SignMultipartPartContract`, `UpdateMediaMetadataContract`. Each operation delegates to its bound implementation and preserves the package ownership and lifecycle checks.
+
+## Ownership and catalog policy
+
+Bind `MediaCatalogAccess` to a host policy implementing `assertCanGrant()` and
+`assertCanRevoke()`; the package denies capability issuance by default.
+`MediaOwnerCatalog` issues recipient-owned grants for an explicitly enabled
+central source catalog. Grants permit bounded inspection and independent copies;
+they do not give recipients ownership of the central row. Existing V1 tenant
+catalog contracts remain compatibility adapters during migration.

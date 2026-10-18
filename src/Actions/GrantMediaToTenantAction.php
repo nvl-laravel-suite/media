@@ -11,7 +11,9 @@ use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Events\MediaCatalogGrantAudited;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaTenantGrant;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Support\Events\DomainEventDispatcher;
+use Nvl\Support\Ownership\Services\OwnershipScope;
 use Nvl\Support\Tenancy\Contracts\TenantContext;
 use Nvl\Support\Tenancy\Contracts\TenantDirectory;
 use Nvl\Support\Tenancy\Enums\TenantContextMode;
@@ -35,20 +37,20 @@ final readonly class GrantMediaToTenantAction implements GrantMediaToTenantContr
             throw new TenantBoundaryViolation('Media grants require platform context and an active recipient.');
         }
 
-        return (new Media)->getConnection()->transaction(function () use ($mediaId, $recipient, $sourceRevision): MediaTenantGrant {
-            (new Media)->getConnection()->table(MediaTables::get(MediaTables::TenantGrantLocks))->insertOrIgnore([
+        return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($mediaId, $recipient, $sourceRevision): MediaTenantGrant {
+            (MediaModelRegistry::newInstance())->getConnection()->table(MediaTables::get(MediaTables::TenantGrantLocks))->insertOrIgnore([
                 'tenant_id' => $recipient->value,
                 'media_id' => $mediaId,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            (new Media)->getConnection()->table(MediaTables::get(MediaTables::TenantGrantLocks))
+            (MediaModelRegistry::newInstance())->getConnection()->table(MediaTables::get(MediaTables::TenantGrantLocks))
                 ->where('tenant_id', $recipient->value)
                 ->where('media_id', $mediaId)
                 ->lockForUpdate()
                 ->first();
 
-            $source = Media::withoutGlobalScope('tenant')
+            $source = MediaModelRegistry::query()->withoutGlobalScope(OwnershipScope::class)
                 ->whereKey($mediaId)
                 ->whereNull('tenant_id')
                 ->where('ownership_key', 'platform')

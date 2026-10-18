@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Actions;
 
-use Illuminate\Support\Facades\DB;
 use Nvl\Media\Contracts\AbortMultipartUploadContract;
 use Nvl\Media\Contracts\MultipartUploadGateway;
 use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Enums\MediaMultipartStatus;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\MediaMultipartUpload;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMultipartLock;
 use Nvl\Media\Services\MediaMultipartSessionMapper;
 
@@ -47,7 +47,7 @@ final readonly class AbortMultipartUploadAction implements AbortMultipartUploadC
 
             $this->gateway->abort($this->sessionMapper->toData($persisted));
 
-            DB::transaction(function () use ($persisted): void {
+            MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($persisted): void {
                 $locked = MediaMultipartUpload::query()
                     ->lockForUpdate()
                     ->findOrFail($persisted->id);

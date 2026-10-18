@@ -17,6 +17,7 @@ use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaFileExistence;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaPathResolver;
 use stdClass;
 use Throwable;
@@ -137,7 +138,7 @@ final readonly class AdoptSpatieMediaAction implements AdoptSpatieMediaContract
         }
 
         if ($apply) {
-            DB::transaction(function () use (
+            MediaModelRegistry::newInstance()->getConnection()->transaction(function () use (
                 $mediaRows,
                 $associationRows,
                 $translationRows,

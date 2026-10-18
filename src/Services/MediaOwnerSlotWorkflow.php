@@ -97,7 +97,7 @@ final readonly class MediaOwnerSlotWorkflow
             }
 
             if ($claim?->replayed === true) {
-                $replayMedia = Media::withTrashed()->find($mediaId);
+                $replayMedia = MediaModelRegistry::query()->withTrashed()->find($mediaId);
                 $this->authorize(
                     $actor,
                     MediaAbility::Associate,
@@ -135,7 +135,7 @@ final readonly class MediaOwnerSlotWorkflow
 
                     return $this->mutationLock->executeMany(
                         $mediaIds,
-                        fn (): MediaLibraryItem => DB::transaction(
+                        fn (): MediaLibraryItem => MediaModelRegistry::newInstance()->getConnection()->transaction(
                             fn (): MediaLibraryItem => $this->replaceInTransaction(
                                 actor: $actor,
                                 owner: $owner,
@@ -281,7 +281,7 @@ final readonly class MediaOwnerSlotWorkflow
                             $slot,
                             $slotDefinition,
                         ): array {
-                            return DB::transaction(
+                            return MediaModelRegistry::newInstance()->getConnection()->transaction(
                                 function () use (
                                     $actor,
                                     $claim,
@@ -291,7 +291,7 @@ final readonly class MediaOwnerSlotWorkflow
                                     $slot,
                                     $slotDefinition,
                                 ): array {
-                                    DB::afterCommit(
+                                    MediaModelRegistry::newInstance()->getConnection()->afterCommit(
                                         $mutationState->markCommitted(...),
                                     );
 
@@ -504,7 +504,7 @@ final readonly class MediaOwnerSlotWorkflow
      */
     private function availableMedia(string $mediaId): Media
     {
-        $media = Media::withTrashed()->find($mediaId);
+        $media = MediaModelRegistry::query()->withTrashed()->find($mediaId);
 
         if (! $media instanceof Media) {
             throw new MediaUploadException(
@@ -556,7 +556,7 @@ final readonly class MediaOwnerSlotWorkflow
      */
     private function lockedMedia(string $mediaId): Media
     {
-        $media = Media::withTrashed()
+        $media = MediaModelRegistry::query()->withTrashed()
             ->whereKey($mediaId)
             ->lockForUpdate()
             ->first();
@@ -602,7 +602,7 @@ final readonly class MediaOwnerSlotWorkflow
     private function ledgerSharesMediaConnection(): bool
     {
         return (new MediaOwnerSlotOperation)->getConnection()->getName()
-            === (new Media)->getConnection()->getName();
+            === (MediaModelRegistry::newInstance())->getConnection()->getName();
     }
 
     /**
@@ -671,7 +671,7 @@ final readonly class MediaOwnerSlotWorkflow
             );
         }
 
-        $media = Media::withTrashed()->find($mediaId);
+        $media = MediaModelRegistry::query()->withTrashed()->find($mediaId);
 
         if (! $media instanceof Media) {
             throw new LogicException(
@@ -762,7 +762,7 @@ final readonly class MediaOwnerSlotWorkflow
             return;
         }
 
-        DB::afterCommit(function () use ($claim, $resultPayload): void {
+        MediaModelRegistry::newInstance()->getConnection()->afterCommit(function () use ($claim, $resultPayload): void {
             try {
                 $this->idempotency->complete($claim, null, $resultPayload);
             } catch (Throwable $claimFailure) {

@@ -6,7 +6,6 @@ namespace Nvl\Media\Providers;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -66,6 +65,7 @@ use Nvl\Media\Contracts\InitiateMultipartUploadContract;
 use Nvl\Media\Contracts\ListOwnerMediaSlotsContract;
 use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Contracts\MediaBatchAuthorization;
+use Nvl\Media\Contracts\MediaCatalogAccess;
 use Nvl\Media\Contracts\MediaCatalogImport;
 use Nvl\Media\Contracts\MediaContentScanner;
 use Nvl\Media\Contracts\MediaHostResolver;
@@ -87,14 +87,16 @@ use Nvl\Media\Events\MediaUploaded;
 use Nvl\Media\Events\MediaUploadedEvent;
 use Nvl\Media\MediaLibrary;
 use Nvl\Media\Models\Media;
-use Nvl\Media\Models\MediaAssociation;
-use Nvl\Media\Models\MediaImageVariation;
-use Nvl\Media\Models\MediaMultipartUpload;
 use Nvl\Media\Models\MediaTenantGrant;
-use Nvl\Media\Models\MediaTranslation;
+use Nvl\Media\Ownership\MediaAdoptionAdapter as OwnershipMediaAdoptionAdapter;
+use Nvl\Media\Ownership\MediaDeliveryGuard;
+use Nvl\Media\Ownership\MediaOwnerCatalog;
+use Nvl\Media\Ownership\MediaOwnershipParentResolver;
+use Nvl\Media\Ownership\MediaResourceRegistrar;
 use Nvl\Media\Policies\MediaPolicy;
 use Nvl\Media\Services\ConfiguredMediaTenantWorklist;
 use Nvl\Media\Services\DefaultMediaAuthorization;
+use Nvl\Media\Services\DenyMediaCatalogAccess;
 use Nvl\Media\Services\ImageOptimizationService;
 use Nvl\Media\Services\MediaAccessService;
 use Nvl\Media\Services\MediaAssetService;
@@ -113,6 +115,7 @@ use Nvl\Media\Services\MediaLocaleResolver;
 use Nvl\Media\Services\MediaLocalFileMaterializer;
 use Nvl\Media\Services\MediaManagementDataFactory;
 use Nvl\Media\Services\MediaModelInteractionService;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMultipartLock;
 use Nvl\Media\Services\MediaMultipartService;
 use Nvl\Media\Services\MediaMultipartSessionMapper;
@@ -128,7 +131,6 @@ use Nvl\Media\Services\MediaReplacementStager;
 use Nvl\Media\Services\MediaScannerPolicy;
 use Nvl\Media\Services\MediaSourceResolver;
 use Nvl\Media\Services\MediaTemporaryFileRegistry;
-use Nvl\Media\Services\MediaTenantOwnerResolver;
 use Nvl\Media\Services\MediaTransactionRollbackRegistry;
 use Nvl\Media\Services\MediaUploadValidator;
 use Nvl\Media\Services\MediaUrlResolver;
@@ -141,12 +143,16 @@ use Nvl\Media\Services\UnsupportedMediaBatchAuthorization;
 use Nvl\Media\Services\UnsupportedMultipartUploadGateway;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Tenancy\MediaAdoptionAdapter;
+use Nvl\Media\Tenancy\MediaLegacyGrantScope;
 use Nvl\Media\Tenancy\MediaTenancyResources;
+use Nvl\Ownership\Services\OwnershipAdoptionRegistry;
 use Nvl\Support\Doctor\PackageDoctorContributor;
 use Nvl\Support\Events\EventAliases;
 use Nvl\Support\Globals\GlobalNames;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
+use Nvl\Support\Ownership\Contracts\OwnershipIntegratedProvider;
+use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Support\Providers\SupportServiceProvider;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Support\Traits\MergesPackageConfiguration;
 use Nvl\Support\Traits\RegistersNamespacedResources;
@@ -154,7 +160,7 @@ use Nvl\Tenancy\Services\TenantAdoptionRegistry;
 use Nvl\Translatable\Services\TranslationResourceRegistry;
 
 /** Registers Media configuration, migrations, contracts, and optional routes. */
-final class MediaServiceProvider extends ServiceProvider
+final class MediaServiceProvider extends ServiceProvider implements OwnershipIntegratedProvider
 {
     use MergesPackageConfiguration;
     use RegistersNamespacedResources;
@@ -171,7 +177,7 @@ final class MediaServiceProvider extends ServiceProvider
         MediaTransactionRollbackRegistry $rollbackCallbacks,
         MediaTenancyResources $tenancyResources,
         TenantResourceRegistry $tenantResourceRegistry,
-        TenantBoundary $tenantBoundary,
+        OwnershipBoundary $tenantBoundary,
     ): void {
         $this->app->make(EventAliases::class)->register(MediaUploaded::class, MediaUploadedEvent::class);
         $events->listen(
@@ -180,11 +186,15 @@ final class MediaServiceProvider extends ServiceProvider
         );
         $typeScriptSources->register(__DIR__.'/..', 'nvl/media');
         $tenancyResources->register($tenantResourceRegistry);
+        $this->app->make(MediaResourceRegistrar::class)->register($this->app->make(OwnershipResourceRegistry::class));
+        if ($this->app->bound(OwnershipAdoptionRegistry::class)) {
+            $this->app->make(OwnershipAdoptionRegistry::class)->register('media', OwnershipMediaAdoptionAdapter::class);
+        }
         if ($this->app->bound(TenantAdoptionRegistry::class)) {
             $this->app->make(TenantAdoptionRegistry::class)->register('media', MediaAdoptionAdapter::class);
         }
-        $this->registerTenantScopes($tenantBoundary);
 
+        MediaTenantGrant::addGlobalScope('tenant', new MediaLegacyGrantScope);
         $this->registerPolicies();
         $this->registerTranslations();
         $this->registerConfig();
@@ -196,7 +206,7 @@ final class MediaServiceProvider extends ServiceProvider
         }
         $translationResources->register(
             key: 'media.assets',
-            modelClass: Media::class,
+            modelClass: $this->app->make(MediaModelRegistry::class)->mediaClass(),
             label: 'Media assets',
             searchableColumns: ['filename', 'mime_type', 'digest'],
             displayColumns: ['filename', 'type', 'is_public'],
@@ -229,6 +239,8 @@ final class MediaServiceProvider extends ServiceProvider
         PackageDoctorContributor::register($this->app, 'nvl/media', fn (): array => $this->app->make(MediaDoctor::class)->inspect());
 
         $this->mergeConfiguration();
+        $this->app->singleton(MediaModelRegistry::class);
+        $this->app->booting(fn () => $this->app->make(MediaModelRegistry::class)->mediaClass());
         $this->app->register(RouteServiceProvider::class);
         $this->app->singleton(MediaTransactionRollbackRegistry::class);
         $this->app->bind(MediaOwnerFactory::class, fn (): MediaOwnerFactory => new MediaOwnerFactory(
@@ -262,29 +274,6 @@ final class MediaServiceProvider extends ServiceProvider
         }
     }
 
-    /** Register ownership scopes from the provider's injected boundary. */
-    private function registerTenantScopes(TenantBoundary $boundary): void
-    {
-        Media::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
-            $boundary->query($query, 'media.assets');
-        });
-        MediaAssociation::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
-            $boundary->query($query, 'media.associations');
-        });
-        MediaImageVariation::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
-            $boundary->query($query, 'media.variations');
-        });
-        MediaTranslation::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
-            $boundary->query($query, 'media.translations');
-        });
-        MediaMultipartUpload::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
-            $boundary->query($query, 'media.multipart');
-        });
-        MediaTenantGrant::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
-            $boundary->query($query, 'media.catalog-grants');
-        });
-    }
-
     /**
      * Register services as scoped bindings resolved once per request.
      */
@@ -292,7 +281,10 @@ final class MediaServiceProvider extends ServiceProvider
     {
         $this->app->scoped(MediaAccessService::class);
         $this->app->scoped(MediaCatalogReader::class);
+        $this->app->scoped(MediaOwnerCatalog::class);
+        $this->app->bindIf(MediaCatalogAccess::class, DenyMediaCatalogAccess::class);
         $this->app->scopedIf(MediaCatalogImporter::class);
+        $this->app->scoped(MediaDeliveryGuard::class);
         $this->app->scoped(MediaDiskGateway::class);
         $this->app->scoped(MediaDoctor::class);
         $this->app->scoped(MediaFileEffectScheduler::class);
@@ -307,7 +299,7 @@ final class MediaServiceProvider extends ServiceProvider
         $this->app->scoped(MediaOwnedSourceLifecycle::class);
         $this->app->scoped(MediaOwnerSlotIdempotency::class);
         $this->app->scoped(MediaTemporaryFileRegistry::class);
-        $this->app->scoped(MediaTenantOwnerResolver::class);
+        $this->app->scoped(MediaOwnershipParentResolver::class);
         $this->app->scoped(MediaPathResolver::class);
         $this->app->scoped(MediaUrlResolver::class);
         $this->app->scoped(MediaImageTransformer::class);

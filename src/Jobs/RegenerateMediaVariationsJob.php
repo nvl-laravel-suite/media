@@ -15,9 +15,12 @@ use Illuminate\Queue\SerializesModels;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Support\MediaQueueConfiguration;
 use Nvl\Media\Support\MediaQueueEnvelope;
 use Nvl\Support\Facades\PackageLog;
+use Nvl\Support\Ownership\Contracts\OwnershipQueuedJob;
+use Nvl\Support\Ownership\ValueObjects\OwnershipJobEnvelope;
 use Nvl\Support\Tenancy\Contracts\TenantQueuedJob;
 use Nvl\Support\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
@@ -29,7 +32,7 @@ use Throwable;
  * instances for each requested preset. Supports filtering by type, disk, date range,
  * and specific preset names.
  */
-final class RegenerateMediaVariationsJob implements ShouldQueue, TenantQueuedJob
+final class RegenerateMediaVariationsJob implements OwnershipQueuedJob, ShouldQueue, TenantQueuedJob
 {
     use Batchable;
     use Dispatchable;
@@ -42,6 +45,14 @@ final class RegenerateMediaVariationsJob implements ShouldQueue, TenantQueuedJob
     public int $timeout;
 
     private readonly TenantJobEnvelope $envelope;
+
+    private readonly OwnershipJobEnvelope $ownershipEnvelope;
+
+    /** Carry scalar producer authority before native scheduling. */
+    public function ownershipJobEnvelope(): OwnershipJobEnvelope
+    {
+        return $this->ownershipEnvelope;
+    }
 
     /**
      * Create a new batch regeneration job.
@@ -63,6 +74,7 @@ final class RegenerateMediaVariationsJob implements ShouldQueue, TenantQueuedJob
         ?TenantJobEnvelope $envelope = null,
     ) {
         $this->envelope = MediaQueueEnvelope::fallback($envelope);
+        $this->ownershipEnvelope = MediaQueueEnvelope::ownership();
         $this->tries = MediaQueueConfiguration::jobInteger('regenerate', 'tries', 1);
         $this->timeout = MediaQueueConfiguration::jobInteger('regenerate', 'timeout', 60);
         $this->onQueue(MediaQueueConfiguration::name());
@@ -139,7 +151,7 @@ final class RegenerateMediaVariationsJob implements ShouldQueue, TenantQueuedJob
      */
     private function buildQuery(): Builder
     {
-        $query = Media::query()->available();
+        $query = MediaModelRegistry::query()->available();
 
         // Default to images only (the only type that supports conversions)
         if ($this->type !== null) {

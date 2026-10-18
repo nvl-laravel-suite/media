@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Support\Config\PackageOptions;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Throwable;
 
 /**
@@ -33,7 +33,7 @@ final class MediaMutationLock
      */
     public function __construct(
         private readonly MediaTransactionRollbackRegistry $rollbackCallbacks,
-        private readonly TenantBoundary $tenantBoundary,
+        private readonly OwnershipBoundary $tenantBoundary,
     ) {}
 
     /**

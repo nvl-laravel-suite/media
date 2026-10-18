@@ -7,6 +7,7 @@ namespace Nvl\Media\Actions;
 use Nvl\Media\Contracts\RenameMediaContract;
 use Nvl\Media\Events\MediaMutated;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Support\Events\DomainEventDispatcher;
 
@@ -33,13 +34,13 @@ final class RenameMediaAction implements RenameMediaContract
     {
         $mediaId = $media instanceof Media ? $media->id : $media;
         $freshMedia = $this->mutationLock->execute($mediaId, function () use ($mediaId, $filename): Media {
-            return (new Media)->getConnection()->transaction(function () use ($mediaId, $filename): Media {
-                $media = Media::query()->lockForUpdate()->findOrFail($mediaId);
+            return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($mediaId, $filename): Media {
+                $media = MediaModelRegistry::query()->lockForUpdate()->findOrFail($mediaId);
                 $media->update(['filename' => $filename]);
 
                 $this->domainEvents->dispatch(new MediaMutated($media->id, 'renamed'), $media->getConnection());
 
-                return Media::query()
+                return MediaModelRegistry::query()
                     ->with(['imageVariations', 'translations'])
                     ->findOrFail($media->id);
             });

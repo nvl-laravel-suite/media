@@ -8,6 +8,7 @@ use Nvl\Media\Enums\ImageFit;
 use Nvl\Media\Enums\ImageFormat;
 use Nvl\Media\Enums\ImagePreset;
 use Nvl\Media\Enums\MediaImageDriver;
+use Nvl\Media\Models\Media;
 use Nvl\Media\Services\NullMediaContentScanner;
 use Nvl\Media\Services\PortableMediaSearchDriver;
 use Nvl\Media\Services\S3MultipartUploadGateway;
@@ -15,6 +16,7 @@ use Nvl\Support\Config\PackageEnvironment;
 
 /** Complete runtime defaults; publication sections are declared in ../resources/config/sections.json. */
 return [
+    'models' => ['media' => Media::class],
     'tenancy' => [
         // Ownership classification is separate from HTTP association allowlists.
         'owner_types' => [],

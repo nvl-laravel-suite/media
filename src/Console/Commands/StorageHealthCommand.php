@@ -16,6 +16,7 @@ use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDiskGuard;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaFileOperator;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\MediaUrlResolver;
 use Nvl\Media\Support\MediaConfiguration;
@@ -552,10 +553,10 @@ final class StorageHealthCommand extends Command
     private function baseMediaQuery(bool $includeTrashed): Builder
     {
         if ($includeTrashed) {
-            return Media::withTrashed();
+            return MediaModelRegistry::query()->withTrashed();
         }
 
-        return Media::query();
+        return MediaModelRegistry::query();
     }
 
     /**
@@ -726,7 +727,7 @@ final class StorageHealthCommand extends Command
         $live = [];
         $tombstones = [];
 
-        Media::query()
+        MediaModelRegistry::query()
             ->withTrashed()
             ->where('disk', $disk)
             ->with('imageVariations')

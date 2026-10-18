@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use InvalidArgumentException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaTenantGrant;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Support\Tenancy\ValueObjects\TenantId;
 
 /**
@@ -40,7 +41,7 @@ final class MediaTenantGrantFactory extends Factory
             }
 
             if ($model->getAttribute('media_id') !== null) {
-                $parent = Media::query()->findOrFail(FactoryGuard::identifier($model->getAttribute('media_id')));
+                $parent = MediaModelRegistry::query()->findOrFail(FactoryGuard::identifier($model->getAttribute('media_id')));
                 FactoryGuard::parent($parent, $model);
                 if ($model->source_revision !== $parent->revision) {
                     throw new InvalidArgumentException('Fixture source revisions must match their exact persisted parent.');
@@ -65,9 +66,9 @@ final class MediaTenantGrantFactory extends Factory
     public function definition(): array
     {
         return [
-            'media_id' => Media::factory(),
+            'media_id' => MediaModelRegistry::newInstance()::factory(),
             'tenant_id' => null,
-            'source_revision' => fn (array $attributes): int => $attributes['media_id'] === null ? 1 : Media::query()->findOrFail(FactoryGuard::identifier($attributes['media_id']))->revision,
+            'source_revision' => fn (array $attributes): int => $attributes['media_id'] === null ? 1 : MediaModelRegistry::query()->findOrFail(FactoryGuard::identifier($attributes['media_id']))->revision,
             'revision' => 1,
             'enabled' => true,
         ];

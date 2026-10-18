@@ -9,6 +9,7 @@ use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\ReusePublicMediaContract;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
+use Nvl\Media\Services\MediaModelRegistry;
 
 /**
  * Reuses a stored public asset without uploading or copying its physical file.
@@ -42,7 +43,7 @@ final readonly class ReusePublicMediaAction implements ReusePublicMediaContract
         bool $dispatchVariations = true,
     ): MediaAssociation {
         $resolvedMedia = is_string($media)
-            ? Media::query()->findOrFail($media)
+            ? MediaModelRegistry::query()->findOrFail($media)
             : $media;
 
         return $this->attachMedia->execute(

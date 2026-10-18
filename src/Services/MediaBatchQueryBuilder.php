@@ -15,14 +15,14 @@ use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Relations\ExactMediaText;
 use Nvl\Media\Support\MediaBatchOwnerAdmission;
 use Nvl\Support\Owners\OwnerBatch;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 
 /** SQL authorization and mandatory ownership applied before window bounds. */
 final readonly class MediaBatchQueryBuilder
 {
     /** Retain the canonical package ownership boundary. */
-    public function __construct(private TenantBoundary $boundary, private MediaBatchOwnerAdmission $owners) {}
+    public function __construct(private OwnershipBoundary $boundary, private MediaBatchOwnerAdmission $owners) {}
 
     /** Build the authorized active association set.
      * @param  array<string, array<array-key, array<array-key, int>>>  $ceilings
@@ -112,7 +112,7 @@ final readonly class MediaBatchQueryBuilder
         $left = ExactMediaText::text($grammar->wrap($associations->getModel()->qualifyColumn('associable_id')), $connection->getDriverName());
         $right = ExactMediaText::text($grammar->wrap($owner->getQualifiedKeyName()), $connection->getDriverName());
         $associations->whereRaw(new ExactMediaText($left, $right, $connection->getDriverName()));
-        $associations->whereIn('media_id', $this->available(Media::query()->withoutEagerLoads())->select('id'));
+        $associations->whereIn('media_id', $this->available(MediaModelRegistry::query()->withoutEagerLoads())->select('id'));
         $associations->where(fn (Builder $nested) => $policy->scopeHostAssociations($nested, $owner, $actor, $slot));
 
         return $query->whereExists($associations->selectRaw('1')->toBase());
@@ -136,8 +136,8 @@ final readonly class MediaBatchQueryBuilder
      */
     public function assets(OwnerBatch $batch, MediaActorData $actor, MediaBatchAuthorization $policy): Builder
     {
-        $query = $this->available(Media::query()->withoutEagerLoads());
-        $nested = (new Media)->newModelQuery();
+        $query = $this->available(MediaModelRegistry::query()->withoutEagerLoads());
+        $nested = (MediaModelRegistry::newInstance())->newModelQuery();
         $policy->scopeMedia($nested, $batch, $actor);
         $query->getQuery()->addNestedWhereQuery($nested->getQuery());
 

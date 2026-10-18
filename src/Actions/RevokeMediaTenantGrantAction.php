@@ -7,8 +7,8 @@ namespace Nvl\Media\Actions;
 use Nvl\Media\Contracts\RevokeMediaTenantGrantContract;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Events\MediaCatalogGrantAudited;
-use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaTenantGrant;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Support\Events\DomainEventDispatcher;
 use Nvl\Support\Tenancy\Contracts\TenantContext;
 use Nvl\Support\Tenancy\Enums\TenantContextMode;
@@ -29,18 +29,18 @@ final readonly class RevokeMediaTenantGrantAction implements RevokeMediaTenantGr
             throw new TenantBoundaryViolation('Media grant revocation requires platform context.');
         }
 
-        return (new Media)->getConnection()->transaction(function () use ($grantId, $expectedRevision): MediaTenantGrant {
+        return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($grantId, $expectedRevision): MediaTenantGrant {
             $identity = MediaTenantGrant::withoutGlobalScope('tenant')->whereKey($grantId)->first(['tenant_id', 'media_id']);
             if (! $identity instanceof MediaTenantGrant) {
                 throw new TenantBoundaryViolation('The Media grant revision is unavailable.');
             }
-            (new Media)->getConnection()->table(MediaTables::get(MediaTables::TenantGrantLocks))->insertOrIgnore([
+            (MediaModelRegistry::newInstance())->getConnection()->table(MediaTables::get(MediaTables::TenantGrantLocks))->insertOrIgnore([
                 'tenant_id' => $identity->tenant_id,
                 'media_id' => $identity->media_id,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            (new Media)->getConnection()->table(MediaTables::get(MediaTables::TenantGrantLocks))
+            (MediaModelRegistry::newInstance())->getConnection()->table(MediaTables::get(MediaTables::TenantGrantLocks))
                 ->where('tenant_id', $identity->tenant_id)
                 ->where('media_id', $identity->media_id)
                 ->lockForUpdate()

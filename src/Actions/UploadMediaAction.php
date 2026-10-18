@@ -16,6 +16,8 @@ use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Events\MediaUploaded;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Ownership\MediaOwnership;
+use Nvl\Media\Ownership\MediaOwnershipParentResolver;
 use Nvl\Media\Services\MediaDeduplicationLock;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDiskGuard;
@@ -23,9 +25,9 @@ use Nvl\Media\Services\MediaFileEffectScheduler;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaFileOperator;
 use Nvl\Media\Services\MediaIngestionPipeline;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaPathResolver;
-use Nvl\Media\Services\MediaTenantOwnerResolver;
 use Nvl\Media\Services\MediaVariationDefinitionNormalizer;
 use Nvl\Media\Services\MediaVariationDispatcher;
 use Nvl\Media\Slots\MediaSlot;
@@ -33,7 +35,6 @@ use Nvl\Media\Support\MediaHashGenerator;
 use Nvl\Support\Events\ConnectionCommitCallbacks;
 use Nvl\Support\Events\DomainEventDispatcher;
 use Nvl\Support\Logging\PackageLogger;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Throwable;
 
 /**
@@ -55,8 +56,7 @@ final class UploadMediaAction implements UploadMediaContract
         private readonly MediaDeduplicationLock $deduplicationLock,
         private readonly MediaMutationLock $mutationLock,
         private readonly MediaVariationDefinitionNormalizer $definitionNormalizer,
-        private readonly MediaTenantOwnerResolver $owners,
-        private readonly TenantBoundary $tenantBoundary,
+        private readonly MediaOwnershipParentResolver $owners,
         private DomainEventDispatcher $domainEvents,
         private ConnectionCommitCallbacks $eventCommits,
         private PackageLogger $packageLogger,
@@ -95,7 +95,7 @@ final class UploadMediaAction implements UploadMediaContract
         ?string $uploadedByType = null,
         array $variationDefinitions = [],
     ): Media {
-        if (config('nvl-tenancy.enabled') === true) {
+        if (MediaOwnership::active()) {
             $model = $this->owners->resolve($model);
         }
         $this->diskGuard->assertAllowed($disk);
@@ -200,7 +200,7 @@ final class UploadMediaAction implements UploadMediaContract
     }
 
     /**
-     * Store a validated upload on disk and persist a new Media row.
+     * Store a validated upload on disk and persist a MediaModelRegistry::newInstance() row.
      *
      * @param  string[]  $tags
      * @param  array<string, mixed>  $metadata
@@ -276,18 +276,16 @@ final class UploadMediaAction implements UploadMediaContract
                 );
             }
 
-            $media = (new Media)->getConnection()->transaction(function () use ($validatedFile, $disk, $isPublic, $fileName, $hash, $folder, $tags, $metadata, $uploaderId, $uploaderType, $stored_path, $variationDefinitions, $skipAutoVariations, &$writeCommitted): Media {
+            $media = (MediaModelRegistry::newInstance())->getConnection()->transaction(function () use ($validatedFile, $disk, $isPublic, $fileName, $hash, $folder, $tags, $metadata, $uploaderId, $uploaderType, $stored_path, $variationDefinitions, $skipAutoVariations, &$writeCommitted): Media {
                 $this->fileEffects->deleteAfterRollback(
                     $disk,
                     [$stored_path],
                     'upload_new_object',
                 );
 
-                $ownership = $this->tenantBoundary->attributes('media.assets');
-                $pathIdentity = config('nvl-tenancy.enabled') === true ? ['storage_path' => $stored_path] : [];
+                $pathIdentity = MediaOwnership::active() ? ['storage_path' => $stored_path] : [];
 
-                $created = Media::query()->forceCreate([
-                    ...$ownership,
+                $created = MediaModelRegistry::create([
                     ...$pathIdentity,
                     'filename' => $fileName,
                     'hash' => $hash,
@@ -313,7 +311,7 @@ final class UploadMediaAction implements UploadMediaContract
                     'uploaded_by_type' => $uploaderType,
                 ]);
 
-                $this->eventCommits->afterCommit((new Media)->getConnection(), static function () use (&$writeCommitted): void {
+                $this->eventCommits->afterCommit((MediaModelRegistry::newInstance())->getConnection(), static function () use (&$writeCommitted): void {
                     $writeCommitted = true;
                 });
                 if (! $skipAutoVariations) {
@@ -355,8 +353,8 @@ final class UploadMediaAction implements UploadMediaContract
             : $this->mutationLock->execute(
                 $media->id,
                 function () use ($media, $requestedDefinitions): Media {
-                    return (new Media)->getConnection()->transaction(function () use ($media, $requestedDefinitions): Media {
-                        $locked = Media::query()->lockForUpdate()->findOrFail($media->id);
+                    return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($media, $requestedDefinitions): Media {
+                        $locked = MediaModelRegistry::query()->lockForUpdate()->findOrFail($media->id);
                         $existingDefinitions = is_array($locked->variation_definitions)
                             ? $locked->variation_definitions
                             : [];
@@ -397,7 +395,7 @@ final class UploadMediaAction implements UploadMediaContract
         $extension = pathinfo($fileName, PATHINFO_EXTENSION);
         $basename = pathinfo($fileName, PATHINFO_FILENAME);
 
-        $sequence = Media::where('digest', $digest)
+        $sequence = MediaModelRegistry::query()->where('digest', $digest)
             ->where('disk', $disk)
             ->count() + 1;
 
@@ -422,7 +420,7 @@ final class UploadMediaAction implements UploadMediaContract
         ?string $uploadedBy,
         ?string $uploadedByType,
     ): ?Media {
-        $query = Media::where('digest', $digest)
+        $query = MediaModelRegistry::query()->where('digest', $digest)
             ->where('disk', $disk)
             ->where('is_public', $isPublic)
             ->available();

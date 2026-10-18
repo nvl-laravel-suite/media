@@ -13,11 +13,17 @@ use Illuminate\Support\Carbon;
 use Nvl\Media\Database\Factories\MediaTranslationFactory;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Ownership\Contracts\Ownable;
+use Nvl\Support\Ownership\Traits\HasOwnership;
+use Nvl\Support\Ownership\ValueObjects\OwnershipDefinition;
 
 /**
- * MediaTranslation: locale-specific accessible metadata for a media record.
+ * @property-read string|null $owner_scope_key Technical immutable partition.
+ * @property-read string|null $owner_reference Captured scalar reference on operational roots.
  *
+ * MediaTranslation: locale-specific accessible metadata for a media record.
  * @property string $id
  * @property string|null $tenant_id Canonical tenant UUID inherited from media.
  * @property string|null $ownership_key Mixed catalog partition inherited from media.
@@ -34,14 +40,21 @@ use Nvl\Support\Config\PackageStorage;
  *
  * @nvl-consumer-read id
  */
-class MediaTranslation extends Model
+class MediaTranslation extends Model implements Ownable
 {
     use GuardsTenantOwnership;
 
     /** @use HasFactory<MediaTranslationFactory> */
     use HasFactory;
 
+    use HasOwnership;
     use HasUuids;
+
+    /** Inherit only from the canonical asset relation. */
+    public static function ownershipDefinition(): OwnershipDefinition
+    {
+        return OwnershipDefinition::inherited('media');
+    }
 
     public const string TABLE = MediaTables::I18n;
 
@@ -77,7 +90,7 @@ class MediaTranslation extends Model
      */
     public function media(): BelongsTo
     {
-        return $this->belongsTo(Media::class, 'media_id');
+        return $this->belongsTo(MediaModelRegistry::modelClass(), 'media_id');
     }
 
     /**

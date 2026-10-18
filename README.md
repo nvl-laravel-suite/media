@@ -57,7 +57,7 @@ Media owns the complete lifecycle of binary assets: ingestion, validation, conte
 - [Command reference](docs/commands.md): doctor, reconciliation, pruning, regeneration, migration, flags, safety, and exit behavior.
 - [Upgrading](UPGRADING.md), [security policy](SECURITY.md), [contributing](CONTRIBUTING.md), and [changelog](CHANGELOG.md).
 
-The optional Spatie permission bridge defaults to `false` through `nvl-media.authorization.spatie_permission.enabled`. Explicit grants use `nvl.media.*` names, including `nvl.media.manage`; holding only `nvl.media.manage` never automatically authorizes access to another owner's private Media. Ownership and host authorization contracts remain authoritative when the bridge is disabled.
+The optional Spatie permission bridge defaults to `true` through `nvl-media.authorization.spatie_permission.enabled`. Explicit grants use `nvl.media.*` names, including `nvl.media.manage`; holding only `nvl.media.manage` never automatically authorizes access to another owner's private Media. Ownership and host authorization contracts remain authoritative when the bridge is disabled.
 
 For finite host lists, use `ListOwnerMediaSlotsContract` with an explicit `MediaBatchAuthorization` SQL adapter.
 The reader returns safe localized original-asset slot DTOs for up to 100 owners and 20 slots, bounded before hydration.

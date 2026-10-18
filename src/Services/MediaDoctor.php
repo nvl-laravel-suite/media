@@ -644,7 +644,7 @@ final readonly class MediaDoctor
         }
 
         try {
-            $samples = Media::query()
+            $samples = MediaModelRegistry::query()
                 ->orderBy('id')
                 ->limit($limit)
                 ->get($columns);

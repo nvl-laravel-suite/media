@@ -136,7 +136,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
                     $sourceMediaId,
                 ): MediaLibraryItem {
                     if ($claim instanceof MediaOwnerSlotOperationClaim) {
-                        $recovered = DB::transaction(function () use (
+                        $recovered = MediaModelRegistry::newInstance()->getConnection()->transaction(function () use (
                             $actor,
                             $claim,
                             $mutationState,
@@ -241,7 +241,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
         }
 
         try {
-            return DB::transaction(
+            return MediaModelRegistry::newInstance()->getConnection()->transaction(
                 fn (): MediaLibraryItem => $this->copyInTransaction(
                     actor: $actor,
                     owner: $owner,
@@ -274,7 +274,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
         bool $completeInsideMutation,
         MediaOwnerSlotMutationState $mutationState,
     ): MediaLibraryItem {
-        DB::afterCommit(function () use (
+        MediaModelRegistry::newInstance()->getConnection()->afterCommit(function () use (
             $mutationState,
         ): void {
             $mutationState->markCommitted();
@@ -436,7 +436,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
             return null;
         }
 
-        $mediaQuery = Media::withTrashed()->whereKey($claim->resultMediaId);
+        $mediaQuery = MediaModelRegistry::query()->withTrashed()->whereKey($claim->resultMediaId);
 
         if ($lockForUpdate) {
             $mediaQuery->lockForUpdate();
@@ -490,7 +490,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
             return;
         }
 
-        DB::afterCommit(function () use ($claim, $result): void {
+        MediaModelRegistry::newInstance()->getConnection()->afterCommit(function () use ($claim, $result): void {
             try {
                 $this->idempotency->complete(
                     $claim,
@@ -556,7 +556,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
      */
     private function media(string $mediaId): Media
     {
-        $media = Media::withTrashed()->find($mediaId);
+        $media = MediaModelRegistry::query()->withTrashed()->find($mediaId);
 
         if (! $media instanceof Media) {
             throw new MediaUploadException("Media [{$mediaId}] does not exist.");
@@ -570,7 +570,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
      */
     private function lockedMedia(string $mediaId): Media
     {
-        $media = Media::withTrashed()
+        $media = MediaModelRegistry::query()->withTrashed()
             ->whereKey($mediaId)
             ->lockForUpdate()
             ->first();
@@ -790,7 +790,7 @@ final readonly class MediaOwnerSlotCopyWorkflow
     private function ledgerSharesMediaConnection(): bool
     {
         return (new MediaOwnerSlotOperation)->getConnection()->getName()
-            === (new Media)->getConnection()->getName();
+            === (MediaModelRegistry::newInstance())->getConnection()->getName();
     }
 
     /**

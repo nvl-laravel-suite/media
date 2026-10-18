@@ -11,7 +11,6 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Nvl\Media\Contracts\AttachMediaContract;
 use Nvl\Media\Contracts\HasNvlMedia;
@@ -22,6 +21,7 @@ use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\ImageOptimizationService;
 use Nvl\Media\Services\MediaLifecycleService;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaOwnedSourceLifecycle;
 use Nvl\Media\Services\MediaTemporaryFileRegistry;
@@ -302,7 +302,7 @@ class MediaAdder implements MediaUploadBuilder
                 : $this->mutationLock->executeForOwnerCollection(
                     $this->model,
                     $this->collectionName($slotName),
-                    fn (): Media => DB::transaction($attachAndEnforceLimit),
+                    fn (): Media => MediaModelRegistry::newInstance()->getConnection()->transaction($attachAndEnforceLimit),
                 );
         } catch (Throwable $exception) {
             if ($media instanceof Media && ! $media->associations()->exists()) {

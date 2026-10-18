@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
-use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection as SupportCollection;
@@ -19,11 +18,14 @@ use Nvl\Media\Exceptions\MediaBatchReadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Models\MediaTranslation;
+use Nvl\Media\Ownership\MediaDeliveryGuard;
+use Nvl\Media\Ownership\MediaOwnership;
 use Nvl\Media\Support\MediaBatchOwnerAdmission;
 use Nvl\Support\Contracts\LocaleCatalog;
 use Nvl\Support\Owners\OwnerBatch;
 use Nvl\Support\Owners\OwnerResultMap;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
+use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Translatable\Services\TranslationResolver;
 use stdClass;
 
@@ -38,9 +40,10 @@ final readonly class MediaOwnerBatchReader
         private MediaLocaleResolver $locales,
         private LocaleCatalog $catalog,
         private TranslationResolver $translations,
-        private TenantBoundary $boundary,
+        private OwnershipBoundary $boundary,
         private MediaUrlResolver $urls,
-        private Repository $configuration,
+        private OwnershipResourceRegistry $ownershipResources,
+        private MediaDeliveryGuard $delivery,
     ) {}
 
     /** Return at most 20,000 association items and ten locale rows per asset.
@@ -55,7 +58,7 @@ final readonly class MediaOwnerBatchReader
         }
         $slots = $this->slotNames($slots);
         $locale = $this->locales->resolve($locale);
-        $definition = (new Media)->translationDefinition();
+        $definition = (MediaModelRegistry::newInstance())->translationDefinition();
         $chain = $definition->localeChain($locale, $this->catalog->supported());
         if (count($chain) > 10) {
             throw new InvalidArgumentException('Media batch reads allow at most ten requested and fallback locales.');
@@ -77,6 +80,7 @@ final readonly class MediaOwnerBatchReader
                 ->whereIn('media_id', $assets->modelKeys())->whereIn('locale', $chain)
                 ->select(['id', 'media_id', 'locale', 'title', 'alt', 'caption'])->limit($assets->count() * count($chain))->get()->groupBy('media_id');
         }
+        $publicUrls = $this->delivery->publicUrls(array_values($assets->all()), fn (Media $asset): string => $this->urls->publicUrl($asset, []));
         $values = [];
         foreach ($batch->identities() as $identity) {
             $named = new stdClass;
@@ -97,7 +101,7 @@ final readonly class MediaOwnerBatchReader
                 $value = $this->translations->resolve($loaded, $definition, $field, $locale, $chain)->value;
                 $fields[$field] = is_string($value) ? $value : null;
             }
-            $url = $asset->is_public ? $this->urls->publicUrl($asset, []) : '';
+            $url = $publicUrls[$asset->id] ?? '';
             $items = $values[$row->associable_type][$row->associable_id]->slots->{$row->collection};
             if (! is_array($items)) {
                 throw new MediaBatchReadException('A requested Media slot must contain an item list.');
@@ -141,11 +145,16 @@ final readonly class MediaOwnerBatchReader
     private function assetColumns(): array
     {
         $columns = ['id', 'mime_type', 'size', 'is_public', 'visibility', 'status', 'disk', 'folder', 'hash'];
-        if ($this->configuration->get('nvl-tenancy.enabled') === true) {
+        if (MediaOwnership::active()) {
             $columns[] = 'storage_path';
         }
 
-        return array_map((new Media)->qualifyColumn(...), $columns);
+        if (config('nvl-ownership.enabled') === true && MediaOwnership::active()) {
+            $definition = $this->ownershipResources->get('media.assets')->ownership;
+            $columns = [...$columns, 'owner_scope_key', 'revision', ...($definition->foreignKey === null ? [] : [$definition->foreignKey])];
+        }
+
+        return array_map((MediaModelRegistry::newInstance())->qualifyColumn(...), $columns);
     }
 
     /** Validate each canonical owner's attribute-dependent declarations without runtime interactions.

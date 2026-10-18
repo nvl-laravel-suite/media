@@ -16,8 +16,10 @@ use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaTenantGrant;
 use Nvl\Media\Models\MediaTranslation;
+use Nvl\Media\Ownership\MediaOwnerCatalog;
 use Nvl\Media\Support\MediaHashGenerator;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
+use Nvl\Support\Ownership\Services\OwnershipScope;
 use Nvl\Support\Tenancy\Contracts\TenantContext;
 use Nvl\Support\Tenancy\Contracts\TenantDirectory;
 use Nvl\Support\Tenancy\Enums\TenantStatus;
@@ -45,9 +47,10 @@ final class MediaCatalogImporter implements MediaCatalogImport
         private readonly MediaFileEffectScheduler $fileEffects,
         private readonly TenantContext $context,
         private readonly TenantDirectory $directory,
-        private readonly TenantBoundary $boundary,
+        private readonly OwnershipBoundary $boundary,
         private readonly EffectiveTenantConnection $connections,
         private readonly MediaVariationDispatcher $variations,
+        private readonly MediaOwnerCatalog $ownedCatalog,
     ) {}
 
     public function inspect(string $grantId): MediaCatalogSnapshot
@@ -57,6 +60,9 @@ final class MediaCatalogImporter implements MediaCatalogImport
 
     public function stage(MediaCatalogSnapshot $source): StagedCatalogMedia
     {
+        if (config('nvl-ownership.enabled') === true) {
+            return $this->ownedCatalog->stage($source);
+        }
         $tenant = $this->context->requireTenant();
         $operationId = (string) Str::uuid();
         $hash = MediaHashGenerator::generateForExtension($source->extension);
@@ -84,6 +90,9 @@ final class MediaCatalogImporter implements MediaCatalogImport
 
     public function persist(MediaCatalogSnapshot $source, StagedCatalogMedia $file, string $idempotencyKey): Media
     {
+        if (config('nvl-ownership.enabled') === true) {
+            return $this->ownedCatalog->persist($source, $file, $idempotencyKey);
+        }
         $connection = $this->connection();
         $tenant = $this->context->requireTenant();
         $expectedSnapshot = [
@@ -122,7 +131,7 @@ final class MediaCatalogImporter implements MediaCatalogImport
             ->where('tenant_id', $tenant->value)
             ->lockForUpdate()
             ->first();
-        $platform = Media::withoutGlobalScope('tenant')
+        $platform = MediaModelRegistry::query()->withoutGlobalScope(OwnershipScope::class)
             ->whereKey($source->sourceId)
             ->whereNull('tenant_id')
             ->where('ownership_key', 'platform')
@@ -136,7 +145,7 @@ final class MediaCatalogImporter implements MediaCatalogImport
             throw new TenantBoundaryViolation('The Media grant or platform source changed during staging.');
         }
 
-        $existing = Media::query()->where('catalog_import_key', $idempotencyKey)->lockForUpdate()->first();
+        $existing = MediaModelRegistry::query()->where('catalog_import_key', $idempotencyKey)->lockForUpdate()->first();
         if ($existing instanceof Media) {
             if ($existing->catalog_source_id !== $source->sourceId
                 || $existing->catalog_source_revision !== $source->sourceRevision
@@ -151,7 +160,7 @@ final class MediaCatalogImporter implements MediaCatalogImport
         }
 
         $this->fileEffects->deleteAfterRollback($file->disk, [$file->storagePath], 'catalog_import');
-        $media = Media::query()->forceCreate([
+        $media = MediaModelRegistry::create([
             ...$this->boundary->attributes('media.assets'),
             'filename' => $source->filename,
             'hash' => basename($file->storagePath),
@@ -194,6 +203,11 @@ final class MediaCatalogImporter implements MediaCatalogImport
 
     public function discard(StagedCatalogMedia $file): void
     {
+        if (config('nvl-ownership.enabled') === true) {
+            $this->ownedCatalog->discard($file);
+
+            return;
+        }
         if (($this->staged[$file->operationId] ?? null) !== $file || isset($this->persisted[$file->operationId])) {
             return;
         }
@@ -204,7 +218,7 @@ final class MediaCatalogImporter implements MediaCatalogImport
 
     private function connection(): Connection
     {
-        $connection = (new Media)->getConnection();
+        $connection = (MediaModelRegistry::newInstance())->getConnection();
         if ($connection !== $this->connections->core()) {
             throw new TenantBoundaryViolation('Media catalog import requires the canonical tenant connection.');
         }

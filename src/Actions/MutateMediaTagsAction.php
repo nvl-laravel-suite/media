@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Actions;
 
-use Illuminate\Support\Facades\DB;
 use Nvl\Media\Contracts\MutateMediaTagsContract;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMutationLock;
 
 /**
@@ -36,8 +36,8 @@ final class MutateMediaTagsAction implements MutateMediaTagsContract
         return $this->mutationLock->execute(
             $mediaId,
             function () use ($mediaId, $add, $remove): Media {
-                return DB::transaction(function () use ($mediaId, $add, $remove): Media {
-                    $locked = Media::query()->lockForUpdate()->findOrFail($mediaId);
+                return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($mediaId, $add, $remove): Media {
+                    $locked = MediaModelRegistry::query()->lockForUpdate()->findOrFail($mediaId);
                     $tags = array_values(array_diff($locked->tags ?? [], $remove));
                     $locked->tags = array_values(array_unique([...$tags, ...$add]));
                     $locked->save();

@@ -12,6 +12,7 @@ use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDiskGuard;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaFileOperator;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaPathResolver;
 use RuntimeException;
 use Throwable;
@@ -231,7 +232,7 @@ class MigrateDiskCommand extends Command
         $normalizedFrom = trim($from, '/');
         $normalizedTo = trim($to, '/');
 
-        $query = Media::withTrashed()
+        $query = MediaModelRegistry::query()->withTrashed()
             ->when(is_string($onDisk) && $onDisk !== '', function (Builder $builder) use ($onDisk): void {
                 $builder->where('disk', $onDisk);
             })
@@ -291,7 +292,7 @@ class MigrateDiskCommand extends Command
                 $folder = (string) $media->folder;
                 $nextFolder = $this->replaceFolderPrefix($folder, $normalizedFrom, $normalizedTo);
 
-                (new Media)->getConnection()->table((new Media)->getTable())
+                (MediaModelRegistry::newInstance())->getConnection()->table((MediaModelRegistry::newInstance())->getTable())
                     ->where('id', $media->id)
                     ->update(['folder' => $nextFolder]);
 
@@ -421,7 +422,7 @@ class MigrateDiskCommand extends Command
      */
     private function mediaQuery(string $from, array $associableTypes, array $collections): Builder
     {
-        $query = Media::withTrashed()->where('disk', $from);
+        $query = MediaModelRegistry::query()->withTrashed()->where('disk', $from);
 
         $this->applyAssociationFilters($query, $associableTypes, $collections);
 

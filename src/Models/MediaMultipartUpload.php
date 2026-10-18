@@ -12,11 +12,16 @@ use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\MediaMultipartStatus;
 use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Ownership\Contracts\Ownable;
+use Nvl\Support\Ownership\Traits\HasOwnership;
 
 /**
- * Server-authoritative multipart upload state.
+ * @property-read string|null $owner_scope_key Technical immutable partition.
+ * @property-read string|null $owner_reference Captured scalar reference on operational roots.
  *
+ * Server-authoritative multipart upload state.
  * @property string $id
  * @property string|null $tenant_id Canonical tenant UUID.
  * @property string|null $ownership_key Operational ownership partition when platform-owned.
@@ -47,9 +52,10 @@ use Nvl\Support\Config\PackageStorage;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-final class MediaMultipartUpload extends Model
+final class MediaMultipartUpload extends Model implements Ownable
 {
     use GuardsTenantOwnership;
+    use HasOwnership;
     use HasUuids;
 
     public const string TABLE = MediaTables::MultipartUploads;
@@ -119,7 +125,7 @@ final class MediaMultipartUpload extends Model
      */
     public function completedMedia(): BelongsTo
     {
-        return $this->belongsTo(Media::class, 'completed_media_id');
+        return $this->belongsTo(MediaModelRegistry::modelClass(), 'completed_media_id');
     }
 
     /** Resolve the configured package storage table. */

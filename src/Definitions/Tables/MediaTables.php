@@ -25,6 +25,8 @@ final class MediaTables
 
     public const string TenantGrants = 'nvl_media_tenant_grants';
 
+    public const string OwnerGrantLocks = 'nvl_media_owner_grant_locks';
+
     public const string TenantGrantLocks = 'nvl_media_tenant_grant_locks';
 
     public const string TenantAdoptionCopies = 'nvl_media_tenant_adoption_copies';
@@ -51,6 +53,12 @@ final class MediaTables
     public static function get(string $key): string
     {
         return PackageStorage::resolveTable('media', $key);
+    }
+
+    /** Resolve the concrete owner catalog serialization ledger. */
+    public static function ownerGrantLocks(): string
+    {
+        return self::get(self::OwnerGrantLocks);
     }
 
     private function __construct() {}

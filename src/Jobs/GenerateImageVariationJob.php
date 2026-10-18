@@ -13,16 +13,20 @@ use Illuminate\Queue\SerializesModels;
 use Nvl\Media\Actions\GenerateImageVariationAction;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Support\MediaQueueConfiguration;
 use Nvl\Media\Support\MediaQueueEnvelope;
 use Nvl\Support\Facades\PackageLog;
+use Nvl\Support\Ownership\Contracts\OwnershipQueuedJob;
+use Nvl\Support\Ownership\Enums\OwnershipContextMode;
+use Nvl\Support\Ownership\ValueObjects\OwnershipJobEnvelope;
 use Nvl\Support\Tenancy\Contracts\TenantQueuedJob;
 use Nvl\Support\Tenancy\Enums\TenantContextMode;
 use Nvl\Support\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
 
 /** GenerateImageVariationJob: queued generation of a single image variation for a media record. */
-final class GenerateImageVariationJob implements ShouldBeUnique, ShouldQueue, TenantQueuedJob
+final class GenerateImageVariationJob implements OwnershipQueuedJob, ShouldBeUnique, ShouldQueue, TenantQueuedJob
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -39,6 +43,14 @@ final class GenerateImageVariationJob implements ShouldBeUnique, ShouldQueue, Te
 
     private readonly TenantJobEnvelope $envelope;
 
+    private readonly OwnershipJobEnvelope $ownershipEnvelope;
+
+    /** Carry scalar producer authority before native scheduling. */
+    public function ownershipJobEnvelope(): OwnershipJobEnvelope
+    {
+        return $this->ownershipEnvelope;
+    }
+
     /**
      * @param  array<string, mixed>|ConversionDefinition  $presetConfig
      */
@@ -50,6 +62,7 @@ final class GenerateImageVariationJob implements ShouldBeUnique, ShouldQueue, Te
         ?TenantJobEnvelope $envelope = null,
     ) {
         $this->envelope = MediaQueueEnvelope::fallback($envelope);
+        $this->ownershipEnvelope = MediaQueueEnvelope::ownership();
         $this->definition = $presetConfig instanceof ConversionDefinition
             ? $presetConfig
             : ConversionDefinition::fromPreset($presetName, $presetConfig);
@@ -67,6 +80,10 @@ final class GenerateImageVariationJob implements ShouldBeUnique, ShouldQueue, Te
     {
         $identity = $this->mediaId.':'.$this->sourceRevision.':'.$this->presetName;
 
+        if ($this->ownershipEnvelope->context()->mode !== OwnershipContextMode::Disabled) {
+            return MediaQueueEnvelope::key($this->ownershipEnvelope, $identity);
+        }
+
         return $this->envelope->context->mode === TenantContextMode::Disabled
             ? $identity
             : hash('sha256', serialize($this->envelope->context)).':'.$identity;
@@ -82,7 +99,7 @@ final class GenerateImageVariationJob implements ShouldBeUnique, ShouldQueue, Te
      */
     public function handle(GenerateImageVariationAction $action): void
     {
-        $media = Media::find($this->mediaId);
+        $media = MediaModelRegistry::query()->find($this->mediaId);
 
         if ($media === null) {
             PackageLog::log('media', 'warning', 'nvl.media.variation.missing', [

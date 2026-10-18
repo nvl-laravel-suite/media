@@ -14,6 +14,7 @@ use Nvl\Media\Services\MediaDiskGuard;
 use Nvl\Media\Services\MediaFileEffectScheduler;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaFileOperator;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Support\Events\ConnectionCommitCallbacks;
@@ -80,7 +81,7 @@ final readonly class RelocateMediaAction implements RelocateMediaContract
         MediaVisibility $visibility,
         ?int $expectedRevision,
     ): Media {
-        $media = Media::query()->with('imageVariations')->findOrFail($mediaId);
+        $media = MediaModelRegistry::query()->with('imageVariations')->findOrFail($mediaId);
 
         if ($expectedRevision !== null && $media->revision !== $expectedRevision) {
             throw new MediaUploadException(
@@ -139,7 +140,7 @@ final readonly class RelocateMediaAction implements RelocateMediaContract
                 $this->assertIntegrity($sourceDisk, $sourcePath, $disk, $targetPath);
             }
 
-            $relocated = (new Media)->getConnection()->transaction(function () use (
+            $relocated = (MediaModelRegistry::newInstance())->getConnection()->transaction(function () use (
                 $mediaId,
                 $disk,
                 $visibility,
@@ -152,7 +153,7 @@ final readonly class RelocateMediaAction implements RelocateMediaContract
                 $rewritePaths,
                 &$writeCommitted,
             ): Media {
-                $locked = Media::query()->with('imageVariations')->lockForUpdate()->findOrFail($mediaId);
+                $locked = MediaModelRegistry::query()->with('imageVariations')->lockForUpdate()->findOrFail($mediaId);
 
                 if ($expectedRevision !== null && $locked->revision !== $expectedRevision) {
                     throw new MediaUploadException(
@@ -182,7 +183,7 @@ final readonly class RelocateMediaAction implements RelocateMediaContract
                     }
                 }
 
-                $this->eventCommits->afterCommit((new Media)->getConnection(), static function () use (&$writeCommitted): void {
+                $this->eventCommits->afterCommit((MediaModelRegistry::newInstance())->getConnection(), static function () use (&$writeCommitted): void {
                     $writeCommitted = true;
                 });
                 $this->fileEffects->deleteAfterCommit($sourceDisk, array_keys($paths), 'relocate_source');

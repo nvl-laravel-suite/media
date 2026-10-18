@@ -175,7 +175,7 @@ final class MediaQueryService
             $relations[] = 'imageVariations';
         }
 
-        return Media::with($relations)
+        return MediaModelRegistry::query()->with($relations)
             ->findOrFail($id);
     }
 
@@ -203,7 +203,7 @@ final class MediaQueryService
      */
     public function usages(string $id): Collection
     {
-        $media = Media::with('associations')->findOrFail($id);
+        $media = MediaModelRegistry::query()->with('associations')->findOrFail($id);
 
         /** @var Collection<int, MediaUsage> */
         return $media->associations
@@ -220,7 +220,7 @@ final class MediaQueryService
     public function findMany(array $ids): EloquentCollection
     {
         $ids = array_values(array_unique($ids));
-        $media = Media::query()->whereIn('id', $ids)->get();
+        $media = MediaModelRegistry::query()->whereIn('id', $ids)->get();
         if ($media->count() !== count($ids)) {
             throw new TenantBoundaryViolation('One or more Media identifiers are unavailable in the active tenant.');
         }
@@ -235,7 +235,7 @@ final class MediaQueryService
      */
     private function baseQuery(?Authenticatable $user = null): Builder
     {
-        $query = Media::query();
+        $query = MediaModelRegistry::query();
         $this->applyVisibilityScope($query, $user);
 
         return $query;

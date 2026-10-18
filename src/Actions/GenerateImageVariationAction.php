@@ -16,11 +16,14 @@ use Nvl\Media\Services\MediaFileEffectScheduler;
 use Nvl\Media\Services\MediaFileOperator;
 use Nvl\Media\Services\MediaImageTransformer;
 use Nvl\Media\Services\MediaLocalFileMaterializer;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\MediaTemporaryFileRegistry;
 use Nvl\Media\Support\MediaVariationFileNamer;
 use Nvl\Support\Logging\PackageLogger;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
+use Nvl\Support\Ownership\Contracts\OwnershipWriter;
 use Throwable;
 
 /**
@@ -42,6 +45,8 @@ final class GenerateImageVariationAction implements GenerateImageVariationContra
         private readonly MediaPathResolver $pathResolver,
         private readonly MediaTemporaryFileRegistry $temporaryFiles,
         private PackageLogger $packageLogger,
+        private readonly OwnershipWriter $ownershipWriter,
+        private OwnershipBoundary $tenantBoundary,
     ) {}
 
     /**
@@ -57,7 +62,7 @@ final class GenerateImageVariationAction implements GenerateImageVariationContra
         return $this->mutationLock->execute(
             $media->id,
             function () use ($media, $definition, $expectedRevision): ?MediaImageVariation {
-                $currentMedia = Media::query()->find($media->id);
+                $currentMedia = MediaModelRegistry::query()->find($media->id);
 
                 if (! $currentMedia instanceof Media
                     || ! $currentMedia->isAvailable()
@@ -75,7 +80,7 @@ final class GenerateImageVariationAction implements GenerateImageVariationContra
 
                 $definition->validate();
                 $resultExtension = $definition->getResultExtension($currentMedia->extension);
-                DB::transaction(function () use ($currentMedia): void {
+                MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($currentMedia): void {
                     $currentMedia->forceFill([
                         'status' => MediaLifecycleStatus::ProcessingVariations,
                         'failure_code' => null,
@@ -161,7 +166,7 @@ final class GenerateImageVariationAction implements GenerateImageVariationContra
                     }
 
                     try {
-                        $variation = DB::transaction(function () use (
+                        $variation = MediaModelRegistry::newInstance()->getConnection()->transaction(function () use (
                             $currentMedia,
                             $definition,
                             $sourceRevision,
@@ -177,7 +182,7 @@ final class GenerateImageVariationAction implements GenerateImageVariationContra
                                 'variation_new_object',
                             );
 
-                            $lockedMedia = Media::query()
+                            $lockedMedia = MediaModelRegistry::query()
                                 ->lockForUpdate()
                                 ->find($currentMedia->id);
 
@@ -192,16 +197,7 @@ final class GenerateImageVariationAction implements GenerateImageVariationContra
                                 'label' => $definition->name,
                             ]);
                             if (! $variation->exists) {
-                                $ownership = [];
-                                if (array_key_exists('tenant_id', $lockedMedia->getAttributes())) {
-                                    $ownership['tenant_id'] = $lockedMedia->tenant_id;
-                                }
-                                if (array_key_exists('ownership_key', $lockedMedia->getAttributes())) {
-                                    $ownership['ownership_key'] = $lockedMedia->ownership_key;
-                                }
-                                if ($ownership !== []) {
-                                    $variation->forceFill($ownership);
-                                }
+                                $variation->forceFill($this->tenantBoundary->attributes('media.variations'));
                             }
                             $variation->forceFill([
                                 'storage_path' => $newVariationPath,
@@ -216,7 +212,16 @@ final class GenerateImageVariationAction implements GenerateImageVariationContra
                                     ? $existing->attempts + 1
                                     : 1,
                                 'failure_context' => null,
-                            ])->save();
+                            ]);
+                            if ($variation->exists) {
+                                $variation->save();
+                            } else {
+                                $this->ownershipWriter->create(MediaImageVariation::class, static function (array $attributes) use ($variation): MediaImageVariation {
+                                    $variation->forceFill($attributes)->save();
+
+                                    return $variation;
+                                });
+                            }
 
                             $lockedMedia->forceFill([
                                 'status' => MediaLifecycleStatus::Available,
@@ -300,8 +305,8 @@ final class GenerateImageVariationAction implements GenerateImageVariationContra
             'message' => mb_substr($exception->getMessage(), 0, 1000),
         ];
 
-        DB::transaction(function () use ($media, $definition, $context): void {
-            Media::query()
+        MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($media, $definition, $context): void {
+            MediaModelRegistry::query()
                 ->whereKey($media->id)
                 ->where('status', MediaLifecycleStatus::ProcessingVariations->value)
                 ->update([

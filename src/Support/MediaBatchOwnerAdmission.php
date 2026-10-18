@@ -4,25 +4,28 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Support;
 
-use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use InvalidArgumentException;
 use Nvl\Media\Contracts\HasNvlMedia;
-use Nvl\Media\Models\Media;
+use Nvl\Media\Ownership\MediaOwnership;
+use Nvl\Media\Ownership\MediaOwnershipParentResolver;
 use Nvl\Media\Relations\ExactMediaText;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Support\Owners\OwnerBatch;
 use Nvl\Support\Owners\OwnerIdentity;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Ownership\Compatibility\LegacyResourceDefinitions;
+use Nvl\Support\Ownership\Compatibility\OwnershipFailures;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
+use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
-use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 
 /** Reloads exact captured identities through canonical host and tenant scopes. */
 final readonly class MediaBatchOwnerAdmission
 {
     /** Retain the registered ownership runtime. */
-    public function __construct(private Repository $configuration, private TenantBoundary $boundary, private TenantResourceRegistry $resources) {}
+    public function __construct(private OwnershipBoundary $boundary, private OwnershipResourceRegistry $resources, private LegacyResourceDefinitions $legacyResources, private OwnershipFailures $failures, private MediaOwnershipParentResolver $parents) {}
 
     /** Canonically reload each concrete owner class once. */
     public function admit(OwnerBatch $input): OwnerBatch
@@ -59,7 +62,7 @@ final readonly class MediaBatchOwnerAdmission
     public function assertPrototype(Model $owner): void
     {
         $prototype = new ($owner::class);
-        $media = new Media;
+        $media = MediaModelRegistry::newInstance();
         if (! $owner instanceof HasNvlMedia) {
             throw new InvalidArgumentException('Media batch owners must implement HasNvlMedia.');
         }
@@ -70,8 +73,10 @@ final readonly class MediaBatchOwnerAdmission
             || $prototype->getConnection() !== $media->getConnection()) {
             throw new TenantBoundaryViolation('Media owners must retain their canonical table and package connection.');
         }
-        if ($this->configuration->get('nvl-tenancy.enabled') === true) {
-            $this->resources->forModel($prototype);
+        if (MediaOwnership::active()) {
+            if ($this->resource($prototype) === null) {
+                $this->parents->resolve($owner);
+            }
         }
     }
 
@@ -92,11 +97,31 @@ final readonly class MediaBatchOwnerAdmission
             }
             $query->whereNull($column);
         }
-        if ($this->configuration->get('nvl-tenancy.enabled') === true) {
-            return $this->boundary->query($query, $this->resources->forModel($owner)->key);
+        if (MediaOwnership::active()) {
+            $resource = $this->resource($owner);
+
+            return $resource === null ? $this->parents->scopeAnchor($query) : $this->boundary->query($query, $resource);
         }
 
         return $query;
+    }
+
+    /** Resolve the one current authority without enrolling legacy metadata in the new graph. */
+    private function resource(Model $model): ?string
+    {
+        foreach ($this->resources->all() as $definition) {
+            if ($definition->model === $model::class) {
+                return $definition->ownership->strategy === 'unscoped' && config('nvl-ownership.enabled') === true ? null : $definition->key;
+            }
+        }
+        $legacy = $this->legacyResources->forModel($model::class);
+        if ($legacy !== null) {
+            return $legacy->key;
+        }
+        if (config('nvl-ownership.enabled') === true) {
+            return null;
+        }
+        throw $this->failures->violation('The Media host record has no canonical ownership resource.');
     }
 
     /** Keep caller OR clauses inside each mandatory owner guard without changing other query state.

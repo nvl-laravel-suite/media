@@ -18,5 +18,6 @@ final readonly class StagedCatalogMedia
         public string $storagePath,
         public string $digest,
         public int $size,
+        public ?string $ownerScopeKey = null,
     ) {}
 }

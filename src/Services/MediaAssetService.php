@@ -7,6 +7,7 @@ namespace Nvl\Media\Services;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
+use Nvl\Media\Ownership\MediaDeliveryGuard;
 use Nvl\Media\Support\MediaAssetVersion;
 use RuntimeException;
 
@@ -15,6 +16,7 @@ final class MediaAssetService
 {
     public function __construct(
         private readonly MediaFileExistence $existence,
+        private readonly MediaDeliveryGuard $delivery,
     ) {}
 
     /**
@@ -30,6 +32,7 @@ final class MediaAssetService
         Media $media,
         ?string $variationLabel = null,
     ): array {
+        $this->delivery->assertAsset($media);
         if (! $media->isAvailable()) {
             throw new RuntimeException("Media [{$media->id}] is not available for delivery.");
         }
@@ -44,6 +47,7 @@ final class MediaAssetService
                 throw new RuntimeException("Media variation [{$variationLabel}] was not found for media [{$media->id}].");
             }
 
+            $this->delivery->assertVariation($variation, $media);
             $path = $variation->getPath();
             if (! $this->existence->exists($media->disk, $path)) {
                 throw new RuntimeException("Media variation file [{$path}] was not found on disk [{$media->disk}].");

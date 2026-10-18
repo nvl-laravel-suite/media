@@ -12,6 +12,7 @@ use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaFileEffectScheduler;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaFileOperator;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\MediaQueryService;
@@ -67,7 +68,7 @@ final class BulkMoveMediaAction implements BulkMoveMediaContract
             $mediaIds,
             $sanitizedFolder,
         ): int {
-            $mediaItems = Media::query()
+            $mediaItems = MediaModelRegistry::query()
                 ->with('imageVariations')
                 ->whereIn('id', $mediaIds)
                 ->get();
@@ -141,7 +142,7 @@ final class BulkMoveMediaAction implements BulkMoveMediaContract
                     }
                 }
 
-                (new Media)->getConnection()->transaction(function () use (
+                (MediaModelRegistry::newInstance())->getConnection()->transaction(function () use (
                     $mediaIds,
                     $sanitizedFolder,
                     $completedCopies,
@@ -161,7 +162,7 @@ final class BulkMoveMediaAction implements BulkMoveMediaContract
                         }
                     }
 
-                    Media::query()
+                    MediaModelRegistry::query()
                         ->whereIn('id', $mediaIds)
                         ->lockForUpdate()
                         ->get()
@@ -170,11 +171,11 @@ final class BulkMoveMediaAction implements BulkMoveMediaContract
                                 ->forceFill(['folder' => $sanitizedFolder])
                                 ->save(),
                         );
-                    $this->eventCommits->afterCommit((new Media)->getConnection(), static function () use (&$writeCommitted): void {
+                    $this->eventCommits->afterCommit((MediaModelRegistry::newInstance())->getConnection(), static function () use (&$writeCommitted): void {
                         $writeCommitted = true;
                     });
                     foreach ($mediaIds as $mediaId) {
-                        $this->domainEvents->dispatch(new MediaMutated($mediaId, 'moved'), (new Media)->getConnection());
+                        $this->domainEvents->dispatch(new MediaMutated($mediaId, 'moved'), (MediaModelRegistry::newInstance())->getConnection());
                     }
                 });
             } catch (Throwable $exception) {

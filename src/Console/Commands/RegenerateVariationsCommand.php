@@ -14,6 +14,7 @@ use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Jobs\RegenerateMediaVariationsJob;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Support\Tenancy\Contracts\TenantContext;
 use Nvl\Support\Tenancy\Contracts\TenantRunner;
 use Nvl\Support\Tenancy\ValueObjects\PlatformOperation;
@@ -304,7 +305,7 @@ class RegenerateVariationsCommand extends Command
      */
     private function buildQuery(?MediaType $type, ?string $disk, ?string $after, ?string $before): Builder
     {
-        $query = Media::query()->available();
+        $query = MediaModelRegistry::query()->available();
 
         if ($type !== null) {
             $query->where('type', $type->value);

@@ -10,6 +10,7 @@ use Illuminate\Support\Str;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
+use Nvl\Media\Ownership\MediaOwnership;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Support\Tenancy\Contracts\TenantContext;
@@ -223,6 +224,11 @@ final readonly class MediaPathResolver
     public function storageFolder(string $folder, ?string $disk = null): string
     {
         $folder = $this->normalizeFolder($folder);
+        if (config('nvl-ownership.enabled') === true) {
+            $partition = MediaOwnership::storagePartition();
+
+            return implode('/', array_filter([self::rootFolder($disk), $partition, $folder], static fn (?string $part): bool => $part !== null && $part !== ''));
+        }
         if (config('nvl-tenancy.enabled') !== true) {
             return self::storagePath($folder, $disk);
         }
@@ -256,7 +262,9 @@ final readonly class MediaPathResolver
         $folder = dirname(trim($storagePath, '/'));
         $root = self::rootFolder($disk);
         $prefix = $root;
-        if (config('nvl-tenancy.enabled') === true) {
+        if (config('nvl-ownership.enabled') === true) {
+            $prefix = implode('/', array_filter([$root, MediaOwnership::storagePartition()], static fn (?string $part): bool => $part !== null && $part !== ''));
+        } elseif (config('nvl-tenancy.enabled') === true) {
             $snapshot = $this->tenantContext?->snapshot() ?? throw new TenantContextMissing;
             $partition = match ($snapshot->mode) {
                 TenantContextMode::Tenant => 'tenants/'.$snapshot->tenantId?->value,

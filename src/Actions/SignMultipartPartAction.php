@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Actions;
 
-use Illuminate\Support\Facades\DB;
 use Nvl\Media\Contracts\MultipartUploadGateway;
 use Nvl\Media\Contracts\SignMultipartPartContract;
 use Nvl\Media\Data\MediaActorData;
@@ -13,6 +12,7 @@ use Nvl\Media\Data\Multipart\SignMultipartPartData;
 use Nvl\Media\Enums\MediaMultipartStatus;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\MediaMultipartUpload;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMultipartSessionMapper;
 
 /**
@@ -33,7 +33,7 @@ final readonly class SignMultipartPartAction implements SignMultipartPartContrac
     ): SignedMultipartPartData {
         $this->assertEnabled();
         $expired = false;
-        $session = DB::transaction(function () use ($part, $actor, &$expired): MediaMultipartUpload {
+        $session = MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($part, $actor, &$expired): MediaMultipartUpload {
             $session = MediaMultipartUpload::query()
                 ->lockForUpdate()
                 ->findOrFail($part->uploadId);

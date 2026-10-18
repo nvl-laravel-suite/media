@@ -10,6 +10,7 @@ use InvalidArgumentException;
 use LogicException;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Models\MediaAssociation;
+use Nvl\Media\Ownership\MediaOwnershipParentResolver;
 use Nvl\Media\Slots\MediaSlot;
 
 /**
@@ -17,7 +18,7 @@ use Nvl\Media\Slots\MediaSlot;
  */
 final readonly class MediaOwnerSlotResolver
 {
-    public function __construct(private MediaTenantOwnerResolver $owners) {}
+    public function __construct(private MediaOwnershipParentResolver $owners) {}
 
     /**
      * Resolve and validate a package-owned single-file slot.

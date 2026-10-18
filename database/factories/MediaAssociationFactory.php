@@ -11,6 +11,7 @@ use InvalidArgumentException;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Tenancy\MediaTenantParentResolver;
 
 /**
@@ -51,7 +52,7 @@ final class MediaAssociationFactory extends Factory
                 throw new InvalidArgumentException('Media association fixtures require an allowlisted tenant owner.');
             }
             if ($model->getAttribute('media_id') !== null) {
-                $parent = Media::query()->findOrFail(FactoryGuard::identifier($model->getAttribute('media_id')));
+                $parent = MediaModelRegistry::query()->findOrFail(FactoryGuard::identifier($model->getAttribute('media_id')));
                 FactoryGuard::parent($parent, $model);
                 if (config('nvl-tenancy.enabled') === true && $owner->getRawOriginal('tenant_id') !== $parent->getRawOriginal('tenant_id')) {
                     throw new InvalidArgumentException('Fixture owner and parent tenancy must agree.');
@@ -69,7 +70,7 @@ final class MediaAssociationFactory extends Factory
     public function definition(): array
     {
         return [
-            'media_id' => Media::factory(),
+            'media_id' => MediaModelRegistry::newInstance()::factory(),
             'associable_type' => null,
             'associable_id' => null,
             'collection' => 'default',

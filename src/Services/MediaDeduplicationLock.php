@@ -13,14 +13,14 @@ use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Support\Config\PackageOptions;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 
 /**
  * MediaDeduplicationLock serializes shared digest uploads before file storage.
  */
 final class MediaDeduplicationLock
 {
-    public function __construct(private readonly TenantBoundary $tenantBoundary) {}
+    public function __construct(private readonly OwnershipBoundary $tenantBoundary) {}
 
     /**
      * Execute a deduplicated upload workflow inside a scoped cache lock.

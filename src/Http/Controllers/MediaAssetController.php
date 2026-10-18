@@ -12,12 +12,15 @@ use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Enums\MediaAbility;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Ownership\MediaDeliveryGuard;
+use Nvl\Media\Ownership\MediaOwnership;
 use Nvl\Media\Services\MediaAccessService;
 use Nvl\Media\Services\MediaAssetService;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Support\MediaAssetUrl;
 use Nvl\Media\Support\MediaAssetVersion;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Support\Tenancy\Services\TenantSiteAttributes;
 use Nvl\Support\Tenancy\ValueObjects\TenantSiteContext;
 use RuntimeException;
@@ -33,6 +36,8 @@ final class MediaAssetController extends Controller
         private readonly MediaDiskGateway $disks,
         private readonly MediaAuthorization $authorization,
         private readonly MediaAccessService $access,
+        private readonly MediaDeliveryGuard $delivery,
+        private readonly OwnershipBoundary $ownership,
     ) {}
 
     /**
@@ -119,7 +124,7 @@ final class MediaAssetController extends Controller
             ...$allowedParameters,
             'version',
             ...($signed ? ['expires', 'signature'] : []),
-            ...($signed ? ['tenant', 'revision'] : []),
+            ...($signed ? ['tenant', 'scope', 'revision'] : []),
         ];
         $unknownQueryKeys = array_values(array_diff(
             array_keys($request->query()),
@@ -159,6 +164,14 @@ final class MediaAssetController extends Controller
     /** Reject signed capabilities issued for another tenant, revision, or canonical origin. */
     private function assertSignedTenantRevision(Request $request, Media $media): void
     {
+        if (config('nvl-ownership.enabled') === true && MediaOwnership::active()) {
+            $this->delivery->assertAsset($media);
+            $scope = $request->query('scope');
+            $revision = $request->query('revision');
+            abort_unless(is_string($scope) && hash_equals($this->ownership->key('media.assets', 'private-url'), $scope) && is_string($revision) && ctype_digit($revision) && (string) $media->revision === $revision, 404);
+
+            return;
+        }
         if (config('nvl-tenancy.enabled') !== true) {
             return;
         }

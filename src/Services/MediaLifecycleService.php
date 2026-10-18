@@ -6,7 +6,6 @@ namespace Nvl\Media\Services;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Nvl\Media\Contracts\AttachMediaContract;
 use Nvl\Media\Contracts\DeleteMediaContract;
 use Nvl\Media\Contracts\DetachMediaContract;
@@ -107,8 +106,8 @@ final class MediaLifecycleService
         $mediaId = $media instanceof Media ? $media->id : $media;
 
         $this->mutationLock->execute($mediaId, function () use ($model, $mediaId, $collection): void {
-            DB::transaction(function () use ($model, $mediaId, $collection): void {
-                $resolvedMedia = Media::query()->lockForUpdate()->findOrFail($mediaId);
+            MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($model, $mediaId, $collection): void {
+                $resolvedMedia = MediaModelRegistry::query()->lockForUpdate()->findOrFail($mediaId);
 
                 $this->removeResolvedFromModel($model, $resolvedMedia, $collection);
             });
@@ -134,7 +133,7 @@ final class MediaLifecycleService
         );
 
         $this->mutationLock->executeMany($mediaIds, function () use ($model, $items, $collection): void {
-            DB::transaction(function () use ($model, $items, $collection): void {
+            MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($model, $items, $collection): void {
                 foreach ($items as $media) {
                     $resolvedCollection = $collection;
 
@@ -143,7 +142,7 @@ final class MediaLifecycleService
                         $resolvedCollection = is_string($pivotCollection) ? $pivotCollection : null;
                     }
 
-                    $resolvedMedia = Media::query()
+                    $resolvedMedia = MediaModelRegistry::query()
                         ->lockForUpdate()
                         ->findOrFail($media->id);
 

@@ -7,6 +7,7 @@ namespace Nvl\Media\Database\Factories;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaTranslation;
+use Nvl\Media\Services\MediaModelRegistry;
 
 /**
  * Builds MediaTranslation fixture rows and their declared package parents.
@@ -38,7 +39,7 @@ final class MediaTranslationFactory extends Factory
             }
 
             if ($model->getAttribute('media_id') !== null) {
-                $parent = Media::query()->findOrFail(FactoryGuard::identifier($model->getAttribute('media_id')));
+                $parent = MediaModelRegistry::query()->findOrFail(FactoryGuard::identifier($model->getAttribute('media_id')));
                 FactoryGuard::parent($parent, $model);
                 FactoryGuard::inherit($model, $parent, true);
             }
@@ -53,7 +54,7 @@ final class MediaTranslationFactory extends Factory
     public function definition(): array
     {
         return [
-            'media_id' => Media::factory(),
+            'media_id' => MediaModelRegistry::newInstance()::factory(),
             'locale' => 'en',
             'title' => $this->faker->sentence(3),
         ];

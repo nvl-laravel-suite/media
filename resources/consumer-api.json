@@ -1200,6 +1200,7 @@
                 "digest",
                 "disk",
                 "operationId",
+                "ownerScopeKey",
                 "size",
                 "storagePath",
                 "tenantId"
@@ -1221,7 +1222,8 @@
             "kind": "class",
             "file": "database/factories/MediaFactory.php",
             "methods": [
-                "definition"
+                "definition",
+                "modelName"
             ],
             "properties": [],
             "constants": []
@@ -1516,6 +1518,7 @@
             "methods": [
                 "__construct",
                 "fromAssociation",
+                "ownershipJobEnvelope",
                 "schemaVersion"
             ],
             "properties": [
@@ -1530,6 +1533,7 @@
             "file": "src/Events/MediaCatalogGrantAudited.php",
             "methods": [
                 "__construct",
+                "ownershipJobEnvelope",
                 "schemaVersion"
             ],
             "properties": [
@@ -1548,6 +1552,7 @@
             "file": "src/Events/MediaDetached.php",
             "methods": [
                 "__construct",
+                "ownershipJobEnvelope",
                 "schemaVersion"
             ],
             "properties": [
@@ -1562,6 +1567,7 @@
             "file": "src/Events/MediaMutated.php",
             "methods": [
                 "__construct",
+                "ownershipJobEnvelope",
                 "schemaVersion"
             ],
             "properties": [
@@ -1577,6 +1583,7 @@
             "file": "src/Events/MediaUploaded.php",
             "methods": [
                 "__construct",
+                "ownershipJobEnvelope",
                 "schemaVersion"
             ],
             "properties": [
@@ -1590,6 +1597,7 @@
             "file": "src/Events/MediaUploadedEvent.php",
             "methods": [
                 "__construct",
+                "ownershipJobEnvelope",
                 "schemaVersion"
             ],
             "properties": [
@@ -2282,6 +2290,7 @@
         "image_variations": "nvl_media_image_variations",
         "media": "nvl_media_media",
         "multipart_uploads": "nvl_media_multipart_uploads",
+        "owner_grant_locks": "nvl_media_owner_grant_locks",
         "owner_slot_operations": "nvl_media_owner_slot_operations",
         "tenant_adoption_copies": "nvl_media_tenant_adoption_copies",
         "tenant_grant_locks": "nvl_media_tenant_grant_locks",

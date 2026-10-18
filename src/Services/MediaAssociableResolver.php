@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Nvl\Media\Contracts\HasNvlMedia;
+use Nvl\Media\Ownership\MediaOwnershipParentResolver;
 use Nvl\Support\OwnerRegistry;
 
 /** MediaAssociableResolver validates and loads Media-capable associable models for API mutations. */
@@ -17,7 +18,7 @@ final class MediaAssociableResolver
 {
     /** Create the mutation resolver with package ownership and shared identity boundaries. */
     public function __construct(
-        private readonly MediaTenantOwnerResolver $owners,
+        private readonly MediaOwnershipParentResolver $owners,
         private readonly OwnerRegistry $identities,
     ) {}
 

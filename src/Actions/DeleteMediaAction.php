@@ -10,6 +10,7 @@ use Nvl\Media\Exceptions\MediaInUseException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Services\MediaFileEffectScheduler;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Support\MediaAssociationSnapshot;
 use Nvl\Support\Events\DomainEventDispatcher;
@@ -56,7 +57,7 @@ final class DeleteMediaAction implements DeleteMediaContract
             $affectedAssociations = [];
             $disk = '';
 
-            $deleted = (new Media)->getConnection()->transaction(function () use (
+            $deleted = (MediaModelRegistry::newInstance())->getConnection()->transaction(function () use (
                 $mediaId,
                 $force,
                 &$originalPath,
@@ -64,7 +65,7 @@ final class DeleteMediaAction implements DeleteMediaContract
                 &$affectedAssociations,
                 &$disk,
             ): bool {
-                $lockedMedia = Media::query()
+                $lockedMedia = MediaModelRegistry::query()
                     ->with(['associations', 'imageVariations'])
                     ->lockForUpdate()
                     ->findOrFail($mediaId);

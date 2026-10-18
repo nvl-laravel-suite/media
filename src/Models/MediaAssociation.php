@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Models;
 
+use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,11 +15,19 @@ use Illuminate\Support\Carbon;
 use Nvl\Media\Database\Factories\MediaAssociationFactory;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
+use Nvl\Media\Ownership\MediaAssociationOwnership;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Ownership\Contracts\Ownable;
+use Nvl\Support\Ownership\Contracts\OwnershipModelPersistence;
+use Nvl\Support\Ownership\Traits\HasOwnership;
+use Nvl\Support\Ownership\ValueObjects\OwnershipDefinition;
 
 /**
- * MediaAssociation: polymorphic pivot linking media to any associable model.
+ * @property-read string|null $owner_scope_key Technical immutable partition.
+ * @property-read string|null $owner_reference Captured scalar reference on operational roots.
  *
+ * MediaAssociation: polymorphic pivot linking media to any associable model.
  * @property string $id
  * @property string|null $tenant_id Canonical tenant UUID inherited from media.
  * @property string|null $ownership_key Mixed catalog partition inherited from media.
@@ -36,14 +45,36 @@ use Nvl\Support\Config\PackageStorage;
  *
  * @api
  */
-class MediaAssociation extends Model
+class MediaAssociation extends Model implements Ownable
 {
     use GuardsTenantOwnership;
 
     /** @use HasFactory<MediaAssociationFactory> */
     use HasFactory;
 
+    use HasOwnership;
     use HasUuids;
+
+    /** Keep scalar attachment targets inside the canonical source persistence lease.
+     * @param  array<string, mixed>  $options
+     */
+    public function save(array $options = []): bool
+    {
+        return Container::getInstance()->make(OwnershipModelPersistence::class)->save($this, function () use ($options): bool {
+            $guard = Container::getInstance()->make(MediaAssociationOwnership::class);
+            $guard->assertTarget($this);
+            $saved = parent::save($options);
+            $guard->assertTarget($this);
+
+            return $saved;
+        });
+    }
+
+    /** Inherit only from the canonical asset relation. */
+    public static function ownershipDefinition(): OwnershipDefinition
+    {
+        return OwnershipDefinition::inherited('media');
+    }
 
     public const string TABLE = MediaTables::Associations;
 
@@ -90,7 +121,7 @@ class MediaAssociation extends Model
      */
     public function media(): BelongsTo
     {
-        return $this->belongsTo(Media::class, 'media_id');
+        return $this->belongsTo(MediaModelRegistry::modelClass(), 'media_id');
     }
 
     /**

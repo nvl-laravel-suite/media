@@ -11,14 +11,14 @@ use Illuminate\Support\Facades\Cache;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Support\Config\PackageOptions;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 
 /**
  * Serializes completion and abortion transitions for one multipart session.
  */
 final class MediaMultipartLock
 {
-    public function __construct(private readonly TenantBoundary $tenantBoundary) {}
+    public function __construct(private readonly OwnershipBoundary $tenantBoundary) {}
 
     /**
      * @template TResult

@@ -187,6 +187,7 @@ it('accounts for the fixed disabled tenancy cold safety probe separately', funct
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $asset = Media::factory()->create(['is_public' => false]);
     batchMediaAssociation($owner, $asset);
+    app()->forgetScopedInstances();
     DB::enableQueryLog();
     DB::flushQueryLog();
     app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['document'], MediaActorData::system());

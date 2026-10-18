@@ -10,6 +10,15 @@ Keep environment reads in `config/nvl-media.php`, then use `php artisan config:c
 
 The values below are the shipped major 5 defaults. Application-published configuration is recursively merged with package defaults so newly added nested safety settings continue to exist after an upgrade; review `UPGRADING.md` whenever publishing or merging a new version.
 
+## Configured models
+
+`nvl-media.models.media` defaults to `Nvl\Media\Models\Media::class`.
+Set it to a concrete subclass before application boot. Media validates required
+casts, UUID keys, its custom builder and canonical persistence hooks. The shared
+Core model registry preserves existing native morph identities. Owned consumers
+override `ownershipDefinition()` with a native column or concrete primary pivot;
+ordinary applications retain the unscoped default.
+
 ## Tenancy
 
 `nvl-media.tenancy.owner_types` is an empty list by default. Tenancy remains opt-in;

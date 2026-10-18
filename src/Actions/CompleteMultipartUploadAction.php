@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Actions;
 
-use Illuminate\Support\Facades\DB;
 use Nvl\Media\Contracts\CompleteMultipartUploadContract;
 use Nvl\Media\Contracts\MultipartUploadGateway;
 use Nvl\Media\Contracts\RecoverableMultipartUploadGateway;
@@ -19,11 +18,14 @@ use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaMultipartUpload;
+use Nvl\Media\Ownership\MediaOwnership;
 use Nvl\Media\Services\MediaFileEffectScheduler;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMultipartLock;
 use Nvl\Media\Services\MediaMultipartSessionMapper;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Support\Logging\PackageLogger;
+use Nvl\Support\Ownership\Contracts\OwnershipWriter;
 use Throwable;
 
 /**
@@ -40,6 +42,7 @@ final readonly class CompleteMultipartUploadAction implements CompleteMultipartU
         private MediaMultipartSessionMapper $sessionMapper,
         private MediaPathResolver $paths,
         private PackageLogger $packageLogger,
+        private OwnershipWriter $ownershipWriter,
     ) {}
 
     public function execute(
@@ -60,7 +63,7 @@ final readonly class CompleteMultipartUploadAction implements CompleteMultipartU
     ): Media {
         $parts = $this->sortedParts($completion->parts);
         $expired = false;
-        $session = DB::transaction(function () use ($completion, $actor, $parts, &$expired): MediaMultipartUpload {
+        $session = MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($completion, $actor, $parts, &$expired): MediaMultipartUpload {
             $session = MediaMultipartUpload::query()
                 ->lockForUpdate()
                 ->findOrFail($completion->uploadId);
@@ -139,7 +142,7 @@ final readonly class CompleteMultipartUploadAction implements CompleteMultipartU
             ->update(['provider_object_identity' => $object->objectIdentity]);
         $session->provider_object_identity = $object->objectIdentity;
 
-        return DB::transaction(function () use ($session, $object): Media {
+        return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($session, $object): Media {
             $locked = MediaMultipartUpload::query()
                 ->lockForUpdate()
                 ->findOrFail($session->id);
@@ -157,16 +160,12 @@ final readonly class CompleteMultipartUploadAction implements CompleteMultipartU
             $pathInfo = pathinfo($locked->object_key);
             $folder = $this->paths->logicalFolderFromStoragePath($locked->object_key, $locked->disk);
 
-            $media = Media::query()->firstOrNew([
+            $media = MediaModelRegistry::query()->firstOrNew([
                 'upload_session_id' => $locked->id,
             ]);
             if (! $media->exists) {
                 $media->forceFill([
-                    ...(config('nvl-tenancy.enabled') === true ? [
-                        'tenant_id' => $locked->tenant_id,
-                        'ownership_key' => $locked->ownership_key,
-                        'storage_path' => $locked->object_key,
-                    ] : []),
+                    ...(MediaOwnership::active() ? ['storage_path' => $locked->object_key] : []),
                     'filename' => $locked->display_filename,
                     'hash' => (string) $pathInfo['basename'],
                     'extension' => $locked->canonical_extension,
@@ -181,7 +180,12 @@ final readonly class CompleteMultipartUploadAction implements CompleteMultipartU
                     'digest' => $locked->expected_checksum,
                     'uploaded_by' => $locked->uploader_id,
                     'uploaded_by_type' => $locked->uploader_type,
-                ])->save();
+                ]);
+                $this->ownershipWriter->create(MediaModelRegistry::modelClass(), static function (array $attributes) use ($media): Media {
+                    $media->forceFill($attributes)->save();
+
+                    return $media;
+                });
             }
 
             $locked->forceFill([

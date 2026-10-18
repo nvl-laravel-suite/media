@@ -23,18 +23,23 @@ use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Support\MediaAssetUrl;
 use Nvl\Media\Traits\MediaFilters;
 use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Ownership\Contracts\Ownable;
+use Nvl\Support\Ownership\Traits\HasOwnership;
 use Nvl\Translatable\Contracts\TranslatableModel;
 use Nvl\Translatable\Enums\TranslationMutationPolicy;
 use Nvl\Translatable\RelatedTranslationDefinition;
 use Nvl\Translatable\Translatable;
 
 /**
- * Media: represents a stored file with variations, translations, and polymorphic associations.
+ * @property-read string|null $owner_scope_key Technical immutable partition.
+ * @property-read string|null $owner_reference Captured scalar reference on operational roots.
  *
+ * Media: represents a stored file with variations, translations, and polymorphic associations.
  * @property string $id
  * @property string|null $tenant_id Canonical tenant UUID when tenant-owned.
  * @property string|null $ownership_key Mixed catalog partition identity.
@@ -95,17 +100,24 @@ use Nvl\Translatable\Translatable;
  * @nvl-consumer-read updated_at
  * @nvl-consumer-read deleted_at
  */
-class Media extends Model implements TranslatableModel
+class Media extends Model implements Ownable, TranslatableModel
 {
     use GuardsTenantOwnership;
 
     /** @use HasFactory<MediaFactory> */
     use HasFactory;
 
+    use HasOwnership;
     use HasUuids;
     use MediaFilters;
     use SoftDeletes;
     use Translatable;
+
+    /** Explicit consumer capability for central source assets that may be copied. */
+    public static function allowsCentralCatalog(): bool
+    {
+        return false;
+    }
 
     public const string TABLE = MediaTables::Media;
 
@@ -161,6 +173,17 @@ class Media extends Model implements TranslatableModel
             mutationPolicy: TranslationMutationPolicy::DomainActionOnly,
             ownershipResource: 'media.assets',
         );
+    }
+
+    /** Bind package routes through the advertised consumer class.
+     * @param  mixed  $value
+     * @param  string|null  $field
+     */
+    public function resolveRouteBinding($value, $field = null): ?Media
+    {
+        $model = MediaModelRegistry::newInstance();
+
+        return $model->newQuery()->where($field ?? $model->getRouteKeyName(), $value)->first();
     }
 
     /**

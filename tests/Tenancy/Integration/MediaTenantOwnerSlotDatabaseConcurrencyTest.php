@@ -8,7 +8,6 @@ use Illuminate\Support\Str;
 use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\MediaOwnerSlotOperationType;
-use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Services\MediaOwnerSlotIdempotency;
 use Nvl\Media\Tests\Fixtures\MediaTenancyScenario;
 use Nvl\Media\Tests\Stubs\TestMediaModel;
@@ -104,7 +103,7 @@ it('claims the same owner-slot key concurrently in independent tenant partitions
         expect($decoded[0]['ok'])->toBeTrue(json_encode($decoded[0], JSON_THROW_ON_ERROR))
             ->and($decoded[1]['ok'])->toBeTrue(json_encode($decoded[1], JSON_THROW_ON_ERROR))
             ->and($decoded[0]['operation_id'])->not->toBe($decoded[1]['operation_id'])
-            ->and(MediaOwnerSlotOperation::withoutGlobalScope('tenant')->where('idempotency_key', $key)
+            ->and(DB::table(MediaTables::get(MediaTables::OwnerSlotOperations))->where('idempotency_key', $key)
                 ->whereIn('tenant_id', [$scenario::A, $scenario::B])->count())->toBe(2)
             ->and(DB::table(MediaTables::OwnerSlotOperations)->where('idempotency_key', $key)
                 ->distinct()->count('request_hash'))->toBe(2);

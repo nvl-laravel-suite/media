@@ -16,10 +16,11 @@ use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Enums\MediaOwnerSlotOperationStatus;
 use Nvl\Media\Enums\MediaOwnerSlotOperationType;
 use Nvl\Media\Models\MediaOwnerSlotOperation;
+use Nvl\Media\Ownership\MediaOwnership;
+use Nvl\Media\Ownership\MediaOwnershipConstraints;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaOwnerSlotOperationClaim;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
-use Nvl\Support\Tenancy\Contracts\TenantContext;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 
 /**
  * Owns portable idempotency claims for Media owner-slot mutations.
@@ -27,8 +28,8 @@ use Nvl\Support\Tenancy\Contracts\TenantContext;
 final class MediaOwnerSlotIdempotency
 {
     public function __construct(
-        private readonly TenantBoundary $tenantBoundary,
-        private readonly TenantContext $tenantContext,
+        private readonly OwnershipBoundary $tenantBoundary,
+        private readonly MediaOwnershipConstraints $ownershipConstraints,
     ) {}
 
     /**
@@ -515,10 +516,11 @@ final class MediaOwnerSlotIdempotency
     private function operationQuery(): Builder
     {
         $query = MediaOwnerSlotOperation::query();
+        if (config('nvl-ownership.enabled') === true && MediaOwnership::active()) {
+            $this->ownershipConstraints->assertUnique($query->getModel()->getConnection(), $query->getModel()->getTable(), ['owner_scope_key', 'idempotency_key']);
+        }
 
-        return config('nvl-tenancy.enabled') === true
-            ? $this->tenantBoundary->query($query, 'media.slot-operations')
-            : $query;
+        return $this->tenantBoundary->query($query, 'media.slot-operations');
     }
 
     /**
@@ -688,11 +690,7 @@ final class MediaOwnerSlotIdempotency
     /** Resolve the stable tenant component of one idempotency identity. */
     private function tenantPartition(): string
     {
-        $snapshot = $this->tenantContext->snapshot();
-
-        return $snapshot->tenantId !== null
-            ? $snapshot->tenantId->value
-            : $snapshot->mode->value;
+        return $this->tenantBoundary->key('media.slot-operations', 'receipt');
     }
 
     /**

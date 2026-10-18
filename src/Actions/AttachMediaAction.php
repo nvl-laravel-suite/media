@@ -13,11 +13,13 @@ use Nvl\Media\Exceptions\MediaNotReusableException;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
+use Nvl\Media\Ownership\MediaOwnershipParentResolver;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMutationLock;
-use Nvl\Media\Services\MediaTenantOwnerResolver;
 use Nvl\Media\Services\MediaVariationDispatcher;
 use Nvl\Support\Events\DomainEventDispatcher;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
+use Nvl\Support\Ownership\Contracts\OwnershipWriter;
 
 /**
  * Attaches a media record to a model via a polymorphic pivot with deduplication.
@@ -29,9 +31,10 @@ final class AttachMediaAction implements AttachMediaContract
     public function __construct(
         private readonly MediaVariationDispatcher $variationDispatcher,
         private readonly MediaMutationLock $mutationLock,
-        private readonly MediaTenantOwnerResolver $owners,
-        private readonly TenantBoundary $tenantBoundary,
+        private readonly MediaOwnershipParentResolver $owners,
+        private readonly OwnershipBoundary $tenantBoundary,
         private DomainEventDispatcher $domainEvents,
+        private readonly OwnershipWriter $ownershipWriter,
     ) {}
 
     /**
@@ -63,9 +66,12 @@ final class AttachMediaAction implements AttachMediaContract
             throw new InvalidArgumentException('Cannot attach media to an unsaved model (model key is null).');
         }
 
-        $association = $this->mutationLock->execute($media->id, function () use (&$media, $morph_type, $morph_id, $collection, $locale, $order, $metadata, $requirePublic): MediaAssociation {
-            return (new Media)->getConnection()->transaction(function () use (&$media, $morph_type, $morph_id, $collection, $locale, $order, $metadata, $requirePublic): MediaAssociation {
-                $media = Media::query()->lockForUpdate()->findOrFail($media->id);
+        $association = $this->mutationLock->execute($media->id, function () use (&$media, $model, $morph_type, $morph_id, $collection, $locale, $order, $metadata, $requirePublic): MediaAssociation {
+            return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use (&$media, $model, $morph_type, $morph_id, $collection, $locale, $order, $metadata, $requirePublic): MediaAssociation {
+                $media = MediaModelRegistry::query()->lockForUpdate()->findOrFail($media->id);
+                $model = $this->owners->resolve($model, true);
+                $morph_type = $model->getMorphClass();
+                $morph_id = $model->getKey();
 
                 if ($requirePublic && ! $media->is_public) {
                     throw MediaNotReusableException::privateAsset($media->id);
@@ -88,14 +94,16 @@ final class AttachMediaAction implements AttachMediaContract
                     'order' => $order ?? 0,
                     'metadata' => ! empty($metadata) ? $metadata : null,
                 ]);
-                if (config('nvl-tenancy.enabled') === true) {
-                    $ownership = ['tenant_id' => $media->tenant_id];
-                    if (array_key_exists('ownership_key', $media->getAttributes())) {
-                        $ownership['ownership_key'] = $media->ownership_key;
-                    }
-                    $association->forceFill($ownership);
+                $association->forceFill($this->tenantBoundary->attributes('media.associations'));
+                if ($association->exists) {
+                    $association->save();
+                } else {
+                    $this->ownershipWriter->create(MediaAssociation::class, static function (array $attributes) use ($association): MediaAssociation {
+                        $association->forceFill($attributes)->save();
+
+                        return $association;
+                    });
                 }
-                $association->save();
 
                 $this->domainEvents->dispatch(MediaAttached::fromAssociation($association), $association->getConnection());
 

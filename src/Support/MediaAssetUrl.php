@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\URL;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
+use Nvl\Media\Ownership\MediaOwnership;
 use Nvl\Support\Tenancy\Exceptions\TenantContextMissing;
 use RuntimeException;
 use Throwable;
@@ -77,6 +78,7 @@ final class MediaAssetUrl
         ?string $tenantId = null,
         ?string $canonicalOrigin = null,
     ): string {
+        MediaOwnership::assertVariationOwner($variation);
         /** @var Media $media */
         $media = $variation->media;
         self::assertAvailable($media);
@@ -195,6 +197,7 @@ final class MediaAssetUrl
                 'tenant' => $tenantId,
                 'revision' => $media->revision,
             ] : []),
+            ...(config('nvl-ownership.enabled') === true && MediaOwnership::active() ? ['scope' => MediaOwnership::privateCapabilityKey(), 'revision' => $media->revision] : []),
             ...$normalized,
         ];
         $routeName = MediaConfiguration::string(
@@ -219,6 +222,9 @@ final class MediaAssetUrl
 
             return $origin.'/'.ltrim($relative, '/');
         } catch (Throwable $routeException) {
+            if (config('nvl-ownership.enabled') === true && MediaOwnership::active()) {
+                throw new RuntimeException('Owned private Media requires its scoped signed application route.', previous: $routeException);
+            }
             $path = self::pathForVariationOrOriginal($media, (string) ($normalized['v'] ?? ''));
 
             try {
@@ -511,9 +517,13 @@ final class MediaAssetUrl
         $variation = $media->getVariation($label);
 
         if (! $variation instanceof MediaImageVariation
+            || $variation->media_id !== $media->id
             || ! self::isCurrentAvailableVariation($media, $variation)) {
             return null;
         }
+
+        MediaOwnership::assertVariationOwner($variation);
+        MediaOwnership::assertVariation($variation, $media);
 
         return $variation;
     }
@@ -554,6 +564,7 @@ final class MediaAssetUrl
      */
     private static function assertAvailable(Media $media): void
     {
+        MediaOwnership::assertAsset($media);
         if (! $media->isAvailable()) {
             throw new RuntimeException("Media [{$media->id}] is not available for delivery.");
         }

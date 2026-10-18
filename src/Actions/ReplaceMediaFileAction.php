@@ -11,6 +11,7 @@ use Nvl\Media\Events\MediaMutated;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Services\MediaFileEffectScheduler;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaReplacementStager;
 use Nvl\Media\Services\MediaVariationDispatcher;
@@ -48,7 +49,7 @@ final class ReplaceMediaFileAction implements ReplaceMediaFileContract
         $mediaId = $media instanceof Media ? $media->id : $media;
 
         return $this->mutationLock->execute($mediaId, function () use ($mediaId, $file): Media {
-            $currentMedia = Media::query()
+            $currentMedia = MediaModelRegistry::query()
                 ->with('imageVariations')
                 ->findOrFail($mediaId);
             $staged = $this->stager->stage($currentMedia, $file);
@@ -61,7 +62,7 @@ final class ReplaceMediaFileAction implements ReplaceMediaFileContract
 
             $writeCommitted = false;
             try {
-                (new Media)->getConnection()->transaction(function () use (
+                (MediaModelRegistry::newInstance())->getConnection()->transaction(function () use (
                     $mediaId,
                     $sourceDisk,
                     $sourcePath,
@@ -76,7 +77,7 @@ final class ReplaceMediaFileAction implements ReplaceMediaFileContract
                         'replace_new_object',
                     );
 
-                    $lockedMedia = Media::query()
+                    $lockedMedia = MediaModelRegistry::query()
                         ->with('imageVariations')
                         ->lockForUpdate()
                         ->findOrFail($mediaId);
@@ -106,7 +107,7 @@ final class ReplaceMediaFileAction implements ReplaceMediaFileContract
                         'failure_code' => null,
                         'failure_context' => null,
                     ]);
-                    $this->eventCommits->afterCommit((new Media)->getConnection(), static function () use (&$writeCommitted): void {
+                    $this->eventCommits->afterCommit((MediaModelRegistry::newInstance())->getConnection(), static function () use (&$writeCommitted): void {
                         $writeCommitted = true;
                     });
                     $this->fileEffects->deleteAfterCommit(
@@ -131,7 +132,7 @@ final class ReplaceMediaFileAction implements ReplaceMediaFileContract
                 throw $exception;
             }
 
-            $freshMedia = Media::query()
+            $freshMedia = MediaModelRegistry::query()
                 ->with(['associations.associable', 'imageVariations', 'translations'])
                 ->findOrFail($mediaId);
 

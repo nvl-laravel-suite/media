@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Actions;
 
-use Illuminate\Support\Facades\DB;
 use Nvl\Media\Contracts\BulkTagMediaContract;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaQueryService;
 
@@ -39,8 +39,8 @@ final class BulkTagMediaAction implements BulkTagMediaContract
         $this->queries->findMany($ids);
 
         return $this->mutationLock->executeMany($ids, function () use ($ids, $tags): int {
-            return DB::transaction(function () use ($ids, $tags): int {
-                $mediaItems = Media::query()
+            return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($ids, $tags): int {
+                $mediaItems = MediaModelRegistry::query()
                     ->whereIn('id', $ids)
                     ->orderBy('id')
                     ->lockForUpdate()

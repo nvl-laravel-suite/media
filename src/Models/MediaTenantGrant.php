@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
 use Nvl\Media\Database\Factories\MediaTenantGrantFactory;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Support\Config\PackageStorage;
 
 /**
@@ -30,7 +31,7 @@ use Nvl\Support\Config\PackageStorage;
  *
  * @api
  */
-final class MediaTenantGrant extends Model
+class MediaTenantGrant extends Model
 {
     use GuardsTenantOwnership;
 
@@ -49,7 +50,7 @@ final class MediaTenantGrant extends Model
     /** @return BelongsTo<Media, $this> */
     public function media(): BelongsTo
     {
-        return $this->belongsTo(Media::class, 'media_id')->withTrashed();
+        return $this->belongsTo(MediaModelRegistry::modelClass(), 'media_id')->withTrashed();
     }
 
     /** @return array<string, string> */

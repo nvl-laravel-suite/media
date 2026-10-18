@@ -20,6 +20,7 @@ use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaFileOperator;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaVariationFileNamer;
 use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
@@ -865,14 +866,14 @@ final readonly class MediaAdoptionAdapter implements TenantAdoptionAdapter, Tena
     /** Resolve the canonical connection after the plan has already been checked. */
     private function connectionByName(): Connection
     {
-        return (new Media)->getConnection();
+        return MediaModelRegistry::newInstance()->getConnection();
     }
 
     /** Require the run and every Media table to share the canonical connection instance. */
     private function assertConnection(TenantAdoptionPlan $plan): void
     {
         $connection = $this->connection($plan);
-        foreach ([new Media, new MediaOwnerSlotOperation] as $model) {
+        foreach ([MediaModelRegistry::newInstance(), new MediaOwnerSlotOperation] as $model) {
             if ($model->getConnection() !== $connection) {
                 throw new TenantBoundaryViolation('Media adoption requires one canonical connection.');
             }

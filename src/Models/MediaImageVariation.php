@@ -12,15 +12,21 @@ use Illuminate\Support\Carbon;
 use Nvl\Media\Database\Factories\MediaImageVariationFactory;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Support\MediaAssetUrl;
 use Nvl\Media\Support\MediaMimeResolver;
 use Nvl\Media\Support\MediaVariationFileNamer;
 use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Ownership\Contracts\Ownable;
+use Nvl\Support\Ownership\Traits\HasOwnership;
+use Nvl\Support\Ownership\ValueObjects\OwnershipDefinition;
 
 /**
- * MediaImageVariation: a generated image conversion (thumbnail, optimized, etc.) for a media record.
+ * @property-read string|null $owner_scope_key Technical immutable partition.
+ * @property-read string|null $owner_reference Captured scalar reference on operational roots.
  *
+ * MediaImageVariation: a generated image conversion (thumbnail, optimized, etc.) for a media record.
  * @property string $id
  * @property string|null $tenant_id Canonical tenant UUID inherited from media.
  * @property string|null $ownership_key Mixed catalog partition inherited from media.
@@ -41,14 +47,21 @@ use Nvl\Support\Config\PackageStorage;
  *
  * @api
  */
-class MediaImageVariation extends Model
+class MediaImageVariation extends Model implements Ownable
 {
     use GuardsTenantOwnership;
 
     /** @use HasFactory<MediaImageVariationFactory> */
     use HasFactory;
 
+    use HasOwnership;
     use HasUuids;
+
+    /** Inherit only from the canonical asset relation. */
+    public static function ownershipDefinition(): OwnershipDefinition
+    {
+        return OwnershipDefinition::inherited('media');
+    }
 
     public const string TABLE = MediaTables::ImageVariations;
 
@@ -101,7 +114,7 @@ class MediaImageVariation extends Model
      */
     public function media(): BelongsTo
     {
-        return $this->belongsTo(Media::class, 'media_id')->withTrashed();
+        return $this->belongsTo(MediaModelRegistry::modelClass(), 'media_id')->withTrashed();
     }
 
     /* ---------------------------------------------------------------

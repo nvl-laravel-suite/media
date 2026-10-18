@@ -7,8 +7,6 @@ namespace Nvl\Media\Services;
 use Closure;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\DatabaseTransactionRecord;
-use Illuminate\Support\Facades\DB;
-use Nvl\Support\Config\PackageStorage;
 use Nvl\Support\Logging\PackageLogger;
 use Throwable;
 
@@ -115,7 +113,7 @@ final class MediaFileEffectScheduler
 
     private function rootTransaction(): ?DatabaseTransactionRecord
     {
-        $connection = DB::connection(PackageStorage::connection('media'));
+        $connection = MediaModelRegistry::newInstance()->getConnection();
 
         if ($connection->transactionLevel() === 0) {
             return null;

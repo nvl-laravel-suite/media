@@ -827,3 +827,25 @@ do not automatically clear Laravel facade caches. Use a separate fake per contai
 - `Nvl\Media\Contracts\UpdateMediaMetadataContract` — `UpdateMediaMetadataAction::execute()` arguments and results.
 
 Existing `UploadMediaContract`, `AttachMediaContract`, `DetachMediaContract`, `DeleteMediaContract`, `ReusePublicMediaContract`, and `ListOwnerMediaSlotsContract` remain the established seams. `MediaUploadBuilder` exposes all eighteen native fluent setters and the three native terminals; its internal fake initialization method is not a consumer API.
+
+## Configured asset models and ownership
+
+Set `nvl-media.models.media` to a concrete Media subclass before boot.
+`MediaModelRegistry::mediaClass()` returns that exact class; uploads, queries,
+relations, translations, factory models, route binding and jobs use it.
+Preserve required casts, UUID identity, builder and canonical save/delete hooks.
+Declare `ownershipDefinition()` using Core's native column or concrete pivot
+strategy. The default remains unscoped. Related rows inherit the asset boundary.
+
+`allowsCentralCatalog()` defaults to false. Override it only for a reviewed
+central source catalog; native column ownership must allow null for central
+sources. `MediaOwnerCatalog::grant()` issues a capability for the currently
+admitted recipient after the host's `MediaCatalogAccess` policy approves it.
+`inspect()`, `stage()`, `persist()` and `discard()` retain the staged-copy port;
+`persist()` requires the actual Media source transaction. `revoke()` requires
+the expected grant revision. Existing copies remain independent after revocation.
+`resolveRouteBinding()` is the framework binding hook for configured subclasses.
+
+Owner-private route URLs bind the full admitted partition/generation and source
+revision. The host must resolve and admit its owner before invoking Media routes.
+A signed URL does not establish an ownership context by itself.

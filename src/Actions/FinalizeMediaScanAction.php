@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Actions;
 
-use Illuminate\Support\Facades\DB;
 use Nvl\Media\Contracts\FinalizeMediaScanContract;
 use Nvl\Media\Data\MediaScanResultData;
 use Nvl\Media\Enums\MediaLifecycleStatus;
@@ -12,6 +11,7 @@ use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaFileTypePolicy;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaVariationDispatcher;
 use Nvl\Support\Logging\PackageLogger;
@@ -38,8 +38,8 @@ final class FinalizeMediaScanAction implements FinalizeMediaScanContract
         $id = $media instanceof Media ? $media->id : $media;
 
         return $this->mutationLock->execute($id, function () use ($id, $result): Media {
-            $finalized = DB::transaction(function () use ($id, $result): Media {
-                $locked = Media::query()->lockForUpdate()->findOrFail($id);
+            $finalized = MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($id, $result): Media {
+                $locked = MediaModelRegistry::query()->lockForUpdate()->findOrFail($id);
 
                 if ($locked->status === MediaLifecycleStatus::Available && $result->clean) {
                     return $locked;

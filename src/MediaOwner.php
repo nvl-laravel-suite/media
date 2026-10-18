@@ -21,6 +21,7 @@ use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Relations\StringMorphToMany;
 use Nvl\Media\Services\MediaLifecycleService;
 use Nvl\Media\Services\MediaModelInteractionService;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Slots\MediaSlot;
 
 /**
@@ -79,7 +80,7 @@ final class MediaOwner
      */
     public function query(): MorphToMany
     {
-        $related = new Media;
+        $related = MediaModelRegistry::newInstance();
 
         return (new StringMorphToMany(
             $related->newQuery(),
@@ -571,7 +572,7 @@ final class MediaOwner
     /** Return the NVL asset model class. */
     public function modelClass(): string
     {
-        return Media::class;
+        return MediaModelRegistry::modelClass();
     }
 
     /** Attach an existing NVL asset through its owned association action.

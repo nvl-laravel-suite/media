@@ -8,6 +8,7 @@ use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Support\MediaDiskResolver;
 
@@ -21,6 +22,12 @@ use Nvl\Media\Support\MediaDiskResolver;
 class MediaFactory extends Factory
 {
     protected $model = Media::class;
+
+    /** Resolve the configured consumer model for native factory persistence. */
+    public function modelName(): string
+    {
+        return app(MediaModelRegistry::class)->mediaClass();
+    }
 
     /**
      * Prepare native parent and owner facts after Laravel expands relationships.

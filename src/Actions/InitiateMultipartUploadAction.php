@@ -22,7 +22,7 @@ use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaHashGenerator;
 use Nvl\Support\Logging\PackageLogger;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Throwable;
 
 /**
@@ -40,7 +40,7 @@ final readonly class InitiateMultipartUploadAction implements InitiateMultipartU
         private MultipartUploadGateway $gateway,
         private MediaFileTypePolicy $fileTypes,
         private MediaMultipartSessionMapper $sessionMapper,
-        private TenantBoundary $tenantBoundary,
+        private OwnershipBoundary $tenantBoundary,
         private PackageLogger $packageLogger,
     ) {}
 
@@ -103,7 +103,8 @@ final readonly class InitiateMultipartUploadAction implements InitiateMultipartU
             $this->paths->storageFolder($folder, $data->disk),
             MediaHashGenerator::generateForExtension($fileType->extension),
         ], static fn (string $part): bool => $part !== ''));
-        $session = MediaMultipartUpload::query()->forceCreate([
+        $session = new MediaMultipartUpload;
+        $session->forceFill([
             ...$this->tenantBoundary->attributes('media.multipart'),
             'disk' => $data->disk,
             'object_key' => $objectKey,
@@ -125,7 +126,7 @@ final readonly class InitiateMultipartUploadAction implements InitiateMultipartU
             'maximum_part_size' => $maximumPartSize,
             'maximum_parts' => $maximumParts,
             'status' => MediaMultipartStatus::Initiated,
-        ]);
+        ])->save();
         $sessionData = $this->sessionMapper->toData($session);
 
         try {
