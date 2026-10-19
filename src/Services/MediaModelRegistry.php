@@ -12,10 +12,12 @@ use Nvl\Support\Models\ConfiguredModelResolver;
 use Nvl\Support\OwnerRegistry;
 use Nvl\Support\Ownership\Contracts\OwnershipWriter;
 use Nvl\Support\Ownership\Exceptions\OwnershipConfigurationInvalid;
-use Nvl\Support\Ownership\Services\OwnershipScope;
-use ReflectionMethod;
 
-/** Resolves the one configured Media extension through the shared native model identity. @api */
+/**
+ * Resolves the one configured Media extension through the shared native model identity.
+ *
+ * @api
+ */
 final class MediaModelRegistry
 {
     /** @var class-string<Media>|null */
@@ -24,9 +26,14 @@ final class MediaModelRegistry
     private bool $validated = false;
 
     /** Retain deployment configuration and the shared identity registry. */
-    public function __construct(private readonly Repository $configuration, private readonly OwnerRegistry $identities) {}
+    public function __construct(
+        private readonly Repository $configuration,
+        private readonly OwnerRegistry $identities,
+    ) {}
 
-    /** Resolve and freeze the concrete Media class before resource compilation. @internal
+    /** Resolve and freeze the concrete Media class before resource compilation.
+     * @internal
+     *
      * @return class-string<Media>
      */
     public function prepare(): string
@@ -59,26 +66,15 @@ final class MediaModelRegistry
         }
         $model = new $class;
         $base = new Media;
-        foreach ($base->getCasts() as $attribute => $cast) {
-            if (($model->getCasts()[$attribute] ?? null) !== $cast) {
-                throw new OwnershipConfigurationInvalid('Configured Media models must retain the required casts.');
-            }
-        }
-        foreach (['save', 'delete', 'newQueryForRestoration', 'bootHasOwnership', 'newEloquentBuilder'] as $method) {
-            if ((new ReflectionMethod($class, $method))->getDeclaringClass()->getName() !== Media::class) {
-                throw new OwnershipConfigurationInvalid('Configured Media models must retain the canonical persistence hooks.');
-            }
-        }
-        if (! $model->hasGlobalScope(OwnershipScope::class)
-            || $model->getKeyName() !== $base->getKeyName() || $model->getKeyType() !== 'string' || $model->getIncrementing()) {
-            throw new OwnershipConfigurationInvalid('Configured Media models must retain the builder, UUID and ownership capabilities.');
-        }
+        (new ConfiguredModelResolver)->assertOwnershipCapabilities($model, $base);
         $this->validated = true;
 
         return $class;
     }
 
-    /** Resolve the immutable model from native framework entry points. @internal
+    /** Resolve the immutable model from native framework entry points.
+     * @internal
+     *
      * @return class-string<Media>
      */
     public static function modelClass(): string
@@ -86,7 +82,11 @@ final class MediaModelRegistry
         return Container::getInstance()->make(self::class)->mediaClass();
     }
 
-    /** Construct the exact configured class without retaining a request-scoped model. @internal */
+    /**
+     * Construct the exact configured class without retaining a request-scoped model.
+     *
+     * @internal
+     */
     public static function newInstance(): Media
     {
         $class = Container::getInstance()->make(self::class)->mediaClass();
@@ -94,7 +94,9 @@ final class MediaModelRegistry
         return new $class;
     }
 
-    /** Persist a package-authored attribute map under the exact source assignment. @internal
+    /** Persist a package-authored attribute map under the exact source assignment.
+     * @internal
+     *
      * @param  array<string, mixed>  $attributes
      */
     public static function create(array $attributes): Media
@@ -107,7 +109,11 @@ final class MediaModelRegistry
         });
     }
 
-    /** Preserve Media's public custom query builder. @internal */
+    /**
+     * Preserve Media's public custom query builder.
+     *
+     * @internal
+     */
     public static function query(): MediaBuilder
     {
         return self::newInstance()->newQuery();

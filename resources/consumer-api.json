@@ -1989,6 +1989,16 @@
             ],
             "constants": []
         },
+        "Nvl\\Media\\Services\\MediaModelRegistry": {
+            "kind": "class",
+            "file": "src/Services/MediaModelRegistry.php",
+            "methods": [
+                "__construct",
+                "mediaClass"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Media\\Slots\\MediaSlot": {
             "kind": "class",
             "file": "src/Slots/MediaSlot.php",
