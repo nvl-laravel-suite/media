@@ -23,6 +23,7 @@
                 "image_variation_presets.small.enabled",
                 "image_variation_presets.thumb.enabled",
                 "migrations.enabled",
+                "models.media",
                 "multipart.enabled",
                 "multipart.gateway",
                 "multipart.lock.seconds",

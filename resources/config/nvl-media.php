@@ -1,13 +1,16 @@
 <?php
 
 declare(strict_types=1);
+
 use Nvl\Media\Enums\ImageFit;
 use Nvl\Media\Enums\ImagePreset;
+use Nvl\Media\Models\Media;
 use Nvl\Media\Services\NullMediaContentScanner;
 use Nvl\Media\Services\S3MultipartUploadGateway;
 use Nvl\Support\Config\PackageEnvironment;
 
 return [
+    'models' => ['media' => Media::class],
     'tenancy' => [
         // Ownership classification is separate from HTTP association allowlists.
         'owner_types' => [],
