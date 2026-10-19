@@ -35,7 +35,11 @@ use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Support\Ownership\Services\OwnershipScope;
 
-/** Issues recipient-owned capabilities and copies exact central revisions into independent assets. @api */
+/**
+ * Issues recipient-owned capabilities and copies exact central revisions into independent assets.
+ *
+ * @api
+ */
 final class MediaOwnerCatalog implements MediaCatalogImport
 {
     /** @var array<string, array{file: StagedCatalogMedia, source: MediaCatalogSnapshot, partition: string, persisted: bool}> */

@@ -4,225 +4,46 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
-use Illuminate\Database\Connection;
-use Illuminate\Support\Str;
+use Illuminate\Contracts\Config\Repository;
+use Nvl\Media\Compatibility\LegacyMediaCatalogImporter;
 use Nvl\Media\Contracts\MediaCatalogImport;
 use Nvl\Media\Data\MediaCatalogSnapshot;
 use Nvl\Media\Data\StagedCatalogMedia;
-use Nvl\Media\Definitions\Tables\MediaTables;
-use Nvl\Media\Enums\MediaLifecycleStatus;
-use Nvl\Media\Enums\MediaType;
-use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Models\Media;
-use Nvl\Media\Models\MediaTenantGrant;
-use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Ownership\MediaOwnerCatalog;
-use Nvl\Media\Support\MediaHashGenerator;
-use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
-use Nvl\Support\Ownership\Services\OwnershipScope;
-use Nvl\Support\Tenancy\Contracts\TenantContext;
-use Nvl\Support\Tenancy\Contracts\TenantDirectory;
-use Nvl\Support\Tenancy\Enums\TenantStatus;
-use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
-use Nvl\Support\Tenancy\Services\EffectiveTenantConnection;
-use Nvl\Support\Tenancy\ValueObjects\TenantId;
 
-/** Stages and persists independent tenant copies of authorized platform Media. */
-final class MediaCatalogImporter implements MediaCatalogImport
+/** Routes copy workflows through native ownership or the explicitly temporary historical bridge. @internal */
+final readonly class MediaCatalogImporter implements MediaCatalogImport
 {
-    /** @var array<string, StagedCatalogMedia> */
-    private array $staged = [];
+    /** Retain the independently guarded native and historical boundaries. */
+    public function __construct(private Repository $configuration, private MediaOwnerCatalog $owned, private LegacyMediaCatalogImporter $legacy) {}
 
-    /** @var array<string, array{grant_id: string, grant_revision: int, source_id: string, source_revision: int, source_digest: string, size: int}> */
-    private array $stagedSnapshots = [];
-
-    /** @var array<string, true> */
-    private array $persisted = [];
-
-    public function __construct(
-        private readonly MediaCatalogReader $reader,
-        private readonly MediaFileOperator $files,
-        private readonly MediaDiskGateway $disks,
-        private readonly MediaPathResolver $paths,
-        private readonly MediaFileEffectScheduler $fileEffects,
-        private readonly TenantContext $context,
-        private readonly TenantDirectory $directory,
-        private readonly OwnershipBoundary $boundary,
-        private readonly EffectiveTenantConnection $connections,
-        private readonly MediaVariationDispatcher $variations,
-        private readonly MediaOwnerCatalog $ownedCatalog,
-    ) {}
-
+    /** Inspect the grant in the selected authority. */
     public function inspect(string $grantId): MediaCatalogSnapshot
     {
-        return $this->reader->find($grantId);
+        return $this->configuration->get('nvl-ownership.enabled') === true ? $this->owned->inspect($grantId) : $this->legacy->inspect($grantId);
     }
 
+    /** Stage a private copy after fresh source admission. */
     public function stage(MediaCatalogSnapshot $source): StagedCatalogMedia
     {
-        if (config('nvl-ownership.enabled') === true) {
-            return $this->ownedCatalog->stage($source);
-        }
-        $tenant = $this->context->requireTenant();
-        $operationId = (string) Str::uuid();
-        $hash = MediaHashGenerator::generateForExtension($source->extension);
-        $path = $this->paths->storageFolder('catalog', $source->disk).'/'.$hash;
-        if (! $this->files->copy($source->disk, $source->storagePath, $source->disk, $path, MediaVisibility::Private)
-            || $this->disks->size($source->disk, $path) !== $source->size
-            || ! hash_equals($source->sourceDigest, $this->disks->checksum($source->disk, $path))) {
-            $this->files->delete($source->disk, $path);
-            throw new TenantBoundaryViolation('The granted Media source could not be staged safely.');
-        }
-
-        $file = new StagedCatalogMedia($operationId, $tenant->value, $source->disk, $path, $source->sourceDigest, $source->size);
-        $this->staged[$operationId] = $file;
-        $this->stagedSnapshots[$operationId] = [
-            'grant_id' => $source->grantId,
-            'grant_revision' => $source->grantRevision,
-            'source_id' => $source->sourceId,
-            'source_revision' => $source->sourceRevision,
-            'source_digest' => $source->sourceDigest,
-            'size' => $source->size,
-        ];
-
-        return $file;
+        return $this->configuration->get('nvl-ownership.enabled') === true ? $this->owned->stage($source) : $this->legacy->stage($source);
     }
 
+    /** Persist only a staged copy belonging to the current authority and source revision. */
     public function persist(MediaCatalogSnapshot $source, StagedCatalogMedia $file, string $idempotencyKey): Media
     {
-        if (config('nvl-ownership.enabled') === true) {
-            return $this->ownedCatalog->persist($source, $file, $idempotencyKey);
-        }
-        $connection = $this->connection();
-        $tenant = $this->context->requireTenant();
-        $expectedSnapshot = [
-            'grant_id' => $source->grantId,
-            'grant_revision' => $source->grantRevision,
-            'source_id' => $source->sourceId,
-            'source_revision' => $source->sourceRevision,
-            'source_digest' => $source->sourceDigest,
-            'size' => $source->size,
-        ];
-        if ($connection->transactionLevel() < 1 || ! Str::isUuid($idempotencyKey)
-            || $file->tenantId !== $tenant->value || ($this->staged[$file->operationId] ?? null) !== $file
-            || ($this->stagedSnapshots[$file->operationId] ?? null) !== $expectedSnapshot
-            || $this->disks->size($file->disk, $file->storagePath) !== $file->size
-            || ! hash_equals($file->digest, $this->disks->checksum($file->disk, $file->storagePath))) {
-            throw new TenantBoundaryViolation('The staged Media tuple is invalid or no transaction is active.');
-        }
-
-        if ($this->directory->find(new TenantId($tenant->value))->status !== TenantStatus::Active) {
-            throw new TenantBoundaryViolation('The Media catalog recipient is no longer active.');
-        }
-
-        $connection->table(MediaTables::get(MediaTables::TenantGrantLocks))->insertOrIgnore([
-            'tenant_id' => $tenant->value,
-            'media_id' => $source->sourceId,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-        $connection->table(MediaTables::get(MediaTables::TenantGrantLocks))
-            ->where('tenant_id', $tenant->value)
-            ->where('media_id', $source->sourceId)
-            ->lockForUpdate()
-            ->first();
-        $grant = MediaTenantGrant::withoutGlobalScope('tenant')
-            ->whereKey($source->grantId)
-            ->where('tenant_id', $tenant->value)
-            ->lockForUpdate()
-            ->first();
-        $platform = MediaModelRegistry::query()->withoutGlobalScope(OwnershipScope::class)
-            ->whereKey($source->sourceId)
-            ->whereNull('tenant_id')
-            ->where('ownership_key', 'platform')
-            ->lockForUpdate()
-            ->first();
-        if (! $grant instanceof MediaTenantGrant || ! $grant->enabled || $grant->revoked_at !== null
-            || $grant->revision !== $source->grantRevision || $grant->source_revision !== $source->sourceRevision
-            || ! $platform instanceof Media || $platform->revision !== $source->sourceRevision
-            || $platform->status !== MediaLifecycleStatus::Available
-            || ! hash_equals($platform->digest, $source->sourceDigest)) {
-            throw new TenantBoundaryViolation('The Media grant or platform source changed during staging.');
-        }
-
-        $existing = MediaModelRegistry::query()->where('catalog_import_key', $idempotencyKey)->lockForUpdate()->first();
-        if ($existing instanceof Media) {
-            if ($existing->catalog_source_id !== $source->sourceId
-                || $existing->catalog_source_revision !== $source->sourceRevision
-                || $existing->catalog_source_digest !== $source->sourceDigest) {
-                throw new TenantBoundaryViolation('The Media import key belongs to another source revision.');
-            }
-            $this->files->delete($file->disk, $file->storagePath);
-            unset($this->staged[$file->operationId]);
-            unset($this->stagedSnapshots[$file->operationId]);
-
-            return $existing;
-        }
-
-        $this->fileEffects->deleteAfterRollback($file->disk, [$file->storagePath], 'catalog_import');
-        $media = MediaModelRegistry::create([
-            ...$this->boundary->attributes('media.assets'),
-            'filename' => $source->filename,
-            'hash' => basename($file->storagePath),
-            'extension' => $source->extension,
-            'mime_type' => $source->mimeType,
-            'size' => $file->size,
-            'disk' => $file->disk,
-            'folder' => 'catalog',
-            'is_public' => false,
-            'visibility' => MediaVisibility::Private,
-            'status' => MediaLifecycleStatus::Available,
-            'available_at' => now(),
-            'type' => MediaType::fromExtension($source->extension),
-            'digest' => $file->digest,
-            'tags' => $source->tags,
-            'metadata' => $source->metadata,
-            'storage_path' => $file->storagePath,
-            'catalog_import_key' => $idempotencyKey,
-            'catalog_source_id' => $source->sourceId,
-            'catalog_source_revision' => $source->sourceRevision,
-            'catalog_source_digest' => $source->sourceDigest,
-        ]);
-        foreach ($source->translations as $locale => $translation) {
-            MediaTranslation::query()->forceCreate([
-                'tenant_id' => $media->tenant_id,
-                'ownership_key' => $media->ownership_key,
-                'media_id' => $media->id,
-                'locale' => $locale,
-                'title' => $translation['title'] ?? null,
-                'alt' => $translation['alt'] ?? null,
-                'caption' => $translation['caption'] ?? null,
-                'description' => $translation['description'] ?? null,
-            ]);
-        }
-        $this->persisted[$file->operationId] = true;
-        $this->variations->dispatchConfiguredForUpload($media);
-
-        return $media;
+        return $this->configuration->get('nvl-ownership.enabled') === true ? $this->owned->persist($source, $file, $idempotencyKey) : $this->legacy->persist($source, $file, $idempotencyKey);
     }
 
+    /** Discard an uncommitted stage through its guarded authority. */
     public function discard(StagedCatalogMedia $file): void
     {
-        if (config('nvl-ownership.enabled') === true) {
-            $this->ownedCatalog->discard($file);
+        if ($this->configuration->get('nvl-ownership.enabled') === true) {
+            $this->owned->discard($file);
 
             return;
         }
-        if (($this->staged[$file->operationId] ?? null) !== $file || isset($this->persisted[$file->operationId])) {
-            return;
-        }
-        $this->files->delete($file->disk, $file->storagePath);
-        unset($this->staged[$file->operationId]);
-        unset($this->stagedSnapshots[$file->operationId]);
-    }
-
-    private function connection(): Connection
-    {
-        $connection = (MediaModelRegistry::newInstance())->getConnection();
-        if ($connection !== $this->connections->core()) {
-            throw new TenantBoundaryViolation('Media catalog import requires the canonical tenant connection.');
-        }
-
-        return $connection;
+        $this->legacy->discard($file);
     }
 }

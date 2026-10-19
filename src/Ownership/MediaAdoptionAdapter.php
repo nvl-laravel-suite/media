@@ -129,7 +129,7 @@ final readonly class MediaAdoptionAdapter implements OwnershipAdoptionAdapter, O
     private function backfillResource(OwnershipAdoptionPlan $plan, ?string $cursor, int $limit): OwnershipBackfillResult
     {
         $parts = $cursor === null ? ['0', ''] : explode(':', $cursor, 2);
-        if (count($parts) !== 2 || ! ctype_digit($parts[0])) {
+        if (count($parts) !== 2 || preg_match('/^[0-9]+$/D', $parts[0]) !== 1) {
             throw new OwnershipConfigurationInvalid('Invalid Media adoption cursor.');
         }
         $keys = $this->resources();

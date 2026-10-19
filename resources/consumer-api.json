@@ -527,6 +527,16 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Media\\Contracts\\MediaCatalogAccess": {
+            "kind": "interface",
+            "file": "src/Contracts/MediaCatalogAccess.php",
+            "methods": [
+                "assertCanGrant",
+                "assertCanRevoke"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Media\\Contracts\\MediaCatalogImport": {
             "kind": "interface",
             "file": "src/Contracts/MediaCatalogImport.php",
@@ -1667,6 +1677,21 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Media\\Exceptions\\MediaDependencyUnavailableException": {
+            "kind": "class",
+            "file": "src/Exceptions/MediaDependencyUnavailableException.php",
+            "methods": [
+                "package",
+                "publicContext",
+                "responseCode",
+                "responseHeaders",
+                "suggestedStatus",
+                "translationKey",
+                "translationParameters"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Media\\Exceptions\\MediaException": {
             "kind": "class",
             "file": "src/Exceptions/MediaException.php",
@@ -1955,6 +1980,22 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Media\\Models\\MediaOwnerGrant": {
+            "kind": "class",
+            "file": "src/Models/MediaOwnerGrant.php",
+            "methods": [
+                "getKey",
+                "getKeyName",
+                "getMorphClass",
+                "getRouteKey",
+                "getRouteKeyName",
+                "is",
+                "isNot",
+                "relationLoaded"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Media\\Models\\MediaTenantGrant": {
             "kind": "class",
             "file": "src/Models/MediaTenantGrant.php",
@@ -1987,6 +2028,21 @@
             "properties": [
                 "id"
             ],
+            "constants": []
+        },
+        "Nvl\\Media\\Ownership\\MediaOwnerCatalog": {
+            "kind": "class",
+            "file": "src/Ownership/MediaOwnerCatalog.php",
+            "methods": [
+                "__construct",
+                "discard",
+                "grant",
+                "inspect",
+                "persist",
+                "revoke",
+                "stage"
+            ],
+            "properties": [],
             "constants": []
         },
         "Nvl\\Media\\Services\\MediaModelRegistry": {
@@ -2241,6 +2297,20 @@
             "capability_relations": []
         },
         "Nvl\\Media\\Models\\MediaImageVariation": {
+            "read": [],
+            "identity_methods": [
+                "getKey",
+                "getKeyName",
+                "getMorphClass",
+                "getRouteKey",
+                "getRouteKeyName",
+                "is",
+                "isNot",
+                "relationLoaded"
+            ],
+            "capability_relations": []
+        },
+        "Nvl\\Media\\Models\\MediaOwnerGrant": {
             "read": [],
             "identity_methods": [
                 "getKey",
