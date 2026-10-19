@@ -11,7 +11,6 @@
         "translation"
     ],
     "require": {
-        "php": "^8.4",
         "ext-ctype": "*",
         "ext-curl": "*",
         "ext-dom": "*",
@@ -27,6 +26,7 @@
         "nvl/core": "^5.1",
         "nvl/filterable": "^5.0",
         "nvl/translatable": "^5.1",
+        "php": "^8.4",
         "spatie/image": "^3.0",
         "spatie/laravel-data": "^4.23",
         "symfony/http-foundation": "^7.0 || ^8.0",
@@ -46,7 +46,8 @@
         "pestphp/pest": "^4.0",
         "pestphp/pest-plugin-laravel": "^4.0",
         "shipmonk/composer-dependency-analyser": "^1.8",
-        "spatie/typescript-transformer": "^3.3"
+        "spatie/typescript-transformer": "^3.3",
+        "symfony/process": "^7.0 || ^8.0"
     },
     "autoload": {
         "psr-4": {
@@ -122,12 +123,14 @@
     "suggest": {
         "aws/aws-sdk-php": "Built-in S3 uploads and multipart storage: composer require league/flysystem-aws-s3-v3:^3.0 aws/aws-sdk-php:^3.322.9 --with-all-dependencies.",
         "league/flysystem-aws-s3-v3": "Built-in S3 uploads and multipart storage: composer require league/flysystem-aws-s3-v3:^3.0 aws/aws-sdk-php:^3.322.9 --with-all-dependencies.",
-        "nvl/tenancy": "Enables enforcing tenant ownership, scoped execution, adoption, and captured tenant queue contexts.",
+        "nvl/ownership": "Adds optional model-declared ownership, isolation, adoption and captured worker contexts.",
+        "nvl/tenancy": "Temporary legacy tenancy bridge for existing tenant installations; native ownership does not require it.",
         "spatie/typescript-transformer": "Consume the declared TypeScript attributes and metadata (^3.3); Core retains the runtime transformation engine."
     },
     "conflict": {
         "aws/aws-sdk-php": "<3.322.9 || >=4.0",
         "league/flysystem-aws-s3-v3": "<3.0 || >=4.0",
+        "nvl/ownership": "<5.0 || >=6.0",
         "nvl/tenancy": "<5.0 || >=6.0"
     },
     "homepage": "https://github.com/nvl-laravel-suite/media",

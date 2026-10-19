@@ -6,6 +6,7 @@ namespace Nvl\Media\Ownership;
 
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
+use Nvl\Support\Ownership\Compatibility\LegacyOwnershipSupport;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
@@ -16,7 +17,7 @@ final class MediaOwnership
     /** A declared consumer root also stays guarded when its runtime is unavailable. */
     public static function active(): bool
     {
-        return self::declared() || config('nvl-tenancy.enabled') === true;
+        return self::declared() || app(LegacyOwnershipSupport::class)->enabled();
     }
 
     /** Read immutable ownership metadata even when the enforcing runtime is unavailable. */
