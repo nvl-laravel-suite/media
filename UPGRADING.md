@@ -1,5 +1,12 @@
 # Upgrading NVL Media
 
+## Major 6 ownership rollout
+
+Support configured Media subclasses with native columns or exclusive pivots. Derive associations, variations and translations from the canonical asset; fence multipart and slot receipts, private delivery, storage copies and worker restoration while preserving asset UUIDs and original tenant IDs.
+
+Upgrade the selected NVL dependency closure together to `^6.0`. Ordinary unowned hosts retain the default unscoped declarations and need no ownership context. For isolation, use the installed Ownership README and UPGRADING guide, exact configured subclasses and reviewed adoption before accepting traffic. Disabling or removing Ownership is not rollback; Core retains durable denial guards. Keep existing tenant IDs and migration history. The explicit Tenancy bridge remains deprecated through major 6; its retirement is a separate reviewed migration no earlier than major 7.
+
+
 ## Per-disk folders and visibility defaults (5.1.0)
 
 The new `root_folders` map defaults to empty; `public_disk` and `private_disk` default to null. Existing disk and folder behavior remains unchanged until configured. An explicit empty per-disk folder omits the base prefix. See [Storage configuration](docs/configuration.md#storage).
@@ -170,7 +177,7 @@ Review the dedicated [PHP API](docs/php-api.md), [HTTP API](docs/http-api.md), [
 
 Declare owner classes in `nvl-core.owners`, for example `'owners' => [Article::class]`, and reference the same model class from each package capability. Laravel's `getMorphClass()` is the stored owner identity: it returns the host-authored morph alias or the FQCN when no map exists. Core declarations and package allowlists do not add or enforce a host morph map and do not grant authorization.
 
-Legacy alias references remain read compatibility during major 5 and are removed in major 6. A legacy configured alias must agree with the model's current `getMorphClass()`; mismatches are diagnostics and require a host decision. Doctor can inspect declared package owner columns for stored-versus-current identities without rewriting them. If the host introduces or changes its morph map, review and convert only the affected stored columns and reconcile host relationships before cutover. No automatic owner-data conversion or `nvl:owners:upgrade` is provided. Rebuild configuration caches and restart workers after the coordinated change.
+Legacy alias references remain read compatibility during major 5 and remain deprecated in major 6. A legacy configured alias must agree with the model's current `getMorphClass()`; mismatches are diagnostics and require a host decision. Doctor can inspect declared package owner columns for stored-versus-current identities without rewriting them. If the host introduces or changes its morph map, review and convert only the affected stored columns and reconcile host relationships before cutover. No automatic owner-data conversion or `nvl:owners:upgrade` is provided. Rebuild configuration caches and restart workers after the coordinated change.
 
 ## Queue default inheritance
 
@@ -201,7 +208,7 @@ DDL transactions are driver dependent and per connection. Inspect dry-run warnin
 
 New integrations implement `HasNvlMedia` and use `InteractsWithNvlMedia`. Move slot/conversion definitions into `registerNvlMedia(MediaRegistration $media, ?Media $asset = null)`, using `$media->slot()` and `$media->conversion()`. Move uploads and reads to `$owner->nvlMedia()->add()`, `fromString()`, `all()`, `first()` and `firstUrl()`. Eager-load `nvlMediaAssociations`, whose NVL assets load with it. The facade, injected library contract and owner-slot Actions accept this capability.
 
-The legacy `HasMedia` interface and `InteractsWithMedia` trait remain forwarding adapters throughout major 5 and are removed in major 6. Existing NVL-only models using that trait retain their public calls and old registration overrides. Handwritten implementations of the old contract must also provide the new capability methods or adopt the forwarding trait. A host composing Spatie Media uses the new NVL contract/trait, preserving Spatie's `media()`, `addMedia()` and `registerMediaConversions()` unchanged. Do not compose the deprecated NVL trait on that dual-library model.
+The legacy `HasMedia` interface and `InteractsWithMedia` trait remain forwarding adapters throughout major 5 and remain deprecated in major 6. Existing NVL-only models using that trait retain their public calls and old registration overrides. Handwritten implementations of the old contract must also provide the new capability methods or adopt the forwarding trait. A host composing Spatie Media uses the new NVL contract/trait, preserving Spatie's `media()`, `addMedia()` and `registerMediaConversions()` unchanged. Do not compose the deprecated NVL trait on that dual-library model.
 
 This API change performs no database, file or morph-identity conversion. NVL and Spatie collection operations use their own models, associations, disks and conversion definitions. Soft deletion preserves both sets; force deletion invokes each library's own cleanup. The reproducible standalone proof is `tools/run-media-spatie-consumer.sh`; Spatie is required only by its test fixture, never by the production Media manifest.
 

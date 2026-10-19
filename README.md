@@ -3,12 +3,12 @@
 ## Quickstart
 
 ```sh
-composer require nvl/media:^5.0
+composer require nvl/media:^6.0
 php artisan nvl:install media --dry-run
 php artisan nvl:install media
 ```
 
-Required NVL dependencies: `nvl/core` (`^5.0`), `nvl/filterable` (`^5.0`), `nvl/translatable` (`^5.0`). Configure disks, scanner policy and owner capabilities. Resolve authorization from the host. S3/images/scanning need their documented optional features; factories do not create files.
+Required NVL dependencies: `nvl/core` (`^6.0`), `nvl/filterable` (`^6.0`), `nvl/translatable` (`^6.0`). Configure disks, scanner policy and owner capabilities. Resolve authorization from the host. S3/images/scanning need their documented optional features; factories do not create files.
 Review the published common config, select one migration owner, and run schema preflight before existing-table upgrades. The installer does not enable features or run migrations. Follow the detailed installation and capability sections below before invoking a storage/provider operation.
 
 Inject `Nvl\Media\Contracts\MediaLibraryContract` in a host service. After supplying the trusted inputs described above, the first public call is:
@@ -34,7 +34,7 @@ See the [installation and publishing guide](https://github.com/nvl-laravel-suite
 
 | Item | Value |
 |---|---|
-| Installed through | `composer require nvl/media:^5.0` |
+| Installed through | `composer require nvl/media:^6.0` |
 | Module identifier | `nvl/media` |
 | PHP namespace | `Nvl\Media` |
 | Service provider | `Nvl\Media\Providers\MediaServiceProvider` |
@@ -76,7 +76,7 @@ See [batched slots](docs/php-api.md#batched-owner-slots) and [SQL authorization]
 - `league/flysystem-aws-s3-v3` is included for S3-compatible disks
 
 ```bash
-composer require nvl/media:^5.0
+composer require nvl/media:^6.0
 php artisan migrate
 ```
 

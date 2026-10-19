@@ -5,6 +5,12 @@ description: Use when implementing, integrating, testing, or reviewing nvl/media
 
 # NVL Media
 
+For major 6, use native Ownership for new isolated integrations and the installed
+Ownership README/UPGRADING runbook for configured subclasses and reviewed adoption.
+Ordinary unowned hosts keep unscoped declarations; installation does not enable
+isolation. Tenant-specific APIs below apply only to the explicitly selected
+deprecated Tenancy bridge; they never substitute for native owner admission.
+
 Treat binary lifecycle, database lifecycle, associations, delivery, and localized metadata as one security boundary. Never expose internal storage paths through public DTOs.
 
 The supported major 5 production profile is PHP 8.3/8.4, Laravel 13, PostgreSQL, S3-compatible private storage with exception-enabled writes, Redis cache/locks/queues, and a real scanner. Multipart is opt-in and requires the recoverable gateway, central session locks, scanner attestation, pruning, and the PostgreSQL/Redis/S3 integration gate. SQLite/local/array/sync are development-compatible but do not prove production concurrency guarantees.
@@ -28,7 +34,7 @@ The supported major 5 production profile is PHP 8.3/8.4, Laravel 13, PostgreSQL,
 ## Choose ownership semantics
 
 - Implement `HasNvlMedia` and use `InteractsWithNvlMedia`. Define slots/conversions in `registerNvlMedia(MediaRegistration $media, ?Media $asset = null)` through `$media->slot()` and `$media->conversion()`; access uploads/mutations/reads through `nvlMedia()` (`add`, `attach`, `detach`, `sync`, `slot`, `first`, `firstUrl`, `all`). Use `ListOwnerMediaSlotsContract` with the explicit actor and `MediaBatchAuthorization` for bounded owner display lists, or the authorized `hasNvlMedia` host scope for existence filtering. `nvlMediaAssociations()` is an internal storage relation; consumers do not load it through relation properties, `load`, `with`, or collection eager loading.
-- A model composing Spatie Media keeps Spatie `media()`, `addMedia()` and `registerMediaConversions()` independently. Compose only the new NVL capability there. Deprecated NVL `HasMedia`/`InteractsWithMedia` forward to the same NVL implementation through major 5 and are removed in major 6.
+- A model composing Spatie Media keeps Spatie `media()`, `addMedia()` and `registerMediaConversions()` independently. Compose only the new NVL capability there. Deprecated NVL `HasMedia`/`InteractsWithMedia` forward to the same NVL implementation through major 6 and remain deprecated in major 6.
 - For application services, inject `MediaLibraryContract` or explicitly import `Nvl\Media\Facades\Media`; never assume a global class alias. The facade delegates to the same Actions and contracts as the trait.
 - Treat facade mutations as trusted application-service calls. Authorize user-driven operations with policies or `Media::allows()` before invoking them.
 - In jobs and console commands, call `MediaAdder::uploadedBy($actor)` before the terminal upload method when private ownership or uploader-scoped deduplication matters.
@@ -110,8 +116,9 @@ return [
 
 ## Operate and verify
 
-- Treat tenancy as opt-in. Register every Media owner as a canonical tenant
-  resource and activate only after the package adapter verifies the full graph.
+- Keep ownership opt-in. Configure the Media subclass/native owner column or
+  pivot and exact host resources; activate only after reviewed graph verification.
+  Legacy tenant resource registration applies only to the deprecated bridge.
 - Treat catalog grants as copy availability, never shared ownership. Imported
   files and rows are independent; revocation cannot rewrite committed copies.
 - Resume an interrupted adoption only after source/schema repair consistent
@@ -128,18 +135,18 @@ return [
 - Use `nvl:media:regenerate` and `nvl:media:migrate-disk` for controlled maintenance.
 - Test public reuse, private isolation, root commit/rollback, concurrent replacement/variation/finalization, scanner failure, SVG safety, SSRF/DNS pinning, temporary-file release, signed expiry, Range/HEAD behavior, multipart recovery, missing storage, localized metadata, and orphan reconciliation.
 
-## Configurable-tenancy release discipline
+## Ownership isolation and release discipline
 
-- Preserve disabled compatibility and package independence; tenant support never creates an undeclared Auth or Suite dependency.
-- Use registered package-owned resources, adoption adapters, Actions, and lifecycle APIs. Never add a generic tenant delete-all path or raw cross-package cleanup.
-- Treat mapping/configuration hashes, interruption checkpoints, conservation evidence, worker context, tenant-leading queries, and standalone consumption as release contracts.
+- Keep unowned applications independent of the enforcement runtime; native ownership never adds an undeclared Auth or Suite dependency. Tenancy-specific APIs are deprecated bridge compatibility.
+- Use registered package-owned resources, adoption adapters, Actions, and lifecycle APIs. Never add a generic owner delete-all path or raw cross-package cleanup.
+- Treat mapping/configuration hashes, interruption checkpoints, conservation evidence, worker context, owner-partitioned queries, and standalone consumption as release contracts.
 
 ## Shared owner identities
 
 - Declare owner class lists in `nvl-core.owners` and reference model classes in `media` capability configuration. Laravel `getMorphClass()` supplies the host-authored stored identity; declarations do not add global host morph mappings.
 - Owners implement HasNvlMedia and use InteractsWithNvlMedia. Preserve collection/slot declarations and authorize the configured mutation ability.
 - Keep the package allowlist and authorization independent of Core registration. Never authorize a model merely because Core knows it.
-- Preserve resolvers, handlers and authorization. Legacy aliases require agreement with native `getMorphClass()` and are removed in major 6; Doctor reports mismatches and stored identity drift without conversion.
+- Preserve resolvers, handlers and authorization. Legacy aliases require agreement with native `getMorphClass()` and remain deprecated in major 6; Doctor reports mismatches and stored identity drift without conversion.
 - If the host changes its morph map, explicitly reconcile reviewed package-owned columns and affected host relations before cutover. Core and package capability registration never mutate the host morph map or rewrite stored values.
 
 ## Shared diagnostics and queue inheritance
@@ -167,7 +174,7 @@ Drain old mutation workers and maintenance processes, then wait for their outsta
 ## Canonical configuration ownership
 
 - Read/write `nvl-media` configuration and publish only canonical `nvl-<package>-<resource>` tags. Keep logical package/tenant resource identifiers unchanged.
-- Generic config roots and unprefixed package environment names are foreign by default. For an upgrading NVL host only, select `nvl-core.compatibility.legacy_config` package IDs and `legacy_env` explicitly; both default off. Canonical presence wins, including false/null/empty values. Legacy inputs are read without writing back and are removed in major 6.
+- Generic config roots and unprefixed package environment names are foreign by default. For an upgrading NVL host only, select `nvl-core.compatibility.legacy_config` package IDs and `legacy_env` explicitly; both default off. Canonical presence wins, including false/null/empty values. Legacy inputs are read without writing back and remain deprecated in major 6.
 - Use canonical `NVL_<PACKAGE>_*` variables only in config evaluation, then rebuild configuration caches and restart workers after cutover. Shared Laravel environment variables retain their names. Consult Core's versioned `support/resources/global-names.json` for all renames.
 - Old global aliases and legacy route families require separate explicit `global_aliases`/`legacy_routes` package selections. Preserve collisions and use Doctor diagnostics; never grant generic permissions automatically or claim signed-link compatibility without the same authorization/signature checks.
 
@@ -185,10 +192,10 @@ Drain old mutation workers and maintenance processes, then wait for their outsta
 
 ## Consumer runtime and testing contracts
 
-Start with the package README Quickstart and Testing your app sections. Use `nvl:install <package>` for loaded-package common config publication; it does not enable features, run schema or refresh caches. Preserve native host owner keys/morph maps and selected auth/tenancy defaults. Read full runtime defaults and publish advanced config only deliberately.
+Start with the package README Quickstart and Testing your app sections. Use `nvl:install <package>` for loaded-package common config publication; it does not enable features, run schema or refresh caches. Preserve native host owner keys/morph maps and selected host Auth and ownership defaults. Read full runtime defaults and publish advanced config only deliberately.
 
 Inject the supported focused interfaces and preserve host bindings. Returned model handles do not permit package-table queries/writes outside documented capability/extension seams. Host tests may substitute contracts in Laravel's container, use shipped model factories (ordinary make may persist parents; withoutParents()->make is detached), and use Laravel effect fakes deliberately. Only Media/Stripe have dedicated provider/library fakes; do not invent a universal package fake. Settings InteractsWithSettings is definition-only. Host PHPStan may include vendor/nvl/core/support/consumer-audit.neon; no unpublished workbench command is a consumer requirement.
 
-Read docs/events.md and the package README error table. Domain events use schemaVersion=1, model-free facts and actual source-connection commit callbacks; only six declared old Event suffix aliases remain for major 5. Migrate exact listeners/fakes and suffix wildcards, drain old queued payloads, rebuild event cache and restart workers. Delivery is not a durable outbox. The Core exception renderer is opt-in, JSON-only for respondable failures, with exactly message/code/context and host-selected locale. Do not expose diagnostics or reinterpret missing bindings as authorization denial.
+Read docs/events.md and the package README error table. Domain events use schemaVersion=1, model-free facts and actual source-connection commit callbacks; only six declared old Event suffix aliases remain deprecated through major 6. Migrate exact listeners/fakes and suffix wildcards, drain old queued payloads, rebuild event cache and restart workers. Delivery is not a durable outbox. The Core exception renderer is opt-in, JSON-only for respondable failures, with exactly message/code/context and host-selected locale. Do not expose diagnostics or reinterpret missing bindings as authorization denial.
 
 Core package logging uses nvl/normal with CSV quiet by default, stable message keys and bounded context; incidents survive quiet. Do not mutate global logger context or log raw row/provider/content/credential payloads. Run only authorized project checks and report new acceptance as pending until actual output exists.

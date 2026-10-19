@@ -65,7 +65,7 @@ For Spatie coexistence, implement Spatie's distinct `HasMedia` plus NVL's `HasNv
 
 ## Deprecated NVL-only model surface
 
-`HasMedia` extends the new capability and the supplied `InteractsWithMedia` trait forwards the methods below to the same owner API. Both remain through major 5, with removal in major 6. Legacy `registerMediaSlots()` and `registerMediaConversions()` overrides feed `registerNvlMedia()`; no separate implementation or duplicate lifecycle listener is installed.
+`HasMedia` extends the new capability and the supplied `InteractsWithMedia` trait forwards the methods below to the same owner API. Both remain deprecated through major 6, with removal in major 6. Legacy `registerMediaSlots()` and `registerMediaConversions()` overrides feed `registerNvlMedia()`; no separate implementation or duplicate lifecycle listener is installed.
 
 ## Legacy NVL-only media-enabled model
 
