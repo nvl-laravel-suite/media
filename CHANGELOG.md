@@ -5,6 +5,13 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [6.0.1] - 2026-10-21
+
+### Changed
+
+- Share configured Media registration and native adoption paging. Isolate retained legacy field guards while preserving the custom builder, binary validation, private paths and source transactions.
+- Require optional Ownership >=6.0.1 when installed so new shared backfill callers cannot resolve an older runtime. Require Core >=6.0.1 for the shared model, queue or compatibility implementation.
+
 ## [6.0.0] - 2026-10-20
 
 ### Changed

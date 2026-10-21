@@ -8,7 +8,7 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Nvl\Media\Builders\MediaBuilder;
 use Nvl\Media\Models\Media;
-use Nvl\Support\Models\ConfiguredModelResolver;
+use Nvl\Support\Models\ConfiguredModelRegistration;
 use Nvl\Support\OwnerRegistry;
 use Nvl\Support\Ownership\Contracts\OwnershipWriter;
 use Nvl\Support\Ownership\Exceptions\OwnershipConfigurationInvalid;
@@ -20,16 +20,27 @@ use Nvl\Support\Ownership\Exceptions\OwnershipConfigurationInvalid;
  */
 final class MediaModelRegistry
 {
-    /** @var class-string<Media>|null */
-    private ?string $media = null;
-
-    private bool $validated = false;
+    /** @var ConfiguredModelRegistration<Media> */
+    private readonly ConfiguredModelRegistration $registration;
 
     /** Retain deployment configuration and the shared identity registry. */
     public function __construct(
-        private readonly Repository $configuration,
-        private readonly OwnerRegistry $identities,
-    ) {}
+        Repository $configuration,
+        OwnerRegistry $identities,
+    ) {
+        $this->registration = new ConfiguredModelRegistration(
+            $configuration,
+            $identities,
+            'nvl-media.models.media',
+            Media::class,
+            'media.assets',
+            static function (string $class): void {
+                if (! in_array($class::ownershipDefinition()->strategy, ['unscoped', 'column', 'pivot'], true)) {
+                    throw new OwnershipConfigurationInvalid('Media roots require a native column or concrete primary pivot.');
+                }
+            },
+        );
+    }
 
     /** Resolve and freeze the concrete Media class before resource compilation.
      * @internal
@@ -38,21 +49,7 @@ final class MediaModelRegistry
      */
     public function prepare(): string
     {
-        if ($this->media !== null) {
-            return $this->media;
-        }
-        $configured = $this->configuration->get('nvl-media.models.media', Media::class);
-        if (! is_string($configured)) {
-            throw new OwnershipConfigurationInvalid('Media model configuration must name a concrete Media subclass.');
-        }
-        $class = (new ConfiguredModelResolver)->resolve($configured, Media::class);
-        if (! in_array($class::ownershipDefinition()->strategy, ['unscoped', 'column', 'pivot'], true)) {
-            throw new OwnershipConfigurationInvalid('Media roots require a native column or concrete primary pivot.');
-        }
-        $this->identities->registerReplacement('media.assets', Media::class, $class);
-        $this->media = $class;
-
-        return $class;
+        return $this->registration->prepare();
     }
 
     /** Validate native capabilities after Laravel installs Eloquent's dispatcher.
@@ -60,16 +57,7 @@ final class MediaModelRegistry
      */
     public function mediaClass(): string
     {
-        $class = $this->prepare();
-        if ($this->validated) {
-            return $class;
-        }
-        $model = new $class;
-        $base = new Media;
-        (new ConfiguredModelResolver)->assertOwnershipCapabilities($model, $base);
-        $this->validated = true;
-
-        return $class;
+        return $this->registration->modelClass();
     }
 
     /** Resolve the immutable model from native framework entry points.

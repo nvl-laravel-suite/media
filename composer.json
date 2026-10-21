@@ -23,7 +23,7 @@
         "laravel/framework": "^12.0 || ^13.0",
         "league/flysystem": "^3.25",
         "nesbot/carbon": "^2.72 || ^3.0",
-        "nvl/core": "^6.0",
+        "nvl/core": "^6.0.1",
         "nvl/filterable": "^6.0",
         "nvl/translatable": "^6.0",
         "php": "^8.4",
@@ -40,7 +40,7 @@
         "laravel/pint": "^1.27",
         "league/flysystem-aws-s3-v3": "^3.0",
         "mockery/mockery": "^1.6",
-        "nvl/ownership": "^6.0",
+        "nvl/ownership": "^6.0.1",
         "nvl/tenancy": "^6.0",
         "orchestra/testbench": "^10.0 || ^11.0",
         "pestphp/pest": "^4.0",
@@ -130,7 +130,7 @@
     "conflict": {
         "aws/aws-sdk-php": "<3.322.9 || >=4.0",
         "league/flysystem-aws-s3-v3": "<3.0 || >=4.0",
-        "nvl/ownership": "<6.0 || >=7.0",
+        "nvl/ownership": "<6.0.1 || >=7.0",
         "nvl/tenancy": "<6.0 || >=7.0"
     },
     "homepage": "https://github.com/nvl-laravel-suite/media",

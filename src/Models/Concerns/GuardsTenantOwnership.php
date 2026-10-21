@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Models\Concerns;
 
-use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Ownership\Compatibility\LegacyModelOwnership;
 
 /** Prevents persisted tenant partition identity from changing through model writes. */
 trait GuardsTenantOwnership
@@ -13,11 +13,7 @@ trait GuardsTenantOwnership
     protected static function bootGuardsTenantOwnership(): void
     {
         static::updating(static function (self $model): void {
-            foreach (['tenant_id', 'ownership_key'] as $attribute) {
-                if (array_key_exists($attribute, $model->getAttributes()) && $model->isDirty($attribute)) {
-                    throw new TenantBoundaryViolation('Persisted Media ownership is immutable.');
-                }
-            }
+            LegacyModelOwnership::assertImmutable($model, ['tenant_id', 'ownership_key'], 'Media');
         });
     }
 }
