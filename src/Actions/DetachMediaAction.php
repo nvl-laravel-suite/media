@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Actions;
 
 use Illuminate\Database\Eloquent\Model;
+use InvalidArgumentException;
 use Nvl\Media\Contracts\DetachMediaContract;
 use Nvl\Media\Events\MediaDetached;
 use Nvl\Media\Models\Media;
@@ -13,6 +14,7 @@ use Nvl\Media\Ownership\MediaOwnershipParentResolver;
 use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Support\MediaAssociationSnapshot;
+use Nvl\Media\Support\MediaBatchOwnerAdmission;
 use Nvl\Support\Events\DomainEventDispatcher;
 
 /**
@@ -50,12 +52,16 @@ final readonly class DetachMediaAction implements DetachMediaContract
                     ->withTrashed()
                     ->lockForUpdate()
                     ->findOrFail($mediaId);
-                $query = MediaAssociation::where('media_id', $mediaId)
-                    ->where('associable_type', $model->getMorphClass())
-                    ->where('associable_id', $model->getKey());
+                $query = MediaAssociation::where('media_id', $mediaId);
+                $ownerKey = $model->getKey();
+                if (! is_int($ownerKey) && ! is_string($ownerKey)) {
+                    throw new InvalidArgumentException('Media removal requires a scalar owner key.');
+                }
+                MediaBatchOwnerAdmission::exact($query, 'associable_type', $model->getMorphClass());
+                MediaBatchOwnerAdmission::exact($query, 'associable_id', (string) $ownerKey);
 
                 if ($collection !== null) {
-                    $query->where('collection', $collection);
+                    MediaBatchOwnerAdmission::exact($query, 'collection', $collection);
                 }
 
                 $associations = $query->get();

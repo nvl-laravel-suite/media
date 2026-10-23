@@ -65,6 +65,14 @@ Private item URLs remain null; obtain private Download links through the separat
 The namespaced `hasNvlMedia()` host scope preserves selections and scopes independently of Spatie.
 See [batched slots](docs/php-api.md#batched-owner-slots) and [SQL authorization](docs/extending.md#explicit-batch-view-authorization).
 
+For complete gallery enumeration, `ListOwnerMediaContract` returns bounded pages
+across all owner collections, complete collection counts, distinct original asset
+counts/bytes, and explicitly requested public variation URLs. It uses the same
+canonical admission and SQL authorization adapter; private URLs remain null.
+`RemoveOwnerMediaContract` atomically removes a selected owner/collection usage,
+preserves shared assets, and deletes an authorized orphan only after commit. See
+the [exact contracts and migration example](docs/php-api.md#batched-owner-slots).
+
 ## Requirements and installation
 
 - PHP 8.4+

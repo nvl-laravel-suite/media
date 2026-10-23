@@ -663,6 +663,62 @@ Media models expose Laravel's `getTable()` and `getConnectionName()` methods usi
 
 ## Batched owner slots
 
+For complete owner gallery enumeration and aggregates, use
+`ListOwnerMediaContract`; the slot reader below remains a bounded display preview.
+
+```php
+$page = app(ListOwnerMediaContract::class)->execute(
+    actor: $actor,
+    owner: $product,
+    collection: null,
+    page: 1,
+    perPage: 50,
+    variations: ['thumbnail'],
+    locale: 'en',
+);
+
+foreach ($page->items as $item) {
+    $assetId = $item->media->mediaId;
+    $collection = $item->collection;
+    $thumbnail = $item->variationUrls->thumbnail;
+}
+
+app(RemoveOwnerMediaContract::class)->execute(
+    actor: $actor,
+    owner: $product,
+    mediaId: $assetId,
+    collection: $collection,
+);
+```
+
+The owner page requires the same explicit `MediaBatchAuthorization` SQL adapter
+and canonical owner admission as batch slot reads. It includes every authorized,
+active association to an available asset, across all collections when `collection`
+is null. Follow `page`/`perPage` until all `total` association items are consumed;
+page size is capped at the configured maximum and at 100. `collectionCounts` is
+an object map of complete association counts in the selected scope.
+`distinctAssetCount` and `originalBytes` count each original asset once, even when
+that asset appears in multiple collections; variations do not contribute bytes.
+At most 1,000 authorized collections and 20 requested variation labels are
+accepted; overflow fails closed. Per-page original/translation/variation
+hydration is bounded independently of the owner's total asset count.
+
+Each item wraps the existing safe `OwnerMediaSlotItemData` as `media`, plus the
+exact `collection` and requested `variationUrls`. Private originals and all
+private variation URLs remain null; use the existing authorized Download flow
+separately. Missing, stale, pending, delivery-disabled or missing-file requested variations are null
+instead of being replaced by the original URL. No model handles or physical
+storage facts are returned.
+
+`RemoveOwnerMediaContract` removes only the selected asset's usages for the
+canonical owner and optional exact collection. A UUID is required. An absent
+matching association fails instead of deleting an unrelated asset. The native
+per-asset mutation lock and transaction govern sharing and orphan decisions:
+other owners and other collections keep their usages/files. The host policy
+must grant `Associate`; `Delete` is additionally checked only when the native
+lifecycle selects a true orphan. Orphan files and domain events follow the outer
+commit, and rollback preserves the association, original and variations.
+
 `ListOwnerMediaSlotsContract::execute(array $owners, array $slots, MediaActorData $actor, ?string $locale = null): OwnerMediaSlots`
 is the public many-owner read boundary. Bind an explicit `MediaBatchAuthorization` SQL adapter before use;
 imperative `MediaAuthorization` callbacks are not converted into batch grants. Unsupported adapters throw

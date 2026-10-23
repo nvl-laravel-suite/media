@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Nvl\Media\Contracts\ListOwnerMediaContract;
 use Nvl\Media\Contracts\ListOwnerMediaSlotsContract;
 use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Contracts\MediaBatchAuthorization;
@@ -124,6 +125,138 @@ function batchMediaStorageQueries(): array
         return false;
     }));
 }
+
+it('paginates every authorized owner collection and counts distinct original bytes beyond previews', function (): void {
+    $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
+    $other = BatchMediaOwner::query()->create(['name' => 'Other']);
+    $associations = [];
+    for ($index = 0; $index < 13; $index++) {
+        $asset = Media::factory()->create(['is_public' => false, 'size' => 100]);
+        $associations[] = batchMediaAssociation($owner, $asset, 'unbounded', $index)->id;
+        if ($index === 0) {
+            $associations[] = batchMediaAssociation($owner, $asset, 'library')->id;
+        }
+    }
+    batchMediaAssociation($other, Media::factory()->create(['size' => 999]), 'unbounded');
+    batchMediaAssociation($owner, Media::factory()->create(['size' => 999]), 'unbounded', active: false);
+    $denied = Media::factory()->create(['size' => 999]);
+    batchMediaAssociation($owner, $denied, 'unbounded');
+    app(MediaBatchAuthorization::class)->deniedAssets = [$denied->id];
+    $reader = app(ListOwnerMediaContract::class);
+    $received = [];
+
+    foreach ([1, 2, 3] as $page) {
+        $result = $reader->execute(MediaActorData::system(), $owner, page: $page, perPage: 5);
+        expect($result->page)->toBe($page)
+            ->and($result->perPage)->toBe(5)
+            ->and($result->total)->toBe(14)
+            ->and($result->collectionCounts->unbounded)->toBe(13)
+            ->and($result->collectionCounts->library)->toBe(1)
+            ->and($result->distinctAssetCount)->toBe(13)
+            ->and($result->originalBytes)->toBe(1300)
+            ->and($result->items)->toHaveCount($page === 3 ? 4 : 5);
+        foreach ($result->items as $item) {
+            $received[] = $item->media->associationId;
+            expect($item->media)->toBeInstanceOf(OwnerMediaSlotItemData::class)
+                ->and($item->media->url)->toBeNull();
+        }
+    }
+    sort($received);
+    sort($associations);
+    expect($received)->toBe($associations);
+    $gallery = $reader->execute(MediaActorData::system(), $owner, collection: 'unbounded', perPage: 10000);
+    expect($gallery->total)->toBe(13)->and($gallery->perPage)->toBe(100)
+        ->and($gallery->distinctAssetCount)->toBe(13)->and($gallery->originalBytes)->toBe(1300);
+});
+
+it('returns requested current public variation URLs without private capabilities or missing fallbacks', function (bool $enabled): void {
+    config(['nvl-media.assets.allowed_parameters' => $enabled ? ['v'] : []]);
+    Storage::fake('public');
+    $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
+    $assets = [];
+    foreach ([true, false] as $public) {
+        $asset = Media::factory()->create(['is_public' => $public, 'type' => 'image', 'extension' => 'jpg', 'mime_type' => 'image/jpeg']);
+        batchMediaAssociation($owner, $asset, 'unbounded');
+        Storage::disk($asset->disk)->put($asset->buildPath(), 'original');
+        $variation = MediaImageVariation::factory()->forMedia($asset)->create(['label' => 'thumbnail', 'status' => 'available']);
+        Storage::disk($asset->disk)->put($variation->getPath(), 'thumbnail');
+        $assets[] = $asset;
+    }
+
+    $result = app(ListOwnerMediaContract::class)->execute(MediaActorData::system(), $owner, variations: ['thumbnail', 'missing']);
+    $items = collect($result->items)->keyBy(static fn ($item): string => $item->media->mediaId);
+
+    if ($enabled) {
+        expect($items[$assets[0]->id]->variationUrls->thumbnail)->toBeString()->toContain('thumbnail');
+    } else {
+        expect($items[$assets[0]->id]->variationUrls->thumbnail)->toBeNull();
+    }
+    expect($items[$assets[0]->id]->variationUrls->missing)->toBeNull()
+        ->and($items[$assets[1]->id]->media->url)->toBeNull()
+        ->and(get_object_vars($items[$assets[1]->id]->variationUrls))->toBe(['thumbnail' => null, 'missing' => null])
+        ->and(json_encode($result))->not->toContain('signature=', 'uploadedBy', 'storagePath');
+})->with([true, false]);
+
+it('serializes owner variation maps as objects for empty and numeric labels', function (array $labels, string $expected): void {
+    $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
+    batchMediaAssociation($owner, Media::factory()->create(['is_public' => false]), 'unbounded');
+
+    $result = app(ListOwnerMediaContract::class)->execute(MediaActorData::system(), $owner, variations: $labels);
+
+    expect(json_encode($result->items[0]->variationUrls))->toBe($expected);
+})->with([
+    'empty' => [[], '{}'],
+    'numeric' => [['0', '1'], '{"0":null,"1":null}'],
+]);
+
+it('resolves exact numeric variation labels independently of a stale numerically equal label', function (): void {
+    Storage::fake('public');
+    $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
+    $asset = Media::factory()->create(['is_public' => true, 'type' => 'image', 'extension' => 'jpg', 'mime_type' => 'image/jpeg']);
+    batchMediaAssociation($owner, $asset, 'unbounded');
+    foreach (['0', '00'] as $label) {
+        $variation = MediaImageVariation::factory()->forMedia($asset)->create(['label' => $label, 'status' => 'available']);
+        Storage::disk($asset->disk)->put($variation->getPath(), 'variation-'.$label);
+        if ($label === '0') {
+            $asset->revision++;
+            $asset->save();
+        }
+    }
+
+    $result = app(ListOwnerMediaContract::class)->execute(MediaActorData::system(), $owner, variations: ['0', '00']);
+
+    expect($result->items[0]->variationUrls->{'0'})->toBeNull()
+        ->and($result->items[0]->variationUrls->{'00'})->toBeString()->toContain('v=00')
+        ->and($asset->getVariation('00')?->label)->toBe('00')
+        ->and($asset->getVariation('0e0'))->toBeNull()
+        ->and($asset->hasVariation('0e0'))->toBeFalse();
+});
+
+it('fails complete owner media reads closed without a query authorization adapter', function (): void {
+    $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
+    app()->instance(MediaBatchAuthorization::class, new UnsupportedMediaBatchAuthorization);
+
+    expect(fn () => app(ListOwnerMediaContract::class)->execute(MediaActorData::system(), $owner))
+        ->toThrow(MediaBatchReadException::class);
+});
+
+it('bounds complete owner collection aggregates before projecting an oversized result', function (): void {
+    $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
+    $asset = Media::factory()->create(['is_public' => false]);
+    $rows = [];
+    for ($index = 0; $index < 1001; $index++) {
+        $rows[] = [
+            'id' => (string) Str::uuid(), 'media_id' => $asset->id, 'associable_type' => $owner->getMorphClass(),
+            'associable_id' => (string) $owner->getKey(), 'collection' => 'collection-'.$index, 'is_active' => true, 'order' => 0,
+        ];
+    }
+    foreach (array_chunk($rows, 200) as $chunk) {
+        DB::table((new MediaAssociation)->getTable())->insert($chunk);
+    }
+
+    expect(fn () => app(ListOwnerMediaContract::class)->execute(MediaActorData::system(), $owner))
+        ->toThrow(MediaBatchReadException::class, '1,000');
+});
 
 it('holds total localized queries fixed and projects nine safe fields', function (int $count): void {
     Storage::fake('public');

@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use InvalidArgumentException;
 use Nvl\Media\Contracts\AttachMediaContract;
 use Nvl\Media\Contracts\DeleteMediaContract;
 use Nvl\Media\Contracts\DetachMediaContract;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
+use Nvl\Media\Support\MediaBatchOwnerAdmission;
 
 /** MediaLifecycleService: handles media collection clearing, deletion, and detachment in transactions. */
 final class MediaLifecycleService
@@ -100,16 +103,18 @@ final class MediaLifecycleService
 
     /**
      * Remove a media association from one model, deleting the underlying row only when it is no longer shared.
+     *
+     * @param  Closure(Media): void|null  $beforeOrphanDelete
      */
-    public function removeFromModel(Model&HasNvlMedia $model, string|Media $media, ?string $collection = null): void
+    public function removeFromModel(Model&HasNvlMedia $model, string|Media $media, ?string $collection = null, ?Closure $beforeOrphanDelete = null): void
     {
         $mediaId = $media instanceof Media ? $media->id : $media;
 
-        $this->mutationLock->execute($mediaId, function () use ($model, $mediaId, $collection): void {
-            MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($model, $mediaId, $collection): void {
+        $this->mutationLock->execute($mediaId, function () use ($model, $mediaId, $collection, $beforeOrphanDelete): void {
+            MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($model, $mediaId, $collection, $beforeOrphanDelete): void {
                 $resolvedMedia = MediaModelRegistry::query()->lockForUpdate()->findOrFail($mediaId);
 
-                $this->removeResolvedFromModel($model, $resolvedMedia, $collection);
+                $this->removeResolvedFromModel($model, $resolvedMedia, $collection, $beforeOrphanDelete);
             });
         });
     }
@@ -153,16 +158,24 @@ final class MediaLifecycleService
     }
 
     /**
-     * Remove a resolved media record from one model, detaching only the targeted association when shared elsewhere.
+     * Remove targeted usages and bypass the public reuse guard only after the held asset lock proves every usage is selected.
+     *
+     * @param  Closure(Media): void|null  $beforeOrphanDelete
      */
-    private function removeResolvedFromModel(Model&HasNvlMedia $model, Media $media, ?string $collection = null): void
+    private function removeResolvedFromModel(Model&HasNvlMedia $model, Media $media, ?string $collection = null, ?Closure $beforeOrphanDelete = null): void
     {
         $targetAssociationIds = MediaAssociation::query()
-            ->where('media_id', $media->id)
-            ->where('associable_type', $model->getMorphClass())
-            ->where('associable_id', $model->getKey())
-            ->when($collection !== null, fn ($query) => $query->where('collection', $collection))
-            ->pluck('id');
+            ->where('media_id', $media->id);
+        $ownerKey = $model->getKey();
+        if (! is_int($ownerKey) && ! is_string($ownerKey)) {
+            throw new InvalidArgumentException('Media removal requires a scalar owner key.');
+        }
+        MediaBatchOwnerAdmission::exact($targetAssociationIds, 'associable_type', $model->getMorphClass());
+        MediaBatchOwnerAdmission::exact($targetAssociationIds, 'associable_id', (string) $ownerKey);
+        if ($collection !== null) {
+            MediaBatchOwnerAdmission::exact($targetAssociationIds, 'collection', $collection);
+        }
+        $targetAssociationIds = $targetAssociationIds->pluck('id');
 
         if ($targetAssociationIds->isEmpty()) {
             return;
@@ -179,6 +192,7 @@ final class MediaLifecycleService
             return;
         }
 
-        $this->deleteAction->execute($media);
+        $beforeOrphanDelete?->__invoke($media);
+        $this->deleteAction->execute($media, force: true);
     }
 }

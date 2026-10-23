@@ -23,9 +23,11 @@ use Nvl\Media\Actions\GetOwnerMediaSlotAction;
 use Nvl\Media\Actions\GrantMediaToTenantAction;
 use Nvl\Media\Actions\ImportPlatformMediaAction;
 use Nvl\Media\Actions\InitiateMultipartUploadAction;
+use Nvl\Media\Actions\ListOwnerMediaAction;
 use Nvl\Media\Actions\ListOwnerMediaSlotsAction;
 use Nvl\Media\Actions\MutateMediaTagsAction;
 use Nvl\Media\Actions\RelocateMediaAction;
+use Nvl\Media\Actions\RemoveOwnerMediaAction;
 use Nvl\Media\Actions\RenameMediaAction;
 use Nvl\Media\Actions\ReplaceMediaFileAction;
 use Nvl\Media\Actions\ReplaceOwnerMediaSlotAction;
@@ -51,9 +53,11 @@ use Nvl\Media\Contracts\GetOwnerMediaSlotContract;
 use Nvl\Media\Contracts\GrantMediaToTenantContract;
 use Nvl\Media\Contracts\ImportPlatformMediaContract;
 use Nvl\Media\Contracts\InitiateMultipartUploadContract;
+use Nvl\Media\Contracts\ListOwnerMediaContract;
 use Nvl\Media\Contracts\ListOwnerMediaSlotsContract;
 use Nvl\Media\Contracts\MutateMediaTagsContract;
 use Nvl\Media\Contracts\RelocateMediaContract;
+use Nvl\Media\Contracts\RemoveOwnerMediaContract;
 use Nvl\Media\Contracts\RenameMediaContract;
 use Nvl\Media\Contracts\ReplaceMediaFileContract;
 use Nvl\Media\Contracts\ReplaceOwnerMediaSlotContract;
@@ -91,6 +95,8 @@ function nvlConsumerBindingsForMedia(): array
         [ImportPlatformMediaContract::class, ImportPlatformMediaAction::class],
         [InitiateMultipartUploadContract::class, InitiateMultipartUploadAction::class],
         [ListOwnerMediaSlotsContract::class, ListOwnerMediaSlotsAction::class],
+        [ListOwnerMediaContract::class, ListOwnerMediaAction::class],
+        [RemoveOwnerMediaContract::class, RemoveOwnerMediaAction::class],
         [MutateMediaTagsContract::class, MutateMediaTagsAction::class],
         [RelocateMediaContract::class, RelocateMediaAction::class],
         [RenameMediaContract::class, RenameMediaAction::class],

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -17,6 +19,7 @@ use Nvl\Media\Actions\GetOwnerMediaSlotAction;
 use Nvl\Media\Actions\ReplaceOwnerMediaSlotAction;
 use Nvl\Media\Contracts\DetachMediaContract;
 use Nvl\Media\Contracts\MediaAuthorization;
+use Nvl\Media\Contracts\RemoveOwnerMediaContract;
 use Nvl\Media\Data\Display\MediaLibraryItem;
 use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Definitions\Tables\MediaTables;
@@ -161,6 +164,133 @@ function releaseOwnerSlotLedger(string $connection, string $path): void
     DB::purge($connection);
     unlink($path);
 }
+
+it('removes only the selected owner collection while preserving every shared usage', function (): void {
+    Storage::fake('public');
+    $owner = ownerSlotOwner();
+    $other = ownerSlotOwner('Other');
+    $media = ownerSlotStoredMedia('shared');
+    $selected = attachOwnerSlotMedia($media, $owner, 'gallery');
+    $sameOwner = attachOwnerSlotMedia($media, $owner, 'documents');
+    $otherOwner = attachOwnerSlotMedia($media, $other, 'gallery');
+    useOwnerSlotAuthorization(static fn (MediaActorData $actor, MediaAbility $ability): bool => $ability === MediaAbility::Associate);
+
+    app(RemoveOwnerMediaContract::class)->execute(ownerSlotActor(), $owner, $media->id, 'gallery');
+
+    expect(MediaAssociation::query()->find($selected->id))->toBeNull()
+        ->and(MediaAssociation::query()->find($sameOwner->id))->not->toBeNull()
+        ->and(MediaAssociation::query()->find($otherOwner->id))->not->toBeNull()
+        ->and($media->fresh())->not->toBeNull();
+    Storage::disk('public')->assertExists($media->buildPath());
+});
+
+it('cleans a selected orphan only after the outer removal transaction commits', function (): void {
+    Storage::fake('public');
+    $owner = ownerSlotOwner();
+    $media = ownerSlotStoredMedia('orphan');
+    attachOwnerSlotMedia($media, $owner, 'gallery');
+    useOwnerSlotAuthorization(static fn (): bool => true);
+    Event::fake([MediaMutated::class]);
+
+    $media->getConnection()->transaction(function () use ($owner, $media): void {
+        app(RemoveOwnerMediaContract::class)->execute(ownerSlotActor(), $owner, $media->id, 'gallery');
+
+        expect($media->fresh()->trashed())->toBeTrue();
+        Storage::disk('public')->assertExists($media->buildPath());
+        Event::assertNotDispatched(MediaMutated::class);
+    });
+
+    Storage::disk('public')->assertMissing($media->buildPath());
+    Event::assertDispatched(MediaMutated::class);
+});
+
+it('rolls back selected orphan removal without deleting files or publishing events', function (): void {
+    Storage::fake('public');
+    $owner = ownerSlotOwner();
+    $media = ownerSlotStoredMedia('rollback');
+    $association = attachOwnerSlotMedia($media, $owner, 'gallery');
+    useOwnerSlotAuthorization(static fn (): bool => true);
+    Event::fake([MediaMutated::class, MediaDetached::class]);
+
+    expect(fn () => $media->getConnection()->transaction(function () use ($owner, $media): void {
+        app(RemoveOwnerMediaContract::class)->execute(ownerSlotActor(), $owner, $media->id, 'gallery');
+        throw new RuntimeException('rollback-removal');
+    }))->toThrow(RuntimeException::class, 'rollback-removal');
+
+    expect($media->fresh())->not->toBeNull()
+        ->and($association->fresh())->not->toBeNull();
+    Storage::disk('public')->assertExists($media->buildPath());
+    Event::assertNotDispatched(MediaMutated::class);
+    Event::assertNotDispatched(MediaDetached::class);
+});
+
+it('denies selected owner removal before mutation when required authority is absent', function (MediaAbility $denied): void {
+    Storage::fake('public');
+    $owner = ownerSlotOwner();
+    $media = ownerSlotStoredMedia('denied');
+    $association = attachOwnerSlotMedia($media, $owner, 'gallery');
+    useOwnerSlotAuthorization(static fn (MediaActorData $actor, MediaAbility $ability): bool => $ability !== $denied);
+
+    expect(fn () => app(RemoveOwnerMediaContract::class)->execute(ownerSlotActor(), $owner, $media->id, 'gallery'))
+        ->toThrow(AuthorizationException::class)
+        ->and($media->fresh())->not->toBeNull()
+        ->and($association->fresh())->not->toBeNull();
+    Storage::disk('public')->assertExists($media->buildPath());
+})->with([MediaAbility::Associate, MediaAbility::Delete]);
+
+it('preserves case-distinct owner collection usages on case-insensitive storage', function (): void {
+    if (DB::connection()->getDriverName() === 'sqlite') {
+        Schema::table((new MediaAssociation)->getTable(), function (Blueprint $table): void {
+            $table->string('collection', 50)->collation('NOCASE')->change();
+        });
+    }
+    $owner = ownerSlotOwner();
+    $other = ownerSlotOwner('Other');
+    $media = ownerSlotMedia();
+    $selected = attachOwnerSlotMedia($media, $owner, 'Gallery');
+    $preserved = attachOwnerSlotMedia($media, $other, 'gallery');
+    useOwnerSlotAuthorization(static fn (MediaActorData $actor, MediaAbility $ability): bool => $ability === MediaAbility::Associate);
+
+    expect(fn () => app(RemoveOwnerMediaContract::class)->execute(ownerSlotActor(), $owner, $media->id, 'gallery'))
+        ->toThrow(ModelNotFoundException::class)
+        ->and($selected->fresh())->not->toBeNull()
+        ->and($preserved->fresh())->not->toBeNull();
+
+    app(RemoveOwnerMediaContract::class)->execute(ownerSlotActor(), $owner, $media->id, 'Gallery');
+
+    expect($selected->fresh())->toBeNull()
+        ->and($preserved->fresh())->not->toBeNull()
+        ->and($media->fresh()->trashed())->toBeFalse();
+});
+
+it('cleans a public orphan after removing every selected collection from one owner', function (): void {
+    Storage::fake('public');
+    $owner = ownerSlotOwner();
+    $media = ownerSlotStoredMedia('public-orphan', ['is_public' => true]);
+    attachOwnerSlotMedia($media, $owner, 'gallery');
+    attachOwnerSlotMedia($media, $owner, 'documents');
+    useOwnerSlotAuthorization(static fn (): bool => true);
+
+    app(RemoveOwnerMediaContract::class)->execute(ownerSlotActor(), $owner, $media->id);
+
+    expect($media->fresh()->trashed())->toBeTrue();
+    Storage::disk('public')->assertMissing($media->buildPath());
+});
+
+it('rejects malformed removal UUIDs and mismatched owner usages before mutation', function (): void {
+    $owner = ownerSlotOwner();
+    $other = ownerSlotOwner('Other');
+    $media = ownerSlotMedia();
+    $association = attachOwnerSlotMedia($media, $other, 'gallery');
+    useOwnerSlotAuthorization(static fn (): bool => true);
+
+    expect(fn () => app(RemoveOwnerMediaContract::class)->execute(ownerSlotActor(), $owner, 'not-a-uuid', 'gallery'))
+        ->toThrow(InvalidArgumentException::class)
+        ->and(fn () => app(RemoveOwnerMediaContract::class)->execute(ownerSlotActor(), $owner, $media->id, 'gallery'))
+        ->toThrow(ModelNotFoundException::class)
+        ->and($association->fresh())->not->toBeNull()
+        ->and($media->fresh()->trashed())->toBeFalse();
+});
 
 it('installs the owner-slot operation ledger with its portable indexes', function (): void {
     expect(Schema::hasTable(MediaTables::OwnerSlotOperations))->toBeTrue();

@@ -50,6 +50,8 @@ Use `bind()` for stateless implementations and `scoped()` when one instance shou
 | `UploadMediaContract` | `UploadMediaAction` | Ordinary authoritative upload |
 | `AttachMediaContract` | `AttachMediaAction` | Association creation |
 | `DetachMediaContract` | `DetachMediaAction` | Association removal |
+| `RemoveOwnerMediaContract` | `RemoveOwnerMediaAction` | Authorized atomic selected-owner removal and orphan cleanup |
+| `ListOwnerMediaContract` | `ListOwnerMediaAction` | Complete bounded owner collection pages, distinct original-byte aggregates, and requested public variations |
 | `DeleteMediaContract` | `DeleteMediaAction` | Transaction-safe global deletion |
 | `ReusePublicMediaContract` | `ReusePublicMediaAction` | Existing public-asset reuse |
 | `MediaAuthorization` | `DefaultMediaAuthorization` | Stable actor/ability policy |

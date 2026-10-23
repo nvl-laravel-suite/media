@@ -444,7 +444,7 @@ class Media extends Model implements Ownable, TranslatableModel
     public function getVariation(string $label): ?MediaImageVariation
     {
         /** @var MediaImageVariation|null */
-        return $this->imageVariations->firstWhere('label', $label);
+        return $this->imageVariations->firstWhere('label', '===', $label);
     }
 
     /**
@@ -452,7 +452,7 @@ class Media extends Model implements Ownable, TranslatableModel
      */
     public function hasVariation(string $label): bool
     {
-        return $this->imageVariations->contains('label', $label);
+        return $this->getVariation($label) !== null;
     }
 
     /**

@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\DB;
 use Nvl\Media\Actions\AttachMediaAction;
+use Nvl\Media\Contracts\ListOwnerMediaContract;
 use Nvl\Media\Contracts\ListOwnerMediaSlotsContract;
 use Nvl\Media\Contracts\MediaBatchAuthorization;
+use Nvl\Media\Contracts\RemoveOwnerMediaContract;
 use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Services\MediaModelRegistry;
@@ -15,8 +17,36 @@ use Nvl\Media\Tests\Fixtures\OwnershipMediaScenario;
 use Nvl\Media\Tests\OwnershipTestCase;
 use Nvl\Media\Tests\Stubs\BatchMediaAuthorization;
 use Nvl\Ownership\Services\OwnershipRunner;
+use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 
 uses(OwnershipTestCase::class);
+
+it('keeps complete owner media pages and removal inside the admitted native owner', function (): void {
+    app()->instance(MediaBatchAuthorization::class, new BatchMediaAuthorization);
+    $runner = app(OwnershipRunner::class);
+    $actor = OwnershipActor::query()->firstOrFail();
+    [$owner, $media] = $runner->run(OwnershipCompany::query()->findOrFail(7), $actor, function (): array {
+        $owner = OwnershipMediaScenario::owner();
+        $media = OwnershipMediaScenario::upload($owner);
+        app(AttachMediaAction::class)->execute($media, $owner, 'documents', dispatchVariations: false);
+
+        return [$owner, $media];
+    });
+    $runner->run(OwnershipCompany::query()->findOrFail(8), $actor, function () use ($owner, $media): void {
+        expect(fn () => app(ListOwnerMediaContract::class)->execute(MediaActorData::system(), $owner))
+            ->toThrow(TenantBoundaryViolation::class)
+            ->and(fn () => app(RemoveOwnerMediaContract::class)->execute(MediaActorData::system(), $owner, $media->id, 'documents'))
+            ->toThrow(TenantBoundaryViolation::class);
+    });
+    $runner->run(OwnershipCompany::query()->findOrFail(7), $actor, function () use ($owner, $media): void {
+        $page = app(ListOwnerMediaContract::class)->execute(MediaActorData::system(), $owner);
+        expect($page->total)->toBe(1)->and($page->distinctAssetCount)->toBe(1)
+            ->and($page->originalBytes)->toBe($media->size)
+            ->and($page->items[0]->media->mediaId)->toBe($media->id);
+        app(RemoveOwnerMediaContract::class)->execute(MediaActorData::system(), $owner, $media->id, 'documents');
+        expect(app(ListOwnerMediaContract::class)->execute(MediaActorData::system(), $owner)->total)->toBe(0);
+    });
+});
 
 it('holds owned public batch delivery queries fixed for one twenty five and one hundred owners', function (): void {
     app()->instance(MediaBatchAuthorization::class, new BatchMediaAuthorization);

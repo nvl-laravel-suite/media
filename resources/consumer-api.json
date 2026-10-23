@@ -177,6 +177,16 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Media\\Actions\\ListOwnerMediaAction": {
+            "kind": "class",
+            "file": "src/Actions/ListOwnerMediaAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Media\\Actions\\ListOwnerMediaSlotsAction": {
             "kind": "class",
             "file": "src/Actions/ListOwnerMediaSlotsAction.php",
@@ -200,6 +210,16 @@
         "Nvl\\Media\\Actions\\RelocateMediaAction": {
             "kind": "class",
             "file": "src/Actions/RelocateMediaAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Actions\\RemoveOwnerMediaAction": {
+            "kind": "class",
+            "file": "src/Actions/RemoveOwnerMediaAction.php",
             "methods": [
                 "__construct",
                 "execute"
@@ -497,6 +517,15 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Media\\Contracts\\ListOwnerMediaContract": {
+            "kind": "interface",
+            "file": "src/Contracts/ListOwnerMediaContract.php",
+            "methods": [
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Media\\Contracts\\ListOwnerMediaSlotsContract": {
             "kind": "interface",
             "file": "src/Contracts/ListOwnerMediaSlotsContract.php",
@@ -686,6 +715,15 @@
         "Nvl\\Media\\Contracts\\RelocateMediaContract": {
             "kind": "interface",
             "file": "src/Contracts/RelocateMediaContract.php",
+            "methods": [
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Contracts\\RemoveOwnerMediaContract": {
+            "kind": "interface",
+            "file": "src/Contracts/RemoveOwnerMediaContract.php",
             "methods": [
                 "execute"
             ],
@@ -891,6 +929,36 @@
                 "modelId",
                 "order",
                 "type"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Display\\OwnerMediaItem": {
+            "kind": "class",
+            "file": "src/Data/Display/OwnerMediaItem.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "collection",
+                "media",
+                "variationUrls"
+            ],
+            "constants": []
+        },
+        "Nvl\\Media\\Data\\Display\\OwnerMediaPage": {
+            "kind": "class",
+            "file": "src/Data/Display/OwnerMediaPage.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "collectionCounts",
+                "distinctAssetCount",
+                "items",
+                "originalBytes",
+                "page",
+                "perPage",
+                "total"
             ],
             "constants": []
         },
