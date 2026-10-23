@@ -5,6 +5,14 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [6.1.0] - 2026-10-23
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- expose safe host APIs and harden package boundaries
+<!-- NVL GENERATED CHANGES END -->
+
 ## [6.0.1] - 2026-10-21
 
 ### Changed
