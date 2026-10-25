@@ -170,7 +170,7 @@ class Media extends Model implements Ownable, TranslatableModel
             translationModel: MediaTranslation::class,
             foreignKey: 'media_id',
             fields: ['title', 'alt', 'caption', 'description'],
-            mutationPolicy: TranslationMutationPolicy::DomainActionOnly,
+            mutationPolicy: TranslationMutationPolicy::OwningServiceOnly,
             ownershipResource: 'media.assets',
         );
     }
