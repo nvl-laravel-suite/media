@@ -64,8 +64,8 @@ final readonly class MediaMutationService
             $data['isPublic'] = $data['is_public'];
             unset($data['is_public']);
         }
-        if (isset($data['translationMode']) && is_string($data['translationMode'])) {
-            $data['translationMode'] = TranslationSyncMode::from($data['translationMode']);
+        if (isset($data['translation_mode']) && is_string($data['translation_mode'])) {
+            $data['translation_mode'] = TranslationSyncMode::from($data['translation_mode']);
         }
 
         return $this->updateMedia->updateMetadata(auth()->user() ?? SystemActor::Background, $media, $data);

@@ -14,7 +14,11 @@ use Nvl\Media\Models\MediaAssociation;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Owners\OwnerBatch;
 
-/** Fails closed until the host explicitly binds an SQL authorization adapter. */
+/**
+ * Fails closed until the host explicitly binds an SQL authorization adapter.
+ *
+ * @internal
+ */
 final class UnsupportedMediaBatchAuthorization implements MediaBatchAuthorization
 {
     /** Reject unsupported owner admission. */

@@ -8,6 +8,8 @@ use Illuminate\Contracts\Foundation\Application;
 
 /**
  * Tracks request-scoped temporary media files for guaranteed termination cleanup.
+ *
+ * @internal
  */
 final class MediaTemporaryFileRegistry
 {

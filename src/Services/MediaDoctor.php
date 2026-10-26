@@ -34,6 +34,8 @@ use Throwable;
 
 /**
  * Performs read-only production-readiness diagnostics for Media.
+ *
+ * @internal
  */
 final readonly class MediaDoctor
 {

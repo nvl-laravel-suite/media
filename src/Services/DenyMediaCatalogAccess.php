@@ -10,7 +10,11 @@ use Nvl\Media\Support\MediaActors;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 
-/** Catalog capability issuance is unavailable until the host supplies a policy. @internal */
+/**
+ * Catalog capability issuance is unavailable until the host supplies a policy.
+ *
+ * @internal
+ */
 final readonly class DenyMediaCatalogAccess implements MediaCatalogAccess
 {
     public function assertCanGrant(Authenticatable|SystemActor $actor, string $sourceId, int $revision): void

@@ -18,6 +18,8 @@ use Throwable;
 
 /**
  * First-party AWS S3 and S3-compatible multipart gateway.
+ *
+ * @internal
  */
 final readonly class S3MultipartUploadGateway implements RecoverableMultipartUploadGateway
 {

@@ -10,7 +10,8 @@ use Nvl\Support\Exceptions\ExceptionResponse;
 use Nvl\Support\Traits\InteractsWithPackageFailure;
 use RuntimeException;
 
-/** Explicit unsupported authorization or storage mode for bounded Media reads.
+/**
+ * Explicit unsupported authorization or storage mode for bounded Media reads.
  *
  * @api
  */

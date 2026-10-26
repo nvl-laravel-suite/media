@@ -138,7 +138,7 @@ describe('GET /nvl/api/v1/media (index)', function () {
     it('rejects invalid filter values through the declared DTO rules', function (string $query) {
         $user = createApiUser();
         $this->actingAs($user)->getJson('/nvl/api/v1/media?'.$query)->assertUnprocessable();
-    })->with(['oversized search' => ['search='.str_repeat('a', 256)], 'unknown type' => ['type=unknown'], 'invalid public flag' => ['isPublic=maybe'], 'zero page size' => ['perPage=0'], 'unknown sort column' => ['sortBy=uploaded_by'], 'invalid sort direction' => ['sortDirection=sideways']]);
+    })->with(['oversized search' => ['search='.str_repeat('a', 256)], 'unknown type' => ['type=unknown'], 'invalid public flag' => ['isPublic=maybe'], 'zero page size' => ['per_page=0'], 'unknown sort column' => ['sortBy=uploaded_by'], 'invalid sort direction' => ['sortDirection=sideways']]);
     it('scopes results to own media and public media', function () {
         Storage::fake('public');
         $owner = createApiUser();

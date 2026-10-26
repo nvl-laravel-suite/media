@@ -17,7 +17,9 @@ use Nvl\Media\Models\MediaAssociation;
  */
 interface HasNvlMedia
 {
-    /** Return NVL associations for eager loading.
+    /**
+     * Return NVL associations for eager loading.
+     *
      * @return MorphMany<MediaAssociation, covariant Model>
      *
      * @internal

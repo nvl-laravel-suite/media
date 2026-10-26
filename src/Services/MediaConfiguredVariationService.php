@@ -8,7 +8,11 @@ use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Support\MediaImageConfiguration;
 
-/** MediaConfiguredVariationService resolves config-defined preset and output conversion payloads. */
+/**
+ * MediaConfiguredVariationService resolves config-defined preset and output conversion payloads.
+ *
+ * @internal
+ */
 final class MediaConfiguredVariationService
 {
     /**

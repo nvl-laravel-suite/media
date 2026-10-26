@@ -16,6 +16,8 @@ use Throwable;
  *
  * This service centralizes disk checks, local path guards, URL creation, and
  * stream-safe reads so write operations can stay in MediaFileOperator.
+ *
+ * @internal
  */
 final class MediaDiskGateway
 {

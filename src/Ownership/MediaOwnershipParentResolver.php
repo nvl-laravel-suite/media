@@ -14,7 +14,11 @@ use Nvl\Support\Ownership\Enums\OwnershipContextMode;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 
-/** Reloads exact host records and ignores carried relation or owner attributes. @internal */
+/**
+ * Reloads exact host records and ignores carried relation or owner attributes.
+ *
+ * @internal
+ */
 final readonly class MediaOwnershipParentResolver
 {
     public function __construct(private OwnershipResourceRegistry $resources, private OwnershipBoundary $boundary, private OwnershipContext $context, private OwnerRegistry $identities) {}

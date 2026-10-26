@@ -9,6 +9,8 @@ use Nvl\Media\Exceptions\MediaUploadException;
 
 /**
  * Validates scanner configuration before accepting an upload.
+ *
+ * @internal
  */
 final readonly class MediaScannerPolicy
 {

@@ -19,6 +19,8 @@ use Throwable;
  * Handles format conversion (e.g. JPG→WebP), quality adjustment, and longest-edge
  * capping. Encodes format intelligence: skips SVG/GIF, avoids lossy same-format
  * re-encoding, and enforces dimension constraints even when processing fails.
+ *
+ * @internal
  */
 class ImageOptimizationService
 {

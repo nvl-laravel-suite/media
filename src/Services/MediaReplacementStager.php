@@ -18,6 +18,8 @@ use Throwable;
 
 /**
  * Validates, scans, stores, and verifies a replacement object before database mutation.
+ *
+ * @internal
  */
 final class MediaReplacementStager
 {

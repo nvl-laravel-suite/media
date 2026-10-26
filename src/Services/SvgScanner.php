@@ -10,7 +10,11 @@ use DOMElement;
 use DOMNode;
 use Nvl\Media\Exceptions\MediaUploadException;
 
-/** SvgScanner: validates uploaded SVG files against XSS and XXE threats. */
+/**
+ * SvgScanner: validates uploaded SVG files against XSS and XXE threats.
+ *
+ * @internal
+ */
 final class SvgScanner
 {
     /** @var array<int, string> Elements that always execute code or load external content. */

@@ -108,7 +108,7 @@ describe('index', function () {
     it('caps direct service pagination at the configured management limit', function () {
         createServiceMedia();
         config(['nvl-media.query.maximum_page_size' => 100]);
-        $result = app(MediaReader::class)->paginate(SystemActor::Background, ['perPage' => 500, 'search' => null, 'type' => null, 'disk' => null, 'isPublic' => null, 'collection' => null, 'tag' => null, 'folder' => null, 'mimeType' => null, 'extension' => null, 'locale' => null, 'associableType' => null, 'page' => 1, 'sortBy' => 'created_at', 'sortDirection' => 'desc']);
+        $result = app(MediaReader::class)->paginate(SystemActor::Background, ['per_page' => 500, 'search' => null, 'type' => null, 'disk' => null, 'isPublic' => null, 'collection' => null, 'tag' => null, 'folder' => null, 'mimeType' => null, 'extension' => null, 'locale' => null, 'associableType' => null, 'page' => 1, 'sortBy' => 'created_at', 'sortDirection' => 'desc']);
         expect($result->perPage())->toBe(100);
     });
     it('filters by type', function () {
@@ -241,7 +241,7 @@ describe('update', function () {
         expect($updated->getAvailableLocales())->toEqualCanonicalizing(['en', 'bg', 'fr']);
         $patched = $service->update($media->id, ['translations' => ['bg' => ['caption' => 'Български надпис']]]);
         expect($patched->getAvailableLocales())->toEqualCanonicalizing(['en', 'bg', 'fr'])->and($patched->translated('title', 'bg'))->toBe('Българско заглавие')->and($patched->translated('caption', 'bg'))->toBe('Български надпис');
-        $replaced = $service->update($media->id, ['translations' => ['en' => ['title' => 'Replacement title'], 'bg' => ['title' => 'Заместено заглавие']], 'translationMode' => 'replace']);
+        $replaced = $service->update($media->id, ['translations' => ['en' => ['title' => 'Replacement title'], 'bg' => ['title' => 'Заместено заглавие']], 'translation_mode' => 'replace']);
         expect($replaced->getAvailableLocales())->toEqualCanonicalizing(['en', 'bg'])->and($replaced->hasTranslation('fr'))->toBeFalse();
     });
     it('validates array payloads before applying any metadata or translation writes', function () {

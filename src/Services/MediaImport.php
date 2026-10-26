@@ -20,7 +20,11 @@ use Nvl\Support\Enums\SystemActor;
 use stdClass;
 use Throwable;
 
-/** Complete native MediaImport operations, including persistence and file effects. */
+/**
+ * Complete native MediaImport operations, including persistence and file effects.
+ *
+ * @api
+ */
 final class MediaImport
 {
     public function __construct(

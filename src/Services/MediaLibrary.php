@@ -26,7 +26,11 @@ use Nvl\Translatable\Services\RelatedTranslationStore;
 use RuntimeException;
 use Throwable;
 
-/** Complete native MediaLibrary operations, including persistence and file effects. */
+/**
+ * Complete native MediaLibrary operations, including persistence and file effects.
+ *
+ * @api
+ */
 final class MediaLibrary
 {
     public function __construct(
@@ -84,7 +88,7 @@ final class MediaLibrary
      * Update metadata and translation fields for a media record.
      */
     /** Mutate only supplied display and localization attributes; omission preserves a value.
-     * @param  array{isPublic?: bool, tags?: list<string>|null, metadata?: array<string, mixed>|null, translations?: array<string, array{title?: string|null, alt?: string|null, caption?: string|null, description?: string|null}>|null, translationMode?: TranslationSyncMode}  $data
+     * @param  array{isPublic?: bool, tags?: list<string>|null, metadata?: array<string, mixed>|null, translations?: array<string, array{title?: string|null, alt?: string|null, caption?: string|null, description?: string|null}>|null, translation_mode?: TranslationSyncMode}  $data
      */
     public function updateMetadata(Authenticatable|SystemActor $actor, Media|string $media, array $data): Media
     {
@@ -126,7 +130,7 @@ final class MediaLibrary
                     }
                 }
 
-                if ($translationRows !== [] || ($data['translationMode'] ?? TranslationSyncMode::Patch)->value === 'replace') {
+                if ($translationRows !== [] || ($data['translation_mode'] ?? TranslationSyncMode::Patch)->value === 'replace') {
                     $definition = $media->translationDefinition();
                     $locales = [];
                     foreach ($translationRows as $locale => $attributes) {
@@ -137,7 +141,7 @@ final class MediaLibrary
                         $locales[$normalized] = true;
                         $this->translations->upsert($media, $definition, $normalized, $attributes);
                     }
-                    if (($data['translationMode'] ?? TranslationSyncMode::Patch) === TranslationSyncMode::Replace) {
+                    if (($data['translation_mode'] ?? TranslationSyncMode::Patch) === TranslationSyncMode::Replace) {
                         $this->translations->deleteExcept($media, $definition, array_keys($locales));
                     }
                 }
@@ -691,7 +695,7 @@ final class MediaLibrary
      */
     private function validateMetadata(array $data): void
     {
-        $unknown = array_diff(array_keys($data), ['tags', 'metadata', 'isPublic', 'translations', 'translationMode']);
+        $unknown = array_diff(array_keys($data), ['tags', 'metadata', 'isPublic', 'translations', 'translation_mode']);
         if ($unknown !== []) {
             throw new \InvalidArgumentException('Unknown or protected Media metadata fields: '.implode(', ', $unknown));
         }
@@ -711,8 +715,8 @@ final class MediaLibrary
             'translations.*.caption' => ['nullable', 'string'],
             'translations.*.description' => ['nullable', 'string'],
         ])->validate();
-        if (array_key_exists('translationMode', $data) && ! $data['translationMode'] instanceof TranslationSyncMode) {
-            throw new \InvalidArgumentException('Media translationMode must be a TranslationSyncMode.');
+        if (array_key_exists('translation_mode', $data) && ! $data['translation_mode'] instanceof TranslationSyncMode) {
+            throw new \InvalidArgumentException('Media translation_mode must be a TranslationSyncMode.');
         }
 
         if (isset($data['metadata']) && is_array($data['metadata'])) {

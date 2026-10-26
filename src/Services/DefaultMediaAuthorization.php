@@ -14,6 +14,8 @@ use Nvl\Support\Enums\SystemActor;
 
 /**
  * Conservative standalone policy based on public visibility and uploader identity.
+ *
+ * @internal
  */
 final class DefaultMediaAuthorization implements MediaAuthorization
 {

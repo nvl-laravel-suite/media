@@ -13,6 +13,8 @@ use Nvl\Media\Support\MediaConfiguration;
  *
  * The cache boundary is deliberately narrow so write services can invalidate
  * paths without owning the read behavior themselves.
+ *
+ * @internal
  */
 final class MediaFileExistence
 {

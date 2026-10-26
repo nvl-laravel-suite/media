@@ -26,6 +26,8 @@ use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 
 /**
  * Owns portable idempotency claims for Media owner-slot mutations.
+ *
+ * @internal
  */
 final class MediaOwnerSlotIdempotency
 {

@@ -10,6 +10,8 @@ use Nvl\Media\Models\Media;
 
 /**
  * Portable substring and JSON search for moderate media datasets.
+ *
+ * @internal
  */
 final class PortableMediaSearchDriver implements MediaSearchDriver
 {

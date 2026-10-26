@@ -131,7 +131,7 @@ it('paginates every authorized owner collection and counts distinct original byt
     $received = [];
     foreach ([1, 2, 3] as $page) {
         $result = $reader->read(SystemActor::Background, $owner, page: $page, perPage: 5);
-        expect($result['page'])->toBe($page)->and($result['perPage'])->toBe(5)->and($result['total'])->toBe(14)->and($result['collectionCounts']->unbounded)->toBe(13)->and($result['collectionCounts']->library)->toBe(1)->and($result['distinctAssetCount'])->toBe(13)->and($result['originalBytes'])->toBe(1300)->and($result['items'])->toHaveCount($page === 3 ? 4 : 5);
+        expect($result['page'])->toBe($page)->and($result['per_page'])->toBe(5)->and($result['total'])->toBe(14)->and($result['collectionCounts']->unbounded)->toBe(13)->and($result['collectionCounts']->library)->toBe(1)->and($result['distinctAssetCount'])->toBe(13)->and($result['originalBytes'])->toBe(1300)->and($result['items'])->toHaveCount($page === 3 ? 4 : 5);
         foreach ($result['items'] as $item) {
             $received[] = $item['media']['associationId'];
             expect($item['media'])->toBeArray()->and($item['media']['url'])->toBeNull();
@@ -141,7 +141,7 @@ it('paginates every authorized owner collection and counts distinct original byt
     sort($associations);
     expect($received)->toBe($associations);
     $gallery = $reader->read(SystemActor::Background, $owner, collection: 'unbounded', perPage: 10000);
-    expect($gallery['total'])->toBe(13)->and($gallery['perPage'])->toBe(100)->and($gallery['distinctAssetCount'])->toBe(13)->and($gallery['originalBytes'])->toBe(1300);
+    expect($gallery['total'])->toBe(13)->and($gallery['per_page'])->toBe(100)->and($gallery['distinctAssetCount'])->toBe(13)->and($gallery['originalBytes'])->toBe(1300);
 });
 it('returns requested current public variation URLs without private capabilities or missing fallbacks', function (bool $enabled): void {
     config(['nvl-media.assets.allowed_parameters' => $enabled ? ['v'] : []]);

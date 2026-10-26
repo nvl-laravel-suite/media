@@ -45,7 +45,11 @@ use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Support\Ownership\Contracts\OwnershipWriter;
 use Throwable;
 
-/** Complete attachment, lifecycle and durable owner-slot operations. */
+/**
+ * Complete attachment, lifecycle and durable owner-slot operations.
+ *
+ * @api
+ */
 final class MediaAttachments
 {
     public function __construct(

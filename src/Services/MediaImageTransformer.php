@@ -22,6 +22,8 @@ use Throwable;
  * Owns the low-level Spatie Image manipulation pipeline for Media originals,
  * variations, and optimization flows. Storage, database writes, and URL
  * behavior remain outside this service.
+ *
+ * @internal
  */
 class MediaImageTransformer
 {

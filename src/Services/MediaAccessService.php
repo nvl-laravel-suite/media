@@ -15,6 +15,8 @@ use Nvl\Support\Enums\SystemActor;
 
 /**
  * Evaluates consumer authorization and optional cross-owner privileges consistently.
+ *
+ * @internal
  */
 final readonly class MediaAccessService
 {

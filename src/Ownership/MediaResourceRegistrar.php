@@ -15,7 +15,11 @@ use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Support\Ownership\ValueObjects\OwnershipDefinition;
 use Nvl\Support\Ownership\ValueObjects\OwnershipResourceDefinition;
 
-/** Compiles Media's complete graph from its configured consumer root. @internal */
+/**
+ * Compiles Media's complete graph from its configured consumer root.
+ *
+ * @internal
+ */
 final readonly class MediaResourceRegistrar
 {
     public function __construct(private MediaModelRegistry $models) {}

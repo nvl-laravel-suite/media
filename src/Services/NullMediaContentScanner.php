@@ -9,6 +9,8 @@ use Nvl\Media\Contracts\MediaContentScanner;
 
 /**
  * Default scanner used when the host has not configured a malware service.
+ *
+ * @internal
  */
 final class NullMediaContentScanner implements MediaContentScanner
 {

@@ -9,6 +9,8 @@ use Nvl\Media\Models\MediaMultipartUpload;
 
 /**
  * Builds an opaque multipart session array from persisted authoritative state.
+ *
+ * @internal
  */
 final class MediaMultipartSessionMapper
 {

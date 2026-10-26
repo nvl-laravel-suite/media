@@ -12,6 +12,8 @@ use Illuminate\Database\Events\TransactionRolledBack;
  *
  * The provider owns one listener for this singleton registry, while scoped Media services
  * register callbacks that are removed as soon as their root transaction finishes.
+ *
+ * @internal
  */
 final class MediaTransactionRollbackRegistry
 {

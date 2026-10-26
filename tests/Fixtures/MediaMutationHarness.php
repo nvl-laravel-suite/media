@@ -27,8 +27,8 @@ final readonly class MediaMutationHarness
             $payload['isPublic'] = $payload['is_public'];
             unset($payload['is_public']);
         }
-        if (isset($payload['translationMode']) && is_string($payload['translationMode'])) {
-            $payload['translationMode'] = TranslationSyncMode::from($payload['translationMode']);
+        if (isset($payload['translation_mode']) && is_string($payload['translation_mode'])) {
+            $payload['translation_mode'] = TranslationSyncMode::from($payload['translation_mode']);
         }
 
         return $this->update->updateMetadata(auth()->user() ?? SystemActor::Background, $id, $payload);

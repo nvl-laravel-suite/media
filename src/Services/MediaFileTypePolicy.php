@@ -11,6 +11,8 @@ use Nvl\Media\Support\MediaMimeResolver;
 
 /**
  * Resolves canonical extensions and MIME types while rejecting dangerous filename claims.
+ *
+ * @internal
  */
 final class MediaFileTypePolicy
 {

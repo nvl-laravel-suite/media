@@ -11,6 +11,8 @@ use Throwable;
 
 /**
  * Adapts optional Spatie-compatible role and permission methods to Media abilities.
+ *
+ * @internal
  */
 final class MediaPrivilegedAccess
 {

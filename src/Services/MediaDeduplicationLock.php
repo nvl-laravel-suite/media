@@ -17,6 +17,8 @@ use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 
 /**
  * MediaDeduplicationLock serializes shared digest uploads before file storage.
+ *
+ * @internal
  */
 final class MediaDeduplicationLock
 {

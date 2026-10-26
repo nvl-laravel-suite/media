@@ -22,6 +22,8 @@ use Nvl\Support\Enums\SystemActor;
 
 /**
  * Validates existing Media against slot policy and identifies removable staging associations.
+ *
+ * @internal
  */
 final readonly class MediaStagingPolicy
 {

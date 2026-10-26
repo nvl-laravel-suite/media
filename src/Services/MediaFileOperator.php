@@ -17,6 +17,8 @@ use Throwable;
  *
  * The operator owns storage mutations only. Read metadata and URL behavior stay
  * in MediaDiskGateway, while existence caching stays in MediaFileExistence.
+ *
+ * @internal
  */
 final class MediaFileOperator
 {

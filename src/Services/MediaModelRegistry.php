@@ -42,7 +42,9 @@ final class MediaModelRegistry
         );
     }
 
-    /** Resolve and freeze the concrete Media class before resource compilation.
+    /**
+     * Resolve and freeze the concrete Media class before resource compilation.
+     *
      * @internal
      *
      * @return class-string<Media>
@@ -60,7 +62,9 @@ final class MediaModelRegistry
         return $this->registration->modelClass();
     }
 
-    /** Resolve the immutable model from native framework entry points.
+    /**
+     * Resolve the immutable model from native framework entry points.
+     *
      * @internal
      *
      * @return class-string<Media>
@@ -82,7 +86,9 @@ final class MediaModelRegistry
         return new $class;
     }
 
-    /** Persist a package-authored attribute map under the exact source assignment.
+    /**
+     * Persist a package-authored attribute map under the exact source assignment.
+     *
      * @internal
      *
      * @param  array<string, mixed>  $attributes

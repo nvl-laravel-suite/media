@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Tests\Fixtures\Data\Mutations;
 
+use Spatie\LaravelData\Attributes\MapInputName;
+use Spatie\LaravelData\Attributes\MapOutputName;
 use Spatie\LaravelData\Data;
 
 /**
@@ -17,6 +19,6 @@ final class ImportPlatformMediaData extends Data
         public string $grantId,
         public int $expectedGrantRevision,
         public int $expectedSourceRevision,
-        public string $idempotencyKey,
+        #[MapInputName('idempotency_key')] #[MapOutputName('idempotency_key')] public string $idempotencyKey,
     ) {}
 }

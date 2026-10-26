@@ -10,7 +10,11 @@ use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 
-/** Current package classification, without retaining an actor or a model. @internal */
+/**
+ * Current package classification, without retaining an actor or a model.
+ *
+ * @internal
+ */
 final class MediaOwnership
 {
     /** A declared consumer root also stays guarded when its runtime is unavailable. */

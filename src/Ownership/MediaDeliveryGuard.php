@@ -14,7 +14,11 @@ use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Support\Ownership\ValueObjects\OwnershipSnapshot;
 
-/** Rejects forged carried delivery facts as well as foreign canonical owners. @internal */
+/**
+ * Rejects forged carried delivery facts as well as foreign canonical owners.
+ *
+ * @internal
+ */
 final class MediaDeliveryGuard
 {
     /** @var array<int, array<string, mixed>> */

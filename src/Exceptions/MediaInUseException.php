@@ -9,7 +9,7 @@ use Nvl\Support\Exceptions\ExceptionResponse;
 
 /**
  * @api
-
+ *
  * Reports a mutation that would violate a shared media asset's usage contract.
  */
 final class MediaInUseException extends MediaException

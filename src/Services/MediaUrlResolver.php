@@ -10,7 +10,11 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Support\MediaAssetUrl;
 
-/** MediaUrlResolver: injected URL boundary for cache-aware media and variation URL generation. */
+/**
+ * MediaUrlResolver: injected URL boundary for cache-aware media and variation URL generation.
+ *
+ * @api
+ */
 final class MediaUrlResolver
 {
     public function __construct(

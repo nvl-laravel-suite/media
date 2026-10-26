@@ -28,7 +28,7 @@ test('consumer facade uploads persist through the native uploader and attach to 
 test('the facade supports typed reads and convenient array filters', function (): void {
     Media::query()->create(['filename' => 'facade.txt', 'hash' => 'facade.txt', 'extension' => 'txt', 'mime_type' => 'text/plain', 'size' => 6, 'disk' => 'public', 'is_public' => true, 'type' => MediaType::DOCUMENT, 'digest' => hash('sha256', 'facade')]);
     Media::query()->create(['filename' => 'facade.pdf', 'hash' => 'facade.pdf', 'extension' => 'pdf', 'mime_type' => 'application/pdf', 'size' => 6, 'disk' => 'public', 'is_public' => true, 'type' => MediaType::DOCUMENT, 'digest' => hash('sha256', 'facade-pdf')]);
-    $page = MediaFacade::paginate(['extension' => 'txt', 'perPage' => 1000]);
+    $page = MediaFacade::paginate(['extension' => 'txt', 'per_page' => 1000]);
     expect($page->total())->toBe(1)->and($page->perPage())->toBe(100)->and($page->items()[0]->filename)->toBe('facade.txt')->and(MediaFacade::findOrFail($page->items()[0]->id)->filename)->toBe('facade.txt');
 });
 test('facade authorization uses the same optional global-role bridge as policies and queries', function (): void {

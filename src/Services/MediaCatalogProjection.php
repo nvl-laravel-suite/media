@@ -6,7 +6,11 @@ namespace Nvl\Media\Services;
 
 use Illuminate\Contracts\Config\Repository;
 
-/** Bounds presentation metadata crossing a granted catalog copy boundary. @internal */
+/**
+ * Bounds presentation metadata crossing a granted catalog copy boundary.
+ *
+ * @internal
+ */
 final readonly class MediaCatalogProjection
 {
     public function __construct(private Repository $configuration) {}

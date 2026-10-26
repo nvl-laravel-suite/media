@@ -10,6 +10,8 @@ use Throwable;
 
 /**
  * Materializes media objects to local filesystem paths for local-only processors.
+ *
+ * @internal
  */
 final class MediaLocalFileMaterializer
 {

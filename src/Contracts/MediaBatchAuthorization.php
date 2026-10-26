@@ -12,7 +12,8 @@ use Nvl\Media\Models\MediaAssociation;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Owners\OwnerBatch;
 
-/** Explicit query-free owner/association and asset View authorization.
+/**
+ * Explicit query-free owner/association and asset View authorization.
  *
  * @api
  */

@@ -23,6 +23,8 @@ use Throwable;
 
 /**
  * Normalizes remote, encoded, disk and string sources into bounded uploads.
+ *
+ * @internal
  */
 final class MediaSourceResolver
 {

@@ -16,7 +16,11 @@ use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Support\Ownership\ValueObjects\OwnerReference;
 
-/** Rechecks physical binaries and attachment targets before publishing an adoption barrier. @internal */
+/**
+ * Rechecks physical binaries and attachment targets before publishing an adoption barrier.
+ *
+ * @internal
+ */
 final readonly class MediaAdoptionVerifier
 {
     public function __construct(

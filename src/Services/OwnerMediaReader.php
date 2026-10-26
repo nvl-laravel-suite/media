@@ -30,7 +30,11 @@ use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Translatable\Services\TranslationResolver;
 use stdClass;
 
-/** Reads complete owner associations with bounded hydration and SQL-authorized totals. */
+/**
+ * Reads complete owner associations with bounded hydration and SQL-authorized totals.
+ *
+ * @api
+ */
 final readonly class OwnerMediaReader
 {
     /** Retain canonical admission, query authorization, localization and public delivery collaborators. */
@@ -49,7 +53,7 @@ final readonly class OwnerMediaReader
 
     /** Return bounded association items and complete distinct original-byte totals.
      * @param  list<string>  $variations
-     * @return array{items: list<array<string, mixed>>, page: int, perPage: int, total: int, collectionCounts: stdClass, distinctAssetCount: int, originalBytes: int}
+     * @return array{items: list<array<string, mixed>>, page: int, per_page: int, total: int, collectionCounts: stdClass, distinctAssetCount: int, originalBytes: int}
      */
     public function read(Authenticatable|SystemActor $actor, Model&HasNvlMedia $owner, ?string $collection = null, int $page = 1, int $perPage = 25, array $variations = [], ?string $locale = null): array
     {
@@ -135,7 +139,7 @@ final readonly class OwnerMediaReader
             $items[] = ['media' => ['associationId' => $row->id, 'mediaId' => $asset->id, 'title' => $text['title'], 'altText' => $text['alt'], 'caption' => $text['caption'], 'mimeType' => $asset->mime_type, 'size' => $asset->size, 'isPublic' => $asset->is_public, 'url' => $publicUrls[$asset->id] ?? null], 'collection' => $row->collection, 'variationUrls' => (object) ($variationUrls[$asset->id] ?? array_fill_keys($labels, null))];
         }
 
-        return ['items' => $items, 'page' => $page, 'perPage' => $perPage, 'total' => $total, 'collectionCounts' => $counts, 'distinctAssetCount' => $this->integer($stats->asset_count), 'originalBytes' => $this->integer($stats->original_bytes)];
+        return ['items' => $items, 'page' => $page, 'per_page' => $perPage, 'total' => $total, 'collectionCounts' => $counts, 'distinctAssetCount' => $this->integer($stats->asset_count), 'originalBytes' => $this->integer($stats->original_bytes)];
     }
 
     /** Build one exact authorized owner association query for both page and totals.

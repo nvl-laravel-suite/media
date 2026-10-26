@@ -14,6 +14,8 @@ use Nvl\Media\Support\MediaConfiguration;
 
 /**
  * Enforces package-wide and slot-specific upload constraints at the action boundary.
+ *
+ * @internal
  */
 final class MediaUploadValidator
 {

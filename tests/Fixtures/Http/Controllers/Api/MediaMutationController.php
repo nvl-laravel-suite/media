@@ -48,7 +48,10 @@ final class MediaMutationController extends Controller
     ): JsonResponse {
         $this->authorize('update', $media);
 
-        $updated = $this->updateMetadata->updateMetadata($request->user(), $media, array_filter(get_object_vars($data), static fn ($value): bool => ! $value instanceof Optional));
+        $attributes = array_filter(get_object_vars($data), static fn ($value): bool => ! $value instanceof Optional);
+        unset($attributes['translationMode']);
+        $attributes['translation_mode'] = $data->translationMode;
+        $updated = $this->updateMetadata->updateMetadata($request->user(), $media, $attributes);
 
         return response()->json([
             'data' => $this->resources->fromModel($updated),

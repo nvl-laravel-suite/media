@@ -24,7 +24,9 @@ use Nvl\Support\Enums\SystemActor;
  */
 trait InteractsWithNvlMedia
 {
-    /** Return the one eager-loadable NVL relation.
+    /**
+     * Return the one eager-loadable NVL relation.
+     *
      * @return MorphMany<MediaAssociation, $this>
      *
      * @internal

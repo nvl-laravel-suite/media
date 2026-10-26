@@ -10,6 +10,8 @@ use Throwable;
 
 /**
  * Applies MediaAdder's explicit local-source ownership contract.
+ *
+ * @internal
  */
 final class MediaOwnedSourceLifecycle
 {

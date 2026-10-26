@@ -16,6 +16,8 @@ use Nvl\Media\Slots\MediaSlot;
 
 /**
  * Resolves persisted Media owners, registered single-file slots, and their exact associations.
+ *
+ * @internal
  */
 final readonly class MediaOwnerSlotResolver
 {

@@ -28,7 +28,11 @@ use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Translatable\Services\TranslationResolver;
 use stdClass;
 
-/** Finite canonical owner admission and authorized bounded original-asset projection. */
+/**
+ * Finite canonical owner admission and authorized bounded original-asset projection.
+ *
+ * @api
+ */
 final readonly class MediaOwnerBatchReader
 {
     /** Retain explicit policy, canonical storage and pure locale projection dependencies. */

@@ -22,6 +22,8 @@ use Throwable;
 
 /**
  * Serializes storage and database mutations for one or more media identities.
+ *
+ * @internal
  */
 final class MediaMutationLock
 {

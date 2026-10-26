@@ -93,7 +93,7 @@ final class MediaLibraryController extends Controller
                     'meta' => [
                         'currentPage' => $paginator->currentPage(),
                         'lastPage' => $paginator->lastPage(),
-                        'perPage' => $paginator->perPage(),
+                        'per_page' => $paginator->perPage(),
                         'total' => $paginator->total(),
                     ],
                 ],

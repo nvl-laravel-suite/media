@@ -31,7 +31,11 @@ use Nvl\Support\Logging\PackageLogger;
 use RuntimeException;
 use Throwable;
 
-/** Complete native MediaUploader operations, including persistence and file effects. */
+/**
+ * Complete native MediaUploader operations, including persistence and file effects.
+ *
+ * @api
+ */
 final class MediaUploader
 {
     public function __construct(

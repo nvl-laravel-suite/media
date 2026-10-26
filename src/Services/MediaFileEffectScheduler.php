@@ -15,6 +15,8 @@ use Throwable;
  *
  * This service deliberately does not open transactions. Actions own the transaction
  * boundary and use this capability to align external storage effects with its outcome.
+ *
+ * @internal
  */
 final class MediaFileEffectScheduler
 {

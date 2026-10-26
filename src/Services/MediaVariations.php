@@ -21,7 +21,11 @@ use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Support\Ownership\Contracts\OwnershipWriter;
 use Throwable;
 
-/** Complete native MediaVariations operations, including persistence and file effects. */
+/**
+ * Complete native MediaVariations operations, including persistence and file effects.
+ *
+ * @api
+ */
 final class MediaVariations
 {
     public function __construct(

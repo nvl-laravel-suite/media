@@ -714,7 +714,6 @@
             "methods": [
                 "allowsCentralCatalog",
                 "associations",
-                "bootHasOwnership",
                 "buildPath",
                 "buildPrivateUrl",
                 "buildPublicUrl",
@@ -842,7 +841,6 @@
             "file": "src/Models/MediaAssociation.php",
             "methods": [
                 "associable",
-                "bootHasOwnership",
                 "delete",
                 "fresh",
                 "getConnectionName",
@@ -883,7 +881,6 @@
             "kind": "class",
             "file": "src/Models/MediaImageVariation.php",
             "methods": [
-                "bootHasOwnership",
                 "delete",
                 "fresh",
                 "getConnectionName",
@@ -928,7 +925,6 @@
             "kind": "class",
             "file": "src/Models/MediaOwnerGrant.php",
             "methods": [
-                "bootHasOwnership",
                 "delete",
                 "fresh",
                 "getConnectionName",
@@ -960,7 +956,6 @@
             "kind": "class",
             "file": "src/Models/MediaTranslation.php",
             "methods": [
-                "bootHasOwnership",
                 "delete",
                 "fresh",
                 "getConnectionName",
@@ -1008,12 +1003,157 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Media\\Services\\MediaAttachments": {
+            "kind": "class",
+            "file": "src/Services/MediaAttachments.php",
+            "methods": [
+                "__construct",
+                "attach",
+                "clearCollection",
+                "clearCollectionExcept",
+                "clearSlot",
+                "copySlot",
+                "deleteAll",
+                "detach",
+                "getSlot",
+                "remove",
+                "removeFromModel",
+                "replaceSlot",
+                "reuse",
+                "sync"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Services\\MediaImport": {
+            "kind": "class",
+            "file": "src/Services/MediaImport.php",
+            "methods": [
+                "__construct",
+                "adopt"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Services\\MediaLibrary": {
+            "kind": "class",
+            "file": "src/Services/MediaLibrary.php",
+            "methods": [
+                "__construct",
+                "bulkDelete",
+                "bulkTag",
+                "delete",
+                "move",
+                "relocate",
+                "rename",
+                "tag",
+                "updateMetadata"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Media\\Services\\MediaModelRegistry": {
             "kind": "class",
             "file": "src/Services/MediaModelRegistry.php",
             "methods": [
                 "__construct",
                 "mediaClass"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Services\\MediaMultipart": {
+            "kind": "class",
+            "file": "src/Services/MediaMultipart.php",
+            "methods": [
+                "__construct",
+                "abort",
+                "complete",
+                "initiate",
+                "signPart"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Services\\MediaOwnerBatchReader": {
+            "kind": "class",
+            "file": "src/Services/MediaOwnerBatchReader.php",
+            "methods": [
+                "__construct",
+                "read"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Services\\MediaReader": {
+            "kind": "class",
+            "file": "src/Services/MediaReader.php",
+            "methods": [
+                "__construct",
+                "filterOptions",
+                "findMany",
+                "get",
+                "paginate",
+                "slots",
+                "usages"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Services\\MediaScan": {
+            "kind": "class",
+            "file": "src/Services/MediaScan.php",
+            "methods": [
+                "__construct",
+                "finalize"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Services\\MediaUploader": {
+            "kind": "class",
+            "file": "src/Services/MediaUploader.php",
+            "methods": [
+                "__construct",
+                "replace",
+                "upload"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Services\\MediaUrlResolver": {
+            "kind": "class",
+            "file": "src/Services/MediaUrlResolver.php",
+            "methods": [
+                "__construct",
+                "buildUrl",
+                "forExistingMedia",
+                "forMedia",
+                "forVariation",
+                "path",
+                "privateUrl",
+                "publicUrl",
+                "temporaryUrl"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Services\\MediaVariations": {
+            "kind": "class",
+            "file": "src/Services/MediaVariations.php",
+            "methods": [
+                "__construct",
+                "generate"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Services\\OwnerMediaReader": {
+            "kind": "class",
+            "file": "src/Services/OwnerMediaReader.php",
+            "methods": [
+                "__construct",
+                "read"
             ],
             "properties": [],
             "constants": []

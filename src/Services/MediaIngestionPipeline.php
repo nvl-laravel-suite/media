@@ -13,6 +13,8 @@ use Throwable;
 
 /**
  * Authoritative validation, scanner, and SVG boundary for materialized media.
+ *
+ * @internal
  */
 final class MediaIngestionPipeline
 {

@@ -49,7 +49,7 @@ final class UpdateMediaPayload extends Data
          */
         public readonly array|Optional|null $translations = new Optional,
 
-        public readonly TranslationSyncMode $translationMode = TranslationSyncMode::Patch,
+        #[MapInputName('translation_mode')] #[MapOutputName('translation_mode')] public readonly TranslationSyncMode $translationMode = TranslationSyncMode::Patch,
     ) {}
 
     /**
@@ -70,7 +70,7 @@ final class UpdateMediaPayload extends Data
             'translations.*.alt' => ['nullable', 'string', 'max:255'],
             'translations.*.caption' => ['nullable', 'string'],
             'translations.*.description' => ['nullable', 'string'],
-            'translationMode' => ['sometimes', Rule::enum(TranslationSyncMode::class)],
+            'translation_mode' => ['sometimes', Rule::enum(TranslationSyncMode::class)],
         ];
     }
 

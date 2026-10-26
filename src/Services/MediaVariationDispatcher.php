@@ -18,7 +18,11 @@ use Nvl\Support\Logging\PackageLogger;
 use Nvl\Support\Ownership\ValueObjects\OwnershipJobEnvelope;
 use Throwable;
 
-/** MediaVariationDispatcher resolves and dispatches variation definitions for existing media records. */
+/**
+ * MediaVariationDispatcher resolves and dispatches variation definitions for existing media records.
+ *
+ * @internal
+ */
 final class MediaVariationDispatcher
 {
     public function __construct(

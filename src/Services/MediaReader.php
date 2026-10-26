@@ -25,7 +25,11 @@ use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 
-/** MediaReader: read-only queries for media listing, detail, and usage lookups. */
+/**
+ * MediaReader: read-only queries for media listing, detail, and usage lookups.
+ *
+ * @api
+ */
 final class MediaReader
 {
     /**
@@ -41,7 +45,7 @@ final class MediaReader
     /**
      * List media with filters, pagination, and optional user scoping.
      *
-     * @param  array{search?: string, type?: MediaType|string|null, disk?: string, isPublic?: bool, collection?: string, tag?: string, folder?: string, mimeType?: string, extension?: string, locale?: string, associableType?: string, perPage?: int, page?: int, sortBy?: string, sortDirection?: string}  $filters
+     * @param  array{search?: string, type?: MediaType|string|null, disk?: string, isPublic?: bool, collection?: string, tag?: string, folder?: string, mimeType?: string, extension?: string, locale?: string, associableType?: string, per_page?: int, page?: int, sortBy?: string, sortDirection?: string}  $filters
      * @return LengthAwarePaginator<int, Media>
      */
     public function paginate(
@@ -51,7 +55,7 @@ final class MediaReader
     ): LengthAwarePaginator {
         $user = MediaActors::assert($user);
         $this->access->authorize($user, MediaAbility::List);
-        $allowed = ['search', 'type', 'disk', 'isPublic', 'collection', 'tag', 'folder', 'mimeType', 'extension', 'locale', 'associableType', 'perPage', 'page', 'sortBy', 'sortDirection'];
+        $allowed = ['search', 'type', 'disk', 'isPublic', 'collection', 'tag', 'folder', 'mimeType', 'extension', 'locale', 'associableType', 'per_page', 'page', 'sortBy', 'sortDirection'];
         if (array_diff(array_keys($filters), $allowed) !== []) {
             throw new \InvalidArgumentException('Unknown Media filter fields.');
         }
@@ -67,7 +71,7 @@ final class MediaReader
             'extension' => ['nullable', 'string', 'max:10'],
             'locale' => ['nullable', 'string', 'max:5'],
             'associableType' => ['nullable', 'string', 'max:255'],
-            'perPage' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:1'],
             'page' => ['nullable', 'integer', 'min:1'],
             'sortBy' => ['nullable', Rule::in(['created_at', 'updated_at', 'filename', 'size', 'type', 'extension', 'mime_type'])],
             'sortDirection' => ['nullable', Rule::in(['asc', 'desc'])],
@@ -164,7 +168,7 @@ final class MediaReader
 
         $query->orderBy($sortBy, $sortDirection);
 
-        $perPage = ($filters['perPage'] ?? 25);
+        $perPage = ($filters['per_page'] ?? 25);
         $perPage = min(
             max(1, $perPage),
             MediaConfiguration::integer('nvl-media.query.maximum_page_size', 100, 1),

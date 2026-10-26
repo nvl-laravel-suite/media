@@ -15,6 +15,8 @@ use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 
 /**
  * Serializes completion and abortion transitions for one multipart session.
+ *
+ * @internal
  */
 final class MediaMultipartLock
 {

@@ -10,7 +10,9 @@ use Nvl\Support\Exceptions\ExceptionResponse;
 use Nvl\Support\Traits\InteractsWithPackageFailure;
 use RuntimeException;
 
-/** Expected failure to store or materialize a media object.
+/**
+ * Expected failure to store or materialize a media object.
+ *
  * @api
  */
 final class MediaStorageException extends RuntimeException implements RespondableException

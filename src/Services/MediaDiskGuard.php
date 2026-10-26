@@ -12,6 +12,8 @@ use Nvl\Media\Support\MediaDiskResolver;
  *
  * Acts as the single authority for deciding whether a requested filesystem
  * disk may be used by user-facing Media write operations.
+ *
+ * @internal
  */
 final class MediaDiskGuard
 {

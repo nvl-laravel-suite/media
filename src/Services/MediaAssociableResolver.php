@@ -13,7 +13,11 @@ use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Ownership\MediaOwnershipParentResolver;
 use Nvl\Support\OwnerRegistry;
 
-/** MediaAssociableResolver validates and loads Media-capable associable models for API mutations. */
+/**
+ * MediaAssociableResolver validates and loads Media-capable associable models for API mutations.
+ *
+ * @internal
+ */
 final class MediaAssociableResolver
 {
     /** Create the mutation resolver with package ownership and shared identity boundaries. */

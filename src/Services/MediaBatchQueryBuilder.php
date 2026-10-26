@@ -19,7 +19,11 @@ use Nvl\Support\Owners\OwnerBatch;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 
-/** SQL authorization and mandatory ownership applied before window bounds. */
+/**
+ * SQL authorization and mandatory ownership applied before window bounds.
+ *
+ * @internal
+ */
 final readonly class MediaBatchQueryBuilder
 {
     /** Retain the canonical package ownership boundary. */

@@ -9,7 +9,9 @@ use Nvl\Support\Contracts\DomainEvent;
 use Nvl\Support\Ownership\Contracts\OwnershipQueuedJob;
 use Nvl\Support\Ownership\ValueObjects\OwnershipJobEnvelope;
 
-/** Scalar-only audit fact for a committed catalog grant lifecycle change. *
+/**
+ * Scalar-only audit fact for a committed catalog grant lifecycle change. *
+ *
  * @api
  */
 final readonly class MediaCatalogGrantAudited implements DomainEvent, OwnershipQueuedJob

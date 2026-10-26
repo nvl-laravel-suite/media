@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Tests\Fixtures\Data\Display;
 
+use Spatie\LaravelData\Attributes\MapInputName;
+use Spatie\LaravelData\Attributes\MapOutputName;
 use Spatie\LaravelData\Data;
 use stdClass;
 
@@ -19,7 +21,7 @@ final class OwnerMediaPage extends Data
     public function __construct(
         public readonly array $items,
         public readonly int $page,
-        public readonly int $perPage,
+        #[MapInputName('per_page')] #[MapOutputName('per_page')] public readonly int $perPage,
         public readonly int $total,
 
         public readonly stdClass $collectionCounts,

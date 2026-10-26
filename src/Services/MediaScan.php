@@ -13,7 +13,11 @@ use Nvl\Media\Support\MediaActors;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Logging\PackageLogger;
 
-/** Complete native MediaScan operations, including persistence and file effects. */
+/**
+ * Complete native MediaScan operations, including persistence and file effects.
+ *
+ * @api
+ */
 final class MediaScan
 {
     public function __construct(

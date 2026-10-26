@@ -11,7 +11,11 @@ use Nvl\Media\Ownership\MediaDeliveryGuard;
 use Nvl\Media\Support\MediaAssetVersion;
 use RuntimeException;
 
-/** MediaAssetService resolves pre-existing image variations for centralized asset delivery. */
+/**
+ * MediaAssetService resolves pre-existing image variations for centralized asset delivery.
+ *
+ * @internal
+ */
 final class MediaAssetService
 {
     public function __construct(

@@ -27,7 +27,11 @@ use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Support\Ownership\Contracts\OwnershipWriter;
 use Throwable;
 
-/** Complete native MediaMultipart operations, including persistence and file effects. */
+/**
+ * Complete native MediaMultipart operations, including persistence and file effects.
+ *
+ * @api
+ */
 final class MediaMultipart
 {
     public function __construct(private readonly MediaDiskGuard $diskGuard, private readonly MediaDiskGateway $disks, private readonly MediaPathResolver $paths, private readonly MediaAuthorization $authorization, private readonly MultipartUploadGateway $gateway, private readonly MediaFileTypePolicy $fileTypes, private readonly MediaMultipartSessionMapper $sessionMapper, private readonly OwnershipBoundary $tenantBoundary, private readonly PackageLogger $packageLogger, private readonly MediaFileEffectScheduler $fileEffects, private readonly MediaMultipartLock $lock, private readonly OwnershipWriter $ownershipWriter) {}

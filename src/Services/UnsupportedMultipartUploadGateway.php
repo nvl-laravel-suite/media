@@ -9,6 +9,8 @@ use Nvl\Media\Exceptions\MediaUploadException;
 
 /**
  * Safe default used until a consumer binds an object-storage adapter.
+ *
+ * @internal
  */
 final class UnsupportedMultipartUploadGateway implements MultipartUploadGateway
 {

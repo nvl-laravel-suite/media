@@ -8,6 +8,8 @@ use Nvl\Media\Contracts\MediaHostResolver;
 
 /**
  * Resolves A and AAAA records through the host operating system.
+ *
+ * @internal
  */
 final class SystemMediaHostResolver implements MediaHostResolver
 {

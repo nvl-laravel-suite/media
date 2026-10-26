@@ -7,7 +7,11 @@ namespace Nvl\Media\Ownership;
 use Illuminate\Database\Connection;
 use Nvl\Support\Ownership\Exceptions\OwnershipSchemaNotReady;
 
-/** Checks package-specific natural identities in live source storage. @internal */
+/**
+ * Checks package-specific natural identities in live source storage.
+ *
+ * @internal
+ */
 final readonly class MediaOwnershipConstraints
 {
     /** @param list<string> $columns */

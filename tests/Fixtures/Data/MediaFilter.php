@@ -96,7 +96,7 @@ class MediaFilter extends Data
         /**
          * @var int|null
          */
-        public readonly int|Optional|null $perPage = 25,
+        #[MapInputName('per_page')] #[MapOutputName('per_page')] public readonly int|Optional|null $perPage = 25,
 
         /**
          * @var int|null
@@ -133,7 +133,7 @@ class MediaFilter extends Data
             'extension' => ['nullable', 'string', 'max:10'],
             'locale' => ['nullable', 'string', 'max:5'],
             'associableType' => ['nullable', 'string', 'max:255'],
-            'perPage' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
             'sortBy' => ['nullable', 'string', Rule::in(self::ALLOWED_SORT_COLUMNS)],
             'sortDirection' => ['nullable', 'string', Rule::in(['asc', 'desc'])],

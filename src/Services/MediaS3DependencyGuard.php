@@ -8,7 +8,11 @@ use Aws\S3\S3Client;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use Nvl\Media\Exceptions\MediaDependencyUnavailableException;
 
-/** Checks optional built-in S3 dependencies before resolving a filesystem adapter. @internal */
+/**
+ * Checks optional built-in S3 dependencies before resolving a filesystem adapter.
+ *
+ * @internal
+ */
 final readonly class MediaS3DependencyGuard
 {
     /** Determine whether both supported S3 runtime classes can be loaded. */

@@ -7,7 +7,7 @@ Consumers own their data objects, Actions, controllers, routes, resources and fr
 ```php
 use Nvl\Media\Services\MediaReader;
 
-$assets = app(MediaReader::class)->paginate($actor, ['perPage' => 25, 'page' => 1]);
+$assets = app(MediaReader::class)->paginate($actor, ['per_page' => 25, 'page' => 1]);
 ```
 
 Bind the authorization contracts and register model slots with `HasNvlMedia::registerNvlMedia()` before writing media. `SystemActor::Background` requires an explicit policy grant. Optional Spatie Permission support does not bypass native ownership boundaries.

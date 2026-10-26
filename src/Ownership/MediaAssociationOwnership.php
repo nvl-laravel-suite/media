@@ -7,7 +7,11 @@ namespace Nvl\Media\Ownership;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 
-/** Locks canonical attachment targets inside native persistence, including quiet writes. @internal */
+/**
+ * Locks canonical attachment targets inside native persistence, including quiet writes.
+ *
+ * @internal
+ */
 final readonly class MediaAssociationOwnership
 {
     public function __construct(private MediaOwnershipParentResolver $parents) {}

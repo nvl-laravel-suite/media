@@ -17,7 +17,11 @@ use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Stringable;
 use UnitEnum;
 
-/** MediaPathResolver: single authority for all media storage path construction and validation. */
+/**
+ * MediaPathResolver: single authority for all media storage path construction and validation.
+ *
+ * @internal
+ */
 final readonly class MediaPathResolver
 {
     /* ---------------------------------------------------------------

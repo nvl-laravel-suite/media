@@ -9,6 +9,8 @@ use Nvl\Media\Conversions\ConversionDefinition;
 
 /**
  * Normalizes upload-specific named variation definitions for persistence.
+ *
+ * @internal
  */
 final class MediaVariationDefinitionNormalizer
 {

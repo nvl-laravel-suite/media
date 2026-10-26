@@ -9,6 +9,8 @@ use Nvl\Translatable\Services\ContentLocale;
 
 /**
  * Provides a Media-facing adapter to the shared content-locale registry.
+ *
+ * @internal
  */
 final readonly class MediaLocaleResolver
 {
