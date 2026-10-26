@@ -41,6 +41,8 @@ abstract class MediaTestCase extends Orchestra
             $table->string('name');
             $table->string('email')->unique();
             $table->string('password');
+            $table->json('media_roles')->nullable();
+            $table->json('media_permissions')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });

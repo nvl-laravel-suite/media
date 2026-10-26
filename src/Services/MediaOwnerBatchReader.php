@@ -48,10 +48,11 @@ final readonly class MediaOwnerBatchReader
     /** Return at most 20,000 association items and ten locale rows per asset.
      * @param  list<Model>  $owners
      * @param  list<string>  $slots
+     * @return array{owners: array<string, array<array-key, array<string, mixed>>>, order: list<array{type: string, id: string}>}
      */
     public function read(array $owners, array $slots, Authenticatable|SystemActor $actor, ?string $locale = null): array
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $input = OwnerBatch::fromModels($owners);
         if ($input->isEmpty()) {
             return $this->result($input, []);
@@ -214,6 +215,7 @@ final readonly class MediaOwnerBatchReader
 
     /** Serialize complete explicit owner arrays.
      * @param  array<string, array<array-key, array<string, mixed>>>  $values
+     * @return array{owners: array<string, array<array-key, array<string, mixed>>>, order: list<array{type: string, id: string}>}
      */
     private function result(OwnerBatch $batch, array $values): array
     {

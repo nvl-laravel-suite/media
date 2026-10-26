@@ -52,8 +52,8 @@ final class MediaVariations
         ConversionDefinition $definition,
         ?int $expectedRevision = null,
     ): ?MediaImageVariation {
-        MediaActors::assert($actor);
-        $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
+        $actor = MediaActors::assert($actor);
+        $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media->id));
 
         return $this->mutationLock->execute(
             $media->id,

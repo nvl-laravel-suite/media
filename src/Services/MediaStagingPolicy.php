@@ -211,9 +211,8 @@ final readonly class MediaStagingPolicy
 
     private function identifiable(Authenticatable|SystemActor $actor): bool
     {
-        return is_string(MediaActors::type($actor))
-            && MediaActors::type($actor) !== ''
-            && (is_int(MediaActors::id($actor)) || is_string(MediaActors::id($actor)))
+        return MediaActors::type($actor) !== ''
+            && MediaActors::id($actor) !== null
             && (string) MediaActors::id($actor) !== '';
     }
 }

@@ -36,7 +36,7 @@ final readonly class MediaAccessService
         ?Media $media = null,
         ?Model $owner = null,
     ): bool {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         if ($actor instanceof Authenticatable && $this->privilegedAccess->allows($actor, $ability)) {
             return true;
         }

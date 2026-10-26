@@ -12,6 +12,7 @@ use Illuminate\Support\Str;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Enums\MediaAbility;
 use Nvl\Media\Enums\MediaLifecycleStatus;
+use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Events\MediaMutated;
 use Nvl\Media\Events\MediaUploaded;
@@ -56,14 +57,12 @@ final class MediaUploader
     /**
      * Upload a file to the given disk and persist the Media record.
      *
-     * @param  string[]  $tags  Flat list of classification tags
+     * @param  array<array-key, mixed>  $tags  Flat list of classification tags
      * @param  array<string, mixed>  $metadata  Arbitrary key-value pairs stored with the media
      * @param  string|null  $folderOverride  Override the resolved storage folder
      * @param  bool|null  $allowDuplicates  Force duplicate row creation and duplicate-safe filenames
      * @param  bool|null  $deduplicateExisting  Reuse an existing media row when one already exists for the same digest
      * @param  bool  $skipAutoVariations  Skip preset/output conversion generation for this upload
-     * @param  string|null  $uploadedBy  Explicit uploader identifier; defaults to the authenticated actor
-     * @param  string|null  $uploadedByType  Explicit uploader morph type; defaults to the authenticated model type
      * @param  array<string, ConversionDefinition|array<string, mixed>>  $variationDefinitions
      * @return Media The freshly created Media model
      *
@@ -84,7 +83,7 @@ final class MediaUploader
         bool $skipAutoVariations = false,
         array $variationDefinitions = [],
     ): Media {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         if (MediaOwnership::active()) {
             $model = $this->owners->resolve($model);
         }
@@ -189,9 +188,10 @@ final class MediaUploader
     /**
      * Store a validated upload on disk and persist a MediaModelRegistry::newInstance() row.
      *
-     * @param  string[]  $tags
+     * @param  array<array-key, mixed>  $tags
      * @param  array<string, mixed>  $metadata
      * @param  array<string, array<string, mixed>>  $variationDefinitions
+     * @param  array{displayFilename: string, extension: string, mimeType: string, size: int, digest: string, type: MediaType, realPath: string}  $validatedFile
      *
      * @throws MediaUploadException When the file cannot be stored on disk
      */
@@ -396,9 +396,6 @@ final class MediaUploader
      *
      * - Public files dedup across all public files on the same disk.
      * - Private files dedup only within the same user's uploads.
-     *
-     * @param  string|null  $uploadedBy  Uploader identifier used for private deduplication
-     * @param  string|null  $uploadedByType  Uploader morph type used for private deduplication
      */
     protected function uploadFindDeduplicateCandidate(Authenticatable|SystemActor $actor,
         string $digest,
@@ -438,7 +435,7 @@ final class MediaUploader
      */
     public function replace(Authenticatable|SystemActor $actor, Media|string $media, UploadedFile $file): Media
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
         $mediaId = $media instanceof Media ? $media->id : $media;
 

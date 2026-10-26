@@ -6,6 +6,7 @@ namespace Nvl\Media\Services;
 
 use Illuminate\Http\UploadedFile;
 use Nvl\Media\Contracts\MediaContentScanner;
+use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Support\Logging\PackageLogger;
 use Throwable;
@@ -27,6 +28,7 @@ final class MediaIngestionPipeline
      * Validate and scan a source against every slot that will reference it.
      *
      * @param  non-empty-list<MediaSlot>  $slots
+     * @return array{displayFilename: string, extension: string, mimeType: string, size: int, digest: string, type: MediaType, realPath: string}
      */
     public function inspect(
         UploadedFile $file,

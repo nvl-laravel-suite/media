@@ -4,23 +4,33 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Tests\Stubs;
 
+use Stringable;
+
 /**
  * Test double for the role and permission methods supplied by Spatie Permission.
+ *
+ * @property list<string>|null $media_roles
+ * @property list<string>|null $media_permissions
  */
 final class TestPermissionMediaUser extends TestMediaUser
 {
-    /** @var list<string> */
-    private array $mediaRoles = [];
-
-    /** @var list<string> */
-    private array $mediaPermissions = [];
+    /** Read role and permission state from the persisted test authority source.
+     * @return array<string, string|Stringable>
+     */
+    protected function casts(): array
+    {
+        return [...parent::casts(), 'media_roles' => 'array', 'media_permissions' => 'array'];
+    }
 
     /**
      * @param  list<string>  $roles
      */
     public function withMediaRoles(array $roles): self
     {
-        $this->mediaRoles = $roles;
+        $this->setAttribute('media_roles', $roles);
+        if ($this->exists) {
+            $this->saveQuietly();
+        }
 
         return $this;
     }
@@ -30,7 +40,10 @@ final class TestPermissionMediaUser extends TestMediaUser
      */
     public function withMediaPermissions(array $permissions): self
     {
-        $this->mediaPermissions = $permissions;
+        $this->setAttribute('media_permissions', $permissions);
+        if ($this->exists) {
+            $this->saveQuietly();
+        }
 
         return $this;
     }
@@ -47,7 +60,7 @@ final class TestPermissionMediaUser extends TestMediaUser
             $requested = array_merge($requested, is_array($role) ? $role : [$role]);
         }
 
-        return array_intersect($this->mediaRoles, $requested) !== [];
+        return array_intersect(($this->media_roles ?? []), $requested) !== [];
     }
 
     /**
@@ -55,6 +68,6 @@ final class TestPermissionMediaUser extends TestMediaUser
      */
     public function checkPermissionTo(string $permission): bool
     {
-        return in_array($permission, $this->mediaPermissions, true);
+        return in_array($permission, ($this->media_permissions ?? []), true);
     }
 }

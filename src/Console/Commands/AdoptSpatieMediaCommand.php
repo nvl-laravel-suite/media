@@ -65,6 +65,8 @@ final class AdoptSpatieMediaCommand extends Command
 
     /**
      * Render a concise reconciliation table and any adoption blockers.
+     *
+     * @param  array{mode: string, ready: bool, sourceMedia: int, sourceAssociations: int, sourceTranslations: int, sourceVariations: int, matchedMedia: int, matchedAssociations: int, matchedTranslations: int, matchedVariations: int, missingPaths: list<string>, errors: list<string>}  $result
      */
     private function renderTextResult(array $result): void
     {

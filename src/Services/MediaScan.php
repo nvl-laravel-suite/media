@@ -26,7 +26,7 @@ final class MediaScan
     ) {}
 
     /** Apply a scanner's bound attestation to its pending asset.
-     * @param  array{clean: bool, mimeType: string, extension: string, size: int, checksum: string, diagnostics?: array<string, scalar|null>}  $result
+     * @param  array<string, mixed>  $result
      */
     public function finalize(Authenticatable|SystemActor $actor,
         Media|string $media,
@@ -36,12 +36,24 @@ final class MediaScan
             || ! is_bool($result['clean'] ?? null) || ! is_string($result['mimeType'] ?? null)
             || ! is_string($result['extension'] ?? null) || ! is_int($result['size'] ?? null) || $result['size'] < 0
             || ! is_string($result['checksum'] ?? null) || preg_match('/^[a-f0-9]{64}$/D', $result['checksum']) !== 1
-            || (isset($result['diagnostics']) && ! is_array($result['diagnostics']))) {
+            || (array_key_exists('diagnostics', $result) && ! is_array($result['diagnostics']))) {
             throw new MediaUploadException('Scanner attestations must contain valid native metadata.');
         }
-        $result += ['diagnostics' => []];
+        $diagnostics = $result['diagnostics'] ?? [];
+        $diagnosticMap = [];
+        foreach ($diagnostics as $key => $value) {
+            if (! is_string($key) || (! is_scalar($value) && $value !== null)) {
+                throw new MediaUploadException('Scanner diagnostics must be a map of scalar values.');
+            }
+            $diagnosticMap[$key] = $value;
+        }
+        $result = [
+            'clean' => $result['clean'], 'mimeType' => $result['mimeType'],
+            'extension' => $result['extension'], 'size' => $result['size'],
+            'checksum' => $result['checksum'], 'diagnostics' => $diagnosticMap,
+        ];
 
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
         $id = $media instanceof Media ? $media->id : $media;
 
@@ -116,6 +128,9 @@ final class MediaScan
         });
     }
 
+    /**
+     * @param  array{clean: bool, mimeType: string, extension: string, size: int, checksum: string, diagnostics: array<array-key, mixed>}  $result
+     */
     private function finalizeTechnicalMismatch(Authenticatable|SystemActor $actor,
         Media $media,
         array $result,

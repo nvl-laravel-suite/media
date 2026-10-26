@@ -49,10 +49,11 @@ final readonly class OwnerMediaReader
 
     /** Return bounded association items and complete distinct original-byte totals.
      * @param  list<string>  $variations
+     * @return array{items: list<array<string, mixed>>, page: int, perPage: int, total: int, collectionCounts: stdClass, distinctAssetCount: int, originalBytes: int}
      */
     public function read(Authenticatable|SystemActor $actor, Model&HasNvlMedia $owner, ?string $collection = null, int $page = 1, int $perPage = 25, array $variations = [], ?string $locale = null): array
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         if ($page < 1 || $perPage < 1 || ($collection !== null && (trim($collection) === '' || mb_strlen($collection) > 50))) {
             throw new InvalidArgumentException('Owner Media reads require a positive page/page size and a valid collection.');
         }

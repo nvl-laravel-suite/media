@@ -29,6 +29,7 @@ use Nvl\Media\Services\DefaultMediaAuthorization;
 use Nvl\Media\Services\MediaAttachments;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaLibrary;
+use Nvl\Media\Services\MediaReader;
 use Nvl\Media\Services\MediaUploader;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Tests\Stubs\RestrictedMediaModel;
@@ -509,4 +510,34 @@ it('denies an ungranted system upload before staging bytes or creating media', f
     expect(fn () => app(MediaUploader::class)->upload(SystemActor::Background, UploadedFile::fake()->createWithContent('denied.txt', 'denied'), 'public', $owner, new MediaSlot('documents'), 'denied.txt'))
         ->toThrow(AuthorizationException::class);
     expect(Media::query()->count())->toBe(0)->and(Storage::disk('public')->allFiles())->toBe([]);
+});
+
+it('rejects nonnative metadata field shapes before resolving an asset', function (array $attributes): void {
+    app(MediaLibrary::class)->updateMetadata(SystemActor::Background, 'unknown-asset', $attributes);
+})->with([
+    'tag map' => [['tags' => ['label' => 'tag']]],
+    'metadata list' => [['metadata' => ['entry']]],
+    'boolean string' => [['isPublic' => '1']],
+    'null visibility' => [['isPublic' => null]],
+])->throws(InvalidArgumentException::class);
+
+it('preserves omitted Media metadata fields and clears explicit nullable fields', function (): void {
+    $media = createMediaRecord(['tags' => ['retained'], 'metadata' => ['retained' => true]]);
+    $library = app(MediaLibrary::class);
+
+    $retained = $library->updateMetadata(SystemActor::Background, $media, []);
+    expect($retained->tags)->toBe(['retained']);
+    expect($retained->metadata)->toBe(['retained' => true]);
+
+    $cleared = $library->updateMetadata(SystemActor::Background, $retained, ['tags' => null, 'metadata' => null]);
+    expect($cleared->tags)->toBeNull();
+    expect($cleared->metadata)->toBeNull();
+});
+
+it('accepts native MediaType enums in authorized reader filters', function (): void {
+    $media = createMediaRecord(['type' => MediaType::IMAGE, 'is_public' => true]);
+
+    $page = app(MediaReader::class)->paginate(SystemActor::Background, ['type' => MediaType::IMAGE]);
+
+    expect($page->getCollection()->modelKeys())->toBe([$media->id]);
 });

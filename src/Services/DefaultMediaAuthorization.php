@@ -52,7 +52,6 @@ final class DefaultMediaAuthorization implements MediaAuthorization
 
         if (! is_string($media->uploaded_by_type)
             || $media->uploaded_by_type === ''
-            || ! is_string(MediaActors::type($actor))
             || MediaActors::type($actor) === '') {
             return false;
         }

@@ -6,6 +6,7 @@ namespace Nvl\Media\Services;
 
 use finfo;
 use Illuminate\Http\UploadedFile;
+use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Exceptions\FileUnacceptableForCollection;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Slots\MediaSlot;
@@ -25,6 +26,8 @@ final class MediaUploadValidator
 
     /**
      * Validate a materialized upload before any filesystem or database mutation.
+     *
+     * @return array{displayFilename: string, extension: string, mimeType: string, size: int, digest: string, type: MediaType, realPath: string}
      *
      * @throws FileUnacceptableForCollection
      * @throws MediaUploadException
@@ -75,6 +78,8 @@ final class MediaUploadValidator
 
     /**
      * Apply one slot's policy to already normalized technical metadata.
+     *
+     * @param  array{displayFilename: string, extension: string, mimeType: string, size: int, digest: string, type: MediaType, realPath: string}  $validatedFile
      *
      * @throws FileUnacceptableForCollection
      */

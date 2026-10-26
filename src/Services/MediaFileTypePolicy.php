@@ -63,6 +63,8 @@ final class MediaFileTypePolicy
     /**
      * Resolve trusted type metadata from a display filename and detected MIME type.
      *
+     * @return array{displayFilename: string, extension: string, mimeType: string, type: MediaType}
+     *
      * @throws FileUnacceptableForCollection
      */
     public function resolve(string $filename, string $detectedMimeType): array

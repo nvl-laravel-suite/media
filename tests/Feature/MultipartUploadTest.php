@@ -263,3 +263,18 @@ it('can retry local abort persistence after the provider has already accepted th
     $persisted = MediaMultipartUpload::query()->findOrFail($session['uploadId']);
     expect($gateway->abortCount)->toBe(2)->and($persisted->status)->toBe(MediaMultipartStatus::Aborted)->and($persisted->provider_state)->toBeNull();
 });
+
+it('rejects invalid scanner diagnostics before resolving or mutating an asset', function (mixed $diagnostics): void {
+    app(MediaScan::class)->finalize(SystemActor::Background, 'unknown-media', [
+        'clean' => false,
+        'mimeType' => 'text/plain',
+        'extension' => 'txt',
+        'size' => 0,
+        'checksum' => str_repeat('a', 64),
+        'diagnostics' => $diagnostics,
+    ]);
+})->with([
+    'explicit null' => [null],
+    'nested map' => [['nested' => ['secret']]],
+    'numeric keys' => [[123]],
+])->throws(MediaUploadException::class);

@@ -6,6 +6,7 @@ namespace Nvl\Media\Services;
 
 use Illuminate\Http\UploadedFile;
 use Nvl\Media\Contracts\HasNvlMedia;
+use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Exceptions\MediaStorageException;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\MediaRegistration;
@@ -34,6 +35,8 @@ final class MediaReplacementStager
 
     /**
      * Stage one replacement file on the media record's current disk.
+     *
+     * @return array{validatedFile: array{displayFilename: string, extension: string, mimeType: string, size: int, digest: string, type: MediaType, realPath: string}, hash: string, path: string}
      *
      * @throws MediaUploadException
      * @throws MediaStorageException

@@ -15,13 +15,13 @@ final readonly class DenyMediaCatalogAccess implements MediaCatalogAccess
 {
     public function assertCanGrant(Authenticatable|SystemActor $actor, string $sourceId, int $revision): void
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         throw new OwnershipViolation('A host catalog grant policy is required.');
     }
 
     public function assertCanRevoke(Authenticatable|SystemActor $actor, string $grantId): void
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         throw new OwnershipViolation('A host catalog revocation policy is required.');
     }
 }

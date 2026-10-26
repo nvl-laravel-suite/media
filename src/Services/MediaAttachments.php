@@ -95,7 +95,7 @@ final class MediaAttachments
         bool $requirePublic = false,
         ?MediaSlot $slot = null,
     ): MediaAssociation {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $model = $this->owners->resolve($model);
         MediaOwnership::assertAsset($media);
         $this->access->authorize($actor, MediaAbility::Associate, $media, $model);
@@ -108,6 +108,10 @@ final class MediaAttachments
 
         return $this->mutationLock->executeForOwnerCollection($model, $collection, function () use ($actor, $media, $model, $collection, $locale, $order, $metadata, $dispatchVariations, $requirePublic, $slot): MediaAssociation {
             return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor, $media, $model, $collection, $locale, $order, $metadata, $dispatchVariations, $requirePublic, $slot): MediaAssociation {
+                $ownerId = $model->getKey();
+                if (! is_int($ownerId) && ! is_string($ownerId)) {
+                    throw new InvalidArgumentException('Media owners require a scalar key.');
+                }
                 $locked = MediaModelRegistry::query()->lockForUpdate()->findOrFail($media->id);
                 if ($slot !== null) {
                     $this->stagingPolicy->assertFitsSlot($locked, $slot);
@@ -115,7 +119,7 @@ final class MediaAttachments
                         $associations = $locked->associations()->lockForUpdate()->get();
                         foreach ($associations as $association) {
                             if ($association->associable_type !== $model->getMorphClass()
-                                || (string) $association->associable_id !== (string) $model->getKey()
+                                || (string) $association->associable_id !== (string) $ownerId
                                 || $association->collection !== $collection) {
                                 throw new FileUnacceptableForCollection('Exclusive Media cannot have a foreign owner or collection association.');
                             }
@@ -125,7 +129,7 @@ final class MediaAttachments
                 $association = $this->attachLocked($actor, $locked, $model, $collection, $locale, $order, $metadata, $dispatchVariations, $requirePublic);
                 if ($slot?->slotSizeLimit !== null) {
                     $rows = MediaAssociation::query()->where('associable_type', $model->getMorphClass())
-                        ->where('associable_id', (string) $model->getKey())->where('collection', $collection)
+                        ->where('associable_id', (string) $ownerId)->where('collection', $collection)
                         ->whereKeyNot($association->id)->orderBy('created_at')->orderBy('id')->lockForUpdate()->get();
                     $overflow = max(0, $rows->count() + 1 - $slot->slotSizeLimit);
                     foreach ($rows->take($overflow) as $old) {
@@ -141,6 +145,9 @@ final class MediaAttachments
         });
     }
 
+    /**
+     * @param  array<string, mixed>  $metadata
+     */
     private function attachLocked(Authenticatable|SystemActor $actor,
         Media $media,
         Model $model,
@@ -151,8 +158,8 @@ final class MediaAttachments
         bool $dispatchVariations = true,
         bool $requirePublic = false,
     ): MediaAssociation {
-        MediaActors::assert($actor);
-        $this->access->authorize($actor, MediaAbility::Associate, MediaModelRegistry::query()->withTrashed()->findOrFail($media instanceof Media ? $media->id : $media), $model);
+        $actor = MediaActors::assert($actor);
+        $this->access->authorize($actor, MediaAbility::Associate, MediaModelRegistry::query()->withTrashed()->findOrFail($media->id), $model);
         $this->tenantBoundary->assertRecord($media, 'media.assets');
         $model = $this->owners->resolve($model);
         $morph_type = $model->getMorphClass();
@@ -235,7 +242,7 @@ final class MediaAttachments
         Model $model,
         ?string $collection = null,
     ): int {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->access->authorize($actor, MediaAbility::Associate, MediaModelRegistry::query()->withTrashed()->findOrFail($media instanceof Media ? $media->id : $media), $model);
         $model = $this->owners->resolve($model);
         $mediaId = $media instanceof Media ? $media->id : $media;
@@ -294,7 +301,7 @@ final class MediaAttachments
         array $metadata = [],
         bool $dispatchVariations = true,
     ): MediaAssociation {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->access->authorize($actor, MediaAbility::Associate, MediaModelRegistry::query()->withTrashed()->findOrFail($media instanceof Media ? $media->id : $media), $model);
         $resolvedMedia = is_string($media)
             ? MediaModelRegistry::query()->findOrFail($media)
@@ -317,7 +324,7 @@ final class MediaAttachments
     /** Remove matching owner usages and authorize deletion only when native lifecycle selects an orphan. */
     public function remove(Authenticatable|SystemActor $actor, Model&HasNvlMedia $owner, string $mediaId, ?string $collection = null): void
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         if (! Str::isUuid($mediaId)) {
             throw new InvalidArgumentException('Owner Media removal requires a valid Media UUID.');
         }
@@ -360,7 +367,7 @@ final class MediaAttachments
      */
     public function sync(Authenticatable|SystemActor $actor, Model&HasNvlMedia $model, array|Collection $media, string $collection = 'default'): void
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $items = $media instanceof Collection ? $media : new Collection($media);
         $identifiers = $items->map(static fn (Media $asset): string => $asset->id)->all();
         $this->mutationLock->executeForOwnerCollection($model, $collection, function () use ($actor, $model, $items, $identifiers, $collection): void {
@@ -382,7 +389,7 @@ final class MediaAttachments
      */
     public function clearCollection(Authenticatable|SystemActor $actor, Model&HasNvlMedia $model, string $collection = 'default'): void
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->lifecycleserviceRemoveManyFromModel($actor, $model, $this->ownerAssets($actor, $model, $collection), $collection);
     }
 
@@ -396,7 +403,7 @@ final class MediaAttachments
         string $collection = 'default',
         array|Collection $except = [],
     ): void {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         if ($except instanceof Collection) {
             $exceptIds = $except->pluck('id')->all();
         } else {
@@ -414,7 +421,7 @@ final class MediaAttachments
      */
     public function deleteAll(Authenticatable|SystemActor $actor, Model&HasNvlMedia $model): void
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->lifecycleserviceRemoveManyFromModel($actor, $model, $this->ownerAssets($actor, $model));
     }
 
@@ -425,7 +432,7 @@ final class MediaAttachments
      */
     public function removeFromModel(Authenticatable|SystemActor $actor, Model&HasNvlMedia $model, string|Media $media, ?string $collection = null, ?Closure $beforeOrphanDelete = null): void
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->access->authorize($actor, MediaAbility::Associate, MediaModelRegistry::query()->withTrashed()->findOrFail($media instanceof Media ? $media->id : $media), $model);
         $mediaId = $media instanceof Media ? $media->id : $media;
 
@@ -523,7 +530,7 @@ final class MediaAttachments
         Model&HasNvlMedia $owner,
         string $slot,
     ): ?Media {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $slot = $this->resolver->slot($owner, $slot)->name;
         $association = $this->resolver->currentAssociation($owner, $slot);
         $media = $association instanceof MediaAssociation
@@ -549,7 +556,7 @@ final class MediaAttachments
         string $mediaId,
         ?string $idempotencyKey = null,
     ): Media {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $slotDefinition = $this->resolver->slot($owner, $slot);
         $slot = $slotDefinition->name;
         $mediaId = $this->ownerslotworkflowMediaId($actor, $mediaId, 'replacements');
@@ -624,7 +631,7 @@ final class MediaAttachments
                 $this->idempotency->complete(
                     $claim,
                     $result->id,
-                    $result->toArray(),
+                    $this->slotSnapshot($result),
                 );
             }
 
@@ -645,7 +652,7 @@ final class MediaAttachments
         string $slot,
         ?string $idempotencyKey = null,
     ): void {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $slotDefinition = $this->resolver->slot($owner, $slot);
         $slot = $slotDefinition->name;
         $durableClaim = null;
@@ -1325,7 +1332,7 @@ final class MediaAttachments
         string $sourceMediaId,
         ?string $idempotencyKey = null,
     ): Media {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $slotDefinition = $this->resolver->slot($owner, $slot);
         $slot = $slotDefinition->name;
         $sourceMediaId = $this->ownerslotcopyworkflowMediaId($actor, $sourceMediaId);
@@ -1359,7 +1366,7 @@ final class MediaAttachments
                     $this->idempotency->complete(
                         $claim,
                         $recovered->id,
-                        $recovered->toArray(),
+                        $this->slotSnapshot($recovered),
                     );
 
                     return $recovered;
@@ -1440,7 +1447,7 @@ final class MediaAttachments
                 $this->idempotency->complete(
                     $claim,
                     $result->id,
-                    $result->toArray(),
+                    $this->slotSnapshot($result),
                 );
             }
 
@@ -1572,14 +1579,14 @@ final class MediaAttachments
             $this->idempotency->checkpoint(
                 $claim,
                 $result->id,
-                $result->toArray(),
+                $this->slotSnapshot($result),
             );
 
             if ($completeInsideMutation) {
                 $this->idempotency->complete(
                     $claim,
                     $result->id,
-                    $result->toArray(),
+                    $this->slotSnapshot($result),
                 );
             }
         }
@@ -1729,7 +1736,7 @@ final class MediaAttachments
             $this->idempotency->complete(
                 $claim,
                 $result->id,
-                $result->toArray(),
+                $this->slotSnapshot($result),
             );
 
             return;
@@ -1740,7 +1747,7 @@ final class MediaAttachments
                 $this->idempotency->complete(
                     $claim,
                     $result->id,
-                    $result->toArray(),
+                    $this->slotSnapshot($result),
                 );
             } catch (Throwable $claimFailure) {
                 report($claimFailure);
@@ -2002,34 +2009,6 @@ final class MediaAttachments
     }
 
     /**
-     * Resolve an attributable actor identifier for the copied Media row.
-     */
-    private function ownerslotcopyworkflowActorId(Authenticatable|SystemActor $actor): ?string
-    {
-        if (! is_int(MediaActors::id($actor)) && ! is_string(MediaActors::id($actor))) {
-            return null;
-        }
-
-        $id = trim((string) MediaActors::id($actor));
-
-        return $id !== '' ? $id : null;
-    }
-
-    /**
-     * Resolve an attributable actor type for the copied Media row.
-     */
-    private function ownerslotcopyworkflowActorType(Authenticatable|SystemActor $actor): ?string
-    {
-        if (! is_string(MediaActors::type($actor))) {
-            return null;
-        }
-
-        $type = trim(MediaActors::type($actor));
-
-        return $type !== '' ? $type : null;
-    }
-
-    /**
      * Determine whether ledger completion participates in the Media transaction.
      */
     private function ownerslotcopyworkflowLedgerSharesMediaConnection(Authenticatable|SystemActor $actor): bool
@@ -2058,7 +2037,11 @@ final class MediaAttachments
     private function ownerAssets(Authenticatable|SystemActor $actor, Model $owner, ?string $collection = null): Collection
     {
         $owner = $this->owners->resolve($owner);
-        $associations = MediaAssociation::query()->where('associable_type', $owner->getMorphClass())->where('associable_id', (string) $owner->getKey());
+        $ownerId = $owner->getKey();
+        if (! is_int($ownerId) && ! is_string($ownerId)) {
+            throw new InvalidArgumentException('Media owners require a scalar key.');
+        }
+        $associations = MediaAssociation::query()->where('associable_type', $owner->getMorphClass())->where('associable_id', (string) $ownerId);
         if ($collection !== null) {
             $associations->where('collection', $collection);
         }
@@ -2087,14 +2070,48 @@ final class MediaAttachments
         $media->syncOriginal();
         foreach (['translations' => MediaTranslation::class, 'image_variations' => MediaImageVariation::class] as $key => $class) {
             if (isset($relations[$key])) {
-                $media->setRelation($key === 'image_variations' ? 'imageVariations' : $key,
-                    (new $class)->newCollection(array_map(static fn (array $attributes): Model => (new $class)->forceFill($attributes), $relations[$key])));
+                $rows = $relations[$key];
+                if (! is_array($rows) || ! array_is_list($rows)) {
+                    throw new InvalidArgumentException('Media slot replay relations must be lists.');
+                }
+                $models = [];
+                foreach ($rows as $attributes) {
+                    $models[] = (new $class)->forceFill($this->slotSnapshotAttributes($attributes));
+                }
+                $media->setRelation($key === 'image_variations' ? 'imageVariations' : $key, (new $class)->newCollection($models));
             }
         }
         if (isset($relations['pivot'])) {
-            $media->setRelation('pivot', (new MediaAssociation)->forceFill($relations['pivot']));
+            $media->setRelation('pivot', (new MediaAssociation)->forceFill($this->slotSnapshotAttributes($relations['pivot'])));
         }
 
         return $media;
+    }
+
+    /** Capture the native durable replay result using named model attributes.
+     * @return array<string, mixed>
+     */
+    private function slotSnapshot(Media $media): array
+    {
+        return $this->slotSnapshotAttributes($media->toArray());
+    }
+
+    /** Validate persisted replay maps before hydrating model attributes.
+     * @return array<string, mixed>
+     */
+    private function slotSnapshotAttributes(mixed $attributes): array
+    {
+        if (! is_array($attributes)) {
+            throw new InvalidArgumentException('Media slot replay attributes must be a map.');
+        }
+        $normalized = [];
+        foreach ($attributes as $key => $value) {
+            if (! is_string($key)) {
+                throw new InvalidArgumentException('Media slot replay attributes require string keys.');
+            }
+            $normalized[$key] = $value;
+        }
+
+        return $normalized;
     }
 }

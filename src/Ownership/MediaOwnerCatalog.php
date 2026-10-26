@@ -43,7 +43,7 @@ use Nvl\Support\Ownership\Services\OwnershipScope;
  */
 final class MediaOwnerCatalog implements MediaCatalogImport
 {
-    /** @var array<string, array{file: array, source: array, partition: string, persisted: bool}> */
+    /** @var array<string, array{file: array{operationId: string, disk: string, storagePath: string, digest: string, size: int, ownerScopeKey: string}, source: array{grantId: string, grantRevision: int, sourceId: string, sourceRevision: int, sourceDigest: string, disk: string, storagePath: string, filename: string, extension: string, mimeType: string, size: int, metadata: array<string, mixed>, tags: list<string>, translations: array<string, array<string, string|null>>}, partition: string, persisted: bool}> */
     private array $staged = [];
 
     public function __construct(
@@ -65,7 +65,7 @@ final class MediaOwnerCatalog implements MediaCatalogImport
     /** Copy one exact authorized catalog revision with staging cleanup on failure. */
     public function import(Authenticatable|SystemActor $actor, string $grantId, int $expectedGrantRevision, int $expectedSourceRevision, string $idempotencyKey): Media
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         if (! Str::isUuid($grantId) || ! Str::isUuid($idempotencyKey) || $expectedGrantRevision < 1 || $expectedSourceRevision < 1) {
             throw new \InvalidArgumentException('Media catalog imports require UUIDs and positive revisions.');
         }
@@ -85,7 +85,7 @@ final class MediaOwnerCatalog implements MediaCatalogImport
     /** Host policy authorizes issuance for the current admitted recipient, never an ambient tenant ID. */
     public function grant(Authenticatable|SystemActor $actor, string $sourceId, int $sourceRevision): MediaOwnerGrant
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->admit();
         $this->access->assertCanGrant($actor, $sourceId, $sourceRevision);
 
@@ -105,7 +105,7 @@ final class MediaOwnerCatalog implements MediaCatalogImport
 
     public function revoke(Authenticatable|SystemActor $actor, string $grantId, int $expectedRevision): MediaOwnerGrant
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->admit();
         $this->access->assertCanRevoke($actor, $grantId);
 
@@ -123,7 +123,7 @@ final class MediaOwnerCatalog implements MediaCatalogImport
     /** Project only one current granted central source, with no general scope-free reader. */
     public function inspect(Authenticatable|SystemActor $actor, string $grantId): array
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->admit();
 
         return $this->snapshot($grantId, false);
@@ -131,7 +131,7 @@ final class MediaOwnerCatalog implements MediaCatalogImport
 
     public function stage(Authenticatable|SystemActor $actor, array $source): array
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->admit();
         if ($this->inspect($actor, $source['grantId']) != $source) {
             throw new OwnershipViolation('The catalog snapshot is stale or forged.');
@@ -157,7 +157,7 @@ final class MediaOwnerCatalog implements MediaCatalogImport
     /** Join the caller's actual source transaction and recheck revocation/revision under locks. */
     public function persist(Authenticatable|SystemActor $actor, array $source, array $file, string $idempotencyKey): Media
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->admit();
         $pending = $this->staged[$file['operationId']] ?? null;
         if ($this->connection()->transactionLevel() < 1 || ! Str::isUuid($idempotencyKey)
@@ -208,7 +208,7 @@ final class MediaOwnerCatalog implements MediaCatalogImport
 
     public function discard(Authenticatable|SystemActor $actor, array $file): void
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $pending = $this->staged[$file['operationId']] ?? null;
         if ($pending === null || $pending['persisted'] || $pending['file'] !== $file || $pending['partition'] !== $this->boundary->key('media.assets', 'catalog-copy')) {
             return;
@@ -217,6 +217,9 @@ final class MediaOwnerCatalog implements MediaCatalogImport
         unset($this->staged[$file['operationId']]);
     }
 
+    /**
+     * @return array{grantId: string, grantRevision: int, sourceId: string, sourceRevision: int, sourceDigest: string, disk: string, storagePath: string, filename: string, extension: string, mimeType: string, size: int, metadata: array<string, mixed>, tags: list<string>, translations: array<string, array<string, string|null>>}
+     */
     private function snapshot(string $grantId, bool $lock): array
     {
         $query = MediaOwnerGrant::query()->whereKey($grantId);
@@ -228,15 +231,15 @@ final class MediaOwnerCatalog implements MediaCatalogImport
             throw new OwnershipViolation('The catalog grant was revoked.');
         }
         $source = $this->source($grant->media_id, $lock);
-        if ($source['revision'] !== $grant->source_revision || ! is_string($source['storage_path'])) {
+        if ($source->revision !== $grant->source_revision || ! is_string($source->storage_path)) {
             throw new OwnershipViolation('The granted central revision is unavailable.');
         }
         $translations = [];
-        foreach (MediaTranslation::query()->withoutGlobalScope(OwnershipScope::class)->useWritePdo()->where('media_id', $source['id'])->where('owner_scope_key', 'central')->orderBy('locale')->get() as $row) {
+        foreach (MediaTranslation::query()->withoutGlobalScope(OwnershipScope::class)->useWritePdo()->where('media_id', $source->id)->where('owner_scope_key', 'central')->orderBy('locale')->get() as $row) {
             $translations[$row->locale] = ['title' => $row->title, 'alt' => $row->alt, 'caption' => $row->caption, 'description' => $row->description];
         }
 
-        return ['grantId' => $grant->id, 'grantRevision' => $grant->revision, 'sourceId' => $source['id'], 'sourceRevision' => $source['revision'], 'sourceDigest' => $source['digest'], 'disk' => $source['disk'], 'storagePath' => $source['storage_path'], 'filename' => $source['filename'], 'extension' => $source['extension'], 'mimeType' => $source['mime_type'], 'size' => $source['size'], 'metadata' => $this->projection->metadata($source['metadata']), 'tags' => $this->projection->tags($source['tags']), 'translations' => $translations];
+        return ['grantId' => $grant->id, 'grantRevision' => $grant->revision, 'sourceId' => $source->id, 'sourceRevision' => $source->revision, 'sourceDigest' => $source->digest, 'disk' => $source->disk, 'storagePath' => $source->storage_path, 'filename' => $source->filename, 'extension' => $source->extension, 'mimeType' => $source->mime_type, 'size' => $source->size, 'metadata' => $this->projection->metadata($source->metadata), 'tags' => $this->projection->tags($source->tags), 'translations' => $translations];
     }
 
     private function source(string $id, bool $lock): Media

@@ -10,6 +10,7 @@ use DateTimeImmutable;
 use Illuminate\Filesystem\AwsS3V3Adapter;
 use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Contracts\RecoverableMultipartUploadGateway;
+use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\MediaMultipartUpload;
 use Nvl\Support\Logging\PackageLogger;
@@ -166,6 +167,7 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
     }
 
     /**
+     * @param  array{uploadId: string, disk: string, objectKey: string, filename: string, mimeType: string, size: int, checksum: string, visibility: MediaVisibility, uploaderId: int|string|null, uploaderType: string|null, expiresAt: DateTimeImmutable, minimumPartSize: int, maximumParts: int}  $session
      * @return array{S3Client, string, string}
      */
     private function provider(array $session): array
@@ -198,6 +200,7 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
     }
 
     /**
+     * @param  array{uploadId: string, disk: string, objectKey: string, filename: string, mimeType: string, size: int, checksum: string, visibility: MediaVisibility, uploaderId: int|string|null, uploaderType: string|null, expiresAt: DateTimeImmutable, minimumPartSize: int, maximumParts: int}  $session
      * @return array{S3Client, string, string, string}
      */
     private function activeProvider(array $session): array
@@ -220,6 +223,10 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
         return [$client, $bucket, $key, $providerUploadId];
     }
 
+    /**
+     * @param  array{uploadId: string, disk: string, objectKey: string, filename: string, mimeType: string, size: int, checksum: string, visibility: MediaVisibility, uploaderId: int|string|null, uploaderType: string|null, expiresAt: DateTimeImmutable, minimumPartSize: int, maximumParts: int}  $session
+     * @return array{path: string, checksum: string, size: int, mimeType: string, objectIdentity: string|null}
+     */
     private function inspectObject(
         array $session,
         S3Client $client,
@@ -251,6 +258,9 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
         return ['path' => $session['objectKey'], 'checksum' => mb_strtolower($checksum), 'size' => (int) $size, 'mimeType' => $mimeType, 'objectIdentity' => $identity ?? $this->identity($head->get('ETag'), $head->get('VersionId'))];
     }
 
+    /**
+     * @param  array{uploadId: string, disk: string, objectKey: string, filename: string, mimeType: string, size: int, checksum: string, visibility: MediaVisibility, uploaderId: int|string|null, uploaderType: string|null, expiresAt: DateTimeImmutable, minimumPartSize: int, maximumParts: int}  $session
+     */
     private function fullObjectChecksum(
         array $session,
         mixed $providerChecksum,
@@ -273,6 +283,7 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
      * Resolve and validate the persisted provider upload identifier.
      *
      * @param  array<string, mixed>|null  $providerState
+     * @param  array{uploadId: string, disk: string, objectKey: string, filename: string, mimeType: string, size: int, checksum: string, visibility: MediaVisibility, uploaderId: int|string|null, uploaderType: string|null, expiresAt: DateTimeImmutable, minimumPartSize: int, maximumParts: int}  $session
      */
     private function providerUploadId(
         array $session,

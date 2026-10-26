@@ -100,6 +100,9 @@ final readonly class MediaDoctor
     }
 
     /** Report optional S3 readiness from declared feature selection without resolving an adapter. */
+    /**
+     * @return array{key: string, severity: string, passed: bool, message: string}
+     */
     private function s3DependencyCheck(): array
     {
         $disks = config('nvl-media.allowed_disks', []);
@@ -118,6 +121,9 @@ final readonly class MediaDoctor
     }
 
     /** Validate the opt-in bridge and report only explicitly selected permission names. */
+    /**
+     * @return array{key: string, severity: string, passed: bool, message: string}
+     */
     private function permissionAdoptionCheck(): array
     {
         $enabled = config('nvl-media.authorization.spatie_permission.enabled', false);
@@ -143,6 +149,8 @@ final readonly class MediaDoctor
 
     /**
      * Warn when automatic vendor loading overlaps a published migration copy.
+     *
+     * @return array{key: string, severity: string, passed: bool, message: string}
      */
     private function migrationOwnershipCheck(): array
     {
@@ -241,6 +249,8 @@ final readonly class MediaDoctor
 
     /**
      * Validate the bounded set of owner type and slot pairs observed by the ledger.
+     *
+     * @return array{key: string, severity: string, passed: bool, message: string}
      */
     private function ownerSlotRegistrationCheck(): array
     {
@@ -455,6 +465,8 @@ final readonly class MediaDoctor
 
     /**
      * Verify representative live media paths against the configured root folder.
+     *
+     * @return array{key: string, severity: string, passed: bool, message: string}
      */
     private function representativeStoragePathCheck(bool $production): array
     {

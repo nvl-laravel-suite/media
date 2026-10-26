@@ -41,7 +41,7 @@ final class MediaReader
     /**
      * List media with filters, pagination, and optional user scoping.
      *
-     * @param  array{search?: string, type?: string, disk?: string, isPublic?: bool, collection?: string, tag?: string, folder?: string, mimeType?: string, extension?: string, locale?: string, associableType?: string, perPage?: int, page?: int, sortBy?: string, sortDirection?: string}  $filters
+     * @param  array{search?: string, type?: MediaType|string|null, disk?: string, isPublic?: bool, collection?: string, tag?: string, folder?: string, mimeType?: string, extension?: string, locale?: string, associableType?: string, perPage?: int, page?: int, sortBy?: string, sortDirection?: string}  $filters
      * @return LengthAwarePaginator<int, Media>
      */
     public function paginate(
@@ -49,7 +49,7 @@ final class MediaReader
         array $filters = [],
         bool $includeVariations = false,
     ): LengthAwarePaginator {
-        MediaActors::assert($user);
+        $user = MediaActors::assert($user);
         $this->access->authorize($user, MediaAbility::List);
         $allowed = ['search', 'type', 'disk', 'isPublic', 'collection', 'tag', 'folder', 'mimeType', 'extension', 'locale', 'associableType', 'perPage', 'page', 'sortBy', 'sortDirection'];
         if (array_diff(array_keys($filters), $allowed) !== []) {
@@ -264,13 +264,13 @@ final class MediaReader
      */
     private function applyVisibilityScope(Builder $query, Authenticatable|SystemActor $user): void
     {
-        MediaActors::assert($user);
+        $user = MediaActors::assert($user);
         $canManage = $this->access->allows($user, MediaAbility::ListAll);
 
         if (! $canManage) {
             $actor = $user;
             $ownerId = MediaActors::id($actor) !== null ? (string) MediaActors::id($actor) : '';
-            $ownerType = MediaActors::type($actor) ?? '';
+            $ownerType = MediaActors::type($actor);
 
             $query->where(function (Builder $builder) use ($ownerId, $ownerType): void {
                 $builder->where('is_public', true)
@@ -330,15 +330,19 @@ final class MediaReader
     /**
      * Return available authorized assets for exact owner collections.
      *
-     * @param  list<string>  $slots
+     * @param  array<array-key, mixed>  $slots
      * @return array<string, list<Media>>
      */
     public function slots(Authenticatable|SystemActor $actor, Model $owner, array $slots, int $limit = 100): array
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $owner = $this->owners->resolve($owner);
         if ($limit < 1 || $limit > 1000 || count($slots) > 100 || ! array_is_list($slots)) {
             throw new \InvalidArgumentException('Media owner reads require bounded slots and limits.');
+        }
+        $ownerId = $owner->getKey();
+        if (! is_int($ownerId) && ! is_string($ownerId)) {
+            throw new \InvalidArgumentException('Media owners require a scalar key.');
         }
         $result = [];
         foreach ($slots as $slot) {
@@ -346,7 +350,7 @@ final class MediaReader
                 throw new \InvalidArgumentException('Media slots require bounded nonempty names.');
             }
             $rows = MediaAssociation::query()->where('associable_type', $owner->getMorphClass())
-                ->where('associable_id', (string) $owner->getKey())->where('collection', $slot)
+                ->where('associable_id', (string) $ownerId)->where('collection', $slot)
                 ->orderBy('order')->orderBy('id')->limit($limit)->get();
             $result[$slot] = [];
             foreach ($rows as $row) {

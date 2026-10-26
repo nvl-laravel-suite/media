@@ -57,7 +57,7 @@ final class MediaLibrary
         if (trim($filename) === '' || strlen($filename) > 255 || str_contains($filename, '/') || str_contains($filename, chr(92))) {
             throw new \InvalidArgumentException('Media filenames must be bounded display names without path separators.');
         }
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
         $mediaId = $media instanceof Media ? $media->id : $media;
         $freshMedia = $this->mutationLock->execute($mediaId, function () use ($mediaId, $filename): Media {
@@ -84,29 +84,13 @@ final class MediaLibrary
      * Update metadata and translation fields for a media record.
      */
     /** Mutate only supplied display and localization attributes; omission preserves a value.
-     * @param  array{isPublic?: bool, tags?: list<string>|null, metadata?: array<string, mixed>|null, translations?: array<string, array{title?: string|null, alt?: string|null, caption?: string|null, description?: string|null}>, translationMode?: TranslationSyncMode}  $data
+     * @param  array{isPublic?: bool, tags?: list<string>|null, metadata?: array<string, mixed>|null, translations?: array<string, array{title?: string|null, alt?: string|null, caption?: string|null, description?: string|null}>|null, translationMode?: TranslationSyncMode}  $data
      */
     public function updateMetadata(Authenticatable|SystemActor $actor, Media|string $media, array $data): Media
     {
-        $unknown = array_diff(array_keys($data), ['tags', 'metadata', 'isPublic', 'translations', 'translationMode']);
-        if ($unknown !== []) {
-            throw new \InvalidArgumentException('Unknown or protected Media metadata fields: '.implode(', ', $unknown));
-        }
-        Validator::make($data, [
-            'tags' => ['nullable', 'array'], 'tags.*' => ['string', 'max:50'],
-            'metadata' => ['nullable', 'array'], 'isPublic' => ['sometimes', 'boolean'],
-            'translations' => ['nullable', 'array', new SupportedLocaleMapRule],
-            'translations.*' => ['array:title,alt,caption,description'],
-            'translations.*.title' => ['nullable', 'string', 'max:255'],
-            'translations.*.alt' => ['nullable', 'string', 'max:255'],
-            'translations.*.caption' => ['nullable', 'string'],
-            'translations.*.description' => ['nullable', 'string'],
-        ])->validate();
-        if (array_key_exists('translationMode', $data) && ! $data['translationMode'] instanceof TranslationSyncMode) {
-            throw new \InvalidArgumentException('Media translationMode must be a TranslationSyncMode.');
-        }
+        $this->validateMetadata($data);
 
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
         $mediaId = $media instanceof Media ? $media->id : $media;
         $freshMedia = $this->mutationLock->execute($mediaId, function () use ($mediaId, $data): Media {
@@ -185,7 +169,7 @@ final class MediaLibrary
         MediaVisibility $visibility,
         ?int $expectedRevision = null,
     ): Media {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
         $mediaId = $media instanceof Media ? $media->id : $media;
         $this->diskGuard->assertAllowed($disk);
@@ -359,7 +343,7 @@ final class MediaLibrary
      */
     public function delete(Authenticatable|SystemActor $actor, Media|string $media, bool $force = false, ?Model $owner = null): bool
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->access->authorize($actor, MediaAbility::Delete, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media), $owner);
         $mediaId = $media instanceof Media ? $media->id : $media;
 
@@ -445,7 +429,7 @@ final class MediaLibrary
      */
     public function bulkDelete(Authenticatable|SystemActor $actor, array $ids): int
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         foreach ($this->queries->findMany($actor, $ids) as $item) {
             $this->access->authorize($actor, MediaAbility::Delete, $item);
         }
@@ -478,7 +462,7 @@ final class MediaLibrary
      */
     public function move(Authenticatable|SystemActor $actor, array $ids, string $folder): int
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         foreach ($this->queries->findMany($actor, $ids) as $item) {
             $this->access->authorize($actor, MediaAbility::Mutate, $item);
         }
@@ -639,7 +623,7 @@ final class MediaLibrary
      */
     public function bulkTag(Authenticatable|SystemActor $actor, array $ids, array $tags): int
     {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         foreach ($this->queries->findMany($actor, $ids) as $item) {
             $this->access->authorize($actor, MediaAbility::Mutate, $item);
         }
@@ -681,7 +665,7 @@ final class MediaLibrary
         array $add = [],
         array $remove = [],
     ): Media {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
         $mediaId = $media instanceof Media ? $media->id : $media;
         $add = $this->tagNormalize($actor, $add);
@@ -700,6 +684,44 @@ final class MediaLibrary
                 });
             },
         );
+    }
+
+    /** Validate native display mutations before actor resolution or persistence.
+     * @param  array<string, mixed>  $data
+     */
+    private function validateMetadata(array $data): void
+    {
+        $unknown = array_diff(array_keys($data), ['tags', 'metadata', 'isPublic', 'translations', 'translationMode']);
+        if ($unknown !== []) {
+            throw new \InvalidArgumentException('Unknown or protected Media metadata fields: '.implode(', ', $unknown));
+        }
+        if (array_key_exists('isPublic', $data) && ! is_bool($data['isPublic'])) {
+            throw new \InvalidArgumentException('Media isPublic must be a native boolean.');
+        }
+        if (isset($data['tags']) && (! is_array($data['tags']) || ! array_is_list($data['tags']))) {
+            throw new \InvalidArgumentException('Media tags must be a native list.');
+        }
+        Validator::make($data, [
+            'tags' => ['nullable', 'array', 'list'], 'tags.*' => ['string', 'max:50'],
+            'metadata' => ['nullable', 'array'], 'isPublic' => ['sometimes', 'boolean'],
+            'translations' => ['nullable', 'array', new SupportedLocaleMapRule],
+            'translations.*' => ['array:title,alt,caption,description'],
+            'translations.*.title' => ['nullable', 'string', 'max:255'],
+            'translations.*.alt' => ['nullable', 'string', 'max:255'],
+            'translations.*.caption' => ['nullable', 'string'],
+            'translations.*.description' => ['nullable', 'string'],
+        ])->validate();
+        if (array_key_exists('translationMode', $data) && ! $data['translationMode'] instanceof TranslationSyncMode) {
+            throw new \InvalidArgumentException('Media translationMode must be a TranslationSyncMode.');
+        }
+
+        if (isset($data['metadata']) && is_array($data['metadata'])) {
+            foreach (array_keys($data['metadata']) as $key) {
+                if (! is_string($key)) {
+                    throw new \InvalidArgumentException('Media metadata must use string keys.');
+                }
+            }
+        }
     }
 
     /**

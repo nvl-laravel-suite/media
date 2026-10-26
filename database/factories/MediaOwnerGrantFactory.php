@@ -13,7 +13,7 @@ final class MediaOwnerGrantFactory extends Factory
 {
     protected $model = MediaOwnerGrant::class;
 
-    /** @return array<string, mixed> */
+    /** @return array{source_revision: int, revision: int, enabled: bool} */
     public function definition(): array
     {
         return ['source_revision' => 1, 'revision' => 1, 'enabled' => true];

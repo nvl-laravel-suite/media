@@ -36,6 +36,8 @@ final class MediaImport
     /**
      * Plan or apply a non-destructive import from staged legacy tables.
      *
+     * @return array{mode: string, ready: bool, sourceMedia: int, sourceAssociations: int, sourceTranslations: int, sourceVariations: int, matchedMedia: int, matchedAssociations: int, matchedTranslations: int, matchedVariations: int, missingPaths: list<string>, errors: list<string>}
+     *
      * @throws InvalidArgumentException
      * @throws LogicException
      */
@@ -47,7 +49,7 @@ final class MediaImport
         string $defaultLocale = 'en',
         bool $apply = false,
     ): array {
-        MediaActors::assert($actor);
+        $actor = MediaActors::assert($actor);
         $this->access->authorize($actor, MediaAbility::ManageStaging);
         $this->adoptAssertTableName($actor, $sourceTable);
         $this->adoptAssertOptionalTableName($actor, $translationTable);
