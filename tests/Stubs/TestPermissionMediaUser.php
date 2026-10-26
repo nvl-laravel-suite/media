@@ -43,7 +43,6 @@ final class TestPermissionMediaUser extends TestMediaUser
     public function hasAnyRole(array|string ...$roles): bool
     {
         $requested = [];
-
         foreach ($roles as $role) {
             $requested = array_merge($requested, is_array($role) ? $role : [$role]);
         }

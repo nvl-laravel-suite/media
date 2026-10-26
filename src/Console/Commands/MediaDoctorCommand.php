@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Nvl\Media\Console\Commands;
 
 use Illuminate\Console\Command;
-use Nvl\Media\Data\MediaDoctorCheckData;
 use Nvl\Media\Services\MediaDoctor;
 
 /**
@@ -27,29 +26,10 @@ final class MediaDoctorCommand extends Command
     {
         $checks = $doctor->inspect((bool) $this->option('production'));
         $format = $this->option('format');
-
         if ($format === 'json') {
-            $this->line((string) json_encode([
-                'package' => 'nvl/media',
-                'healthy' => ! $this->hasFailures($checks),
-                'checks' => array_map(
-                    static fn (MediaDoctorCheckData $check): array => $check->toArray(),
-                    $checks,
-                ),
-            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            $this->line((string) json_encode(['package' => 'nvl/media', 'healthy' => ! $this->hasFailures($checks), 'checks' => array_map(static fn (array $check): array => $check, $checks)], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         } else {
-            $this->table(
-                ['Check', 'Severity', 'Result', 'Message'],
-                array_map(
-                    static fn (MediaDoctorCheckData $check): array => [
-                        $check->key,
-                        $check->severity,
-                        $check->passed ? 'PASS' : 'FAIL',
-                        $check->message,
-                    ],
-                    $checks,
-                ),
-            );
+            $this->table(['Check', 'Severity', 'Result', 'Message'], array_map(static fn (array $check): array => [$check['key'], $check['severity'], $check['passed'] ? 'PASS' : 'FAIL', $check['message']], $checks));
         }
 
         return $this->hasFailures($checks) ? self::FAILURE : self::SUCCESS;
@@ -58,14 +38,13 @@ final class MediaDoctorCommand extends Command
     /**
      * Determine whether error or strict-warning checks failed.
      *
-     * @param  list<MediaDoctorCheckData>  $checks
+     * @param  list<array{key: string, severity: string, passed: bool, message: string}>  $checks
      */
     private function hasFailures(array $checks): bool
     {
         $strict = (bool) $this->option('strict');
-
         foreach ($checks as $check) {
-            if (! $check->passed && ($check->severity === 'error' || $strict)) {
+            if (! $check['passed'] && ($check['severity'] === 'error' || $strict)) {
                 return true;
             }
         }

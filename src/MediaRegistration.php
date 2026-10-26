@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Media;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Conversions\ConversionDefinition;
+use Nvl\Media\Models\Media;
 use Nvl\Media\Slots\MediaSlot;
 
 /**
@@ -20,6 +23,15 @@ final class MediaRegistration
 
     /** @var array<string, ConversionDefinition> */
     private array $conversions = [];
+
+    /** Build the host's slot/conversion declarations for this operation. */
+    public static function forOwner(Model&HasNvlMedia $owner, ?Media $asset = null): self
+    {
+        $registration = new self;
+        $owner->registerNvlMedia($registration, $asset);
+
+        return $registration;
+    }
 
     /** Define or replace one allowed slot. */
     public function slot(string $name): MediaSlot

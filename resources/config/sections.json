@@ -47,18 +47,10 @@
                 "queue.jobs.regenerate.timeout",
                 "queue.name",
                 "root_folders",
-                "routes.api_enabled",
-                "routes.api_middleware",
-                "routes.api_prefix",
-                "routes.assets_enabled",
-                "routes.assets_prefix",
-                "routes.management_middleware",
                 "scanner.allow_noop",
                 "scanner.required",
                 "scanner.untrusted_uploads",
-                "sources.remote.enabled",
-                "tenancy.active_tenant_worklist",
-                "tenancy.owner_types"
+                "sources.remote.enabled"
             ],
             "advanced": [
                 "adoption.path_sample_size",

@@ -9,7 +9,6 @@ use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
@@ -18,11 +17,11 @@ use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Contracts\MediaContentScanner;
 use Nvl\Media\Contracts\MultipartUploadGateway;
 use Nvl\Media\Contracts\RecoverableMultipartUploadGateway;
-use Nvl\Media\Data\MediaDoctorCheckData;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\ImageFormat;
 use Nvl\Media\Enums\MediaImageDriver;
 use Nvl\Media\Exceptions\MediaUploadException;
+use Nvl\Media\MediaRegistration;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Slots\MediaSlot;
@@ -31,9 +30,6 @@ use Nvl\Media\Support\MediaDiskResolver;
 use Nvl\Media\Support\MediaImageConfiguration;
 use Nvl\Media\Support\MediaQueueConfiguration;
 use Nvl\Support\Config\PackageOptions;
-use Nvl\Support\Tenancy\Contracts\TenantInstallationState;
-use Nvl\Support\Tenancy\Services\EffectiveTenantConnection;
-use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Throwable;
 
 /**
@@ -44,13 +40,10 @@ final readonly class MediaDoctor
     public function __construct(
         private Container $container,
         private MediaFileExistence $existence,
-        private TenantInstallationState $tenantInstallation,
-        private EffectiveTenantConnection $tenantConnections,
-        private TenantResourceRegistry $tenantResources,
     ) {}
 
     /**
-     * @return list<MediaDoctorCheckData>
+     * @return list<array{key: string, severity: string, passed: bool, message: string}>
      */
     public function inspect(bool $production = false): array
     {
@@ -58,7 +51,6 @@ final readonly class MediaDoctor
             $this->permissionAdoptionCheck(),
             $this->s3DependencyCheck(),
             ...$this->schemaChecks(),
-            ...$this->tenancyChecks(),
             $this->migrationOwnershipCheck(),
             ...$this->diskChecks($production),
             $this->storageConfigurationCheck(),
@@ -66,7 +58,6 @@ final readonly class MediaDoctor
             ...$this->integrityChecks($production),
             ...$this->imageChecks(),
             ...$this->queueChecks($production),
-            ...$this->routeChecks(),
             ...$this->sourceChecks($production),
             ...$this->lockChecks($production),
             ...$this->ownerSlotChecks(),
@@ -78,9 +69,9 @@ final readonly class MediaDoctor
     /**
      * Validate visibility disks and per-disk prefixes without creating files or adapters.
      *
-     * @return MediaDoctorCheckData Machine-readable storage configuration result
+     * @return array{key: string, severity: string, passed: bool, message: string} Machine-readable storage configuration result
      */
-    private function storageConfigurationCheck(): MediaDoctorCheckData
+    private function storageConfigurationCheck(): array
     {
         try {
             $guard = new MediaDiskGuard;
@@ -102,14 +93,14 @@ final readonly class MediaDoctor
                 MediaPathResolver::rootFolder($disk);
             }
 
-            return new MediaDoctorCheckData('storage.configuration', 'error', true, 'Visibility disks and disk-relative media roots are valid.');
+            return ['key' => 'storage.configuration', 'severity' => 'error', 'passed' => true, 'message' => 'Visibility disks and disk-relative media roots are valid.'];
         } catch (InvalidArgumentException|MediaUploadException $exception) {
-            return new MediaDoctorCheckData('storage.configuration', 'error', false, $exception->getMessage());
+            return ['key' => 'storage.configuration', 'severity' => 'error', 'passed' => false, 'message' => $exception->getMessage()];
         }
     }
 
     /** Report optional S3 readiness from declared feature selection without resolving an adapter. */
-    private function s3DependencyCheck(): MediaDoctorCheckData
+    private function s3DependencyCheck(): array
     {
         $disks = config('nvl-media.allowed_disks', []);
         $selected = false;
@@ -121,129 +112,50 @@ final readonly class MediaDoctor
         }
         $available = (new MediaS3DependencyGuard)->available();
 
-        return new MediaDoctorCheckData(
-            'dependencies.s3', $selected ? 'error' : 'info', ! $selected || $available,
-            $selected
+        return ['key' => 'dependencies.s3', 'severity' => $selected ? 'error' : 'info', 'passed' => ! $selected || $available, 'message' => $selected
                 ? ($available ? 'The selected built-in S3 dependencies are available.' : 'Install league/flysystem-aws-s3-v3:^3.0 and aws/aws-sdk-php:^3.322.9 before selecting built-in S3 storage.')
-                : 'Built-in S3 storage is inactive; its SDK and adapter are optional.',
-        );
+                : 'Built-in S3 storage is inactive; its SDK and adapter are optional.'];
     }
 
     /** Validate the opt-in bridge and report only explicitly selected permission names. */
-    private function permissionAdoptionCheck(): MediaDoctorCheckData
+    private function permissionAdoptionCheck(): array
     {
         $enabled = config('nvl-media.authorization.spatie_permission.enabled', false);
         if (! is_bool($enabled)) {
-            return new MediaDoctorCheckData('adoption.spatie_permission', 'error', false, 'nvl-media.authorization.spatie_permission.enabled must be boolean.');
+            return ['key' => 'adoption.spatie_permission', 'severity' => 'error', 'passed' => false, 'message' => 'nvl-media.authorization.spatie_permission.enabled must be boolean.'];
         }
         if (! $enabled) {
-            return new MediaDoctorCheckData('adoption.spatie_permission', 'info', true, 'Spatie permission bridge is disabled; package ownership authorization applies.');
+            return ['key' => 'adoption.spatie_permission', 'severity' => 'info', 'passed' => true, 'message' => 'Spatie permission bridge is disabled; package ownership authorization applies.'];
         }
         $permission = config('nvl-media.authorization.spatie_permission.global_permission');
         if (! is_string($permission) || trim($permission) === '') {
-            return new MediaDoctorCheckData('adoption.spatie_permission', 'error', false, 'The explicit Spatie permission bridge requires a nonempty global permission name.');
+            return ['key' => 'adoption.spatie_permission', 'severity' => 'error', 'passed' => false, 'message' => 'The explicit Spatie permission bridge requires a nonempty global permission name.'];
         }
 
-        return new MediaDoctorCheckData('adoption.spatie_permission', 'info', true,
-            'Explicit Spatie permission bridge is active; global permission: '.$permission.'. Only deliberately configured ability mappings grant cross-owner access.');
+        return ['key' => 'adoption.spatie_permission', 'severity' => 'info', 'passed' => true, 'message' => 'Explicit Spatie permission bridge is active; global permission: '.$permission.'. Only deliberately configured ability mappings grant cross-owner access.'];
     }
 
     /**
      * Verify the opt-in ownership installation without requiring it in disabled deployments.
      *
-     * @return list<MediaDoctorCheckData>
+     * @return list<array{key: string, severity: string, passed: bool, message: string}>
      */
-    private function tenancyChecks(): array
-    {
-        if (config('nvl-tenancy.enabled') !== true) {
-            return [];
-        }
-
-        $checks = [];
-        $registered = $this->tenantResources->all();
-        foreach (['media.assets', 'media.associations', 'media.variations', 'media.translations', 'media.multipart', 'media.slot-operations', 'media.catalog-grants'] as $resource) {
-            if (! isset($registered[$resource])) {
-                continue;
-            }
-            try {
-                $this->tenantInstallation->assertUsable($resource);
-                $checks[] = new MediaDoctorCheckData(
-                    'tenancy.marker.'.$resource,
-                    'error',
-                    true,
-                    "Tenant ownership marker [{$resource}] is active and compatible.",
-                );
-            } catch (Throwable $exception) {
-                $checks[] = new MediaDoctorCheckData(
-                    'tenancy.marker.'.$resource,
-                    'error',
-                    false,
-                    'Tenant ownership marker is unavailable or incompatible: '.mb_substr($exception->getMessage(), 0, 500),
-                );
-            }
-        }
-
-        $operationConnection = (new MediaOwnerSlotOperation)->getConnection();
-        $connectionMatches = $operationConnection === $this->tenantConnections->core();
-        $checks[] = new MediaDoctorCheckData(
-            'tenancy.owner_slots.connection',
-            'error',
-            $connectionMatches,
-            $connectionMatches
-                ? 'Owner-slot operations use the canonical tenant connection.'
-                : 'Owner-slot operations must use the canonical tenant connection.',
-        );
-
-        $mixed = config('nvl-tenancy.sharing.media') === 'copy'
-            || config('nvl-tenancy.resources.media') === 'platform';
-        $mixedReady = ! $mixed || collect([
-            MediaTables::get(MediaTables::Media),
-            MediaTables::get(MediaTables::Associations),
-            MediaTables::get(MediaTables::ImageVariations),
-            MediaTables::get(MediaTables::I18n),
-            MediaTables::get(MediaTables::MultipartUploads),
-        ])->every(static fn (string $table): bool => Schema::hasColumn($table, 'ownership_key'));
-        $checks[] = new MediaDoctorCheckData(
-            'tenancy.schema.partition',
-            'error',
-            $mixedReady,
-            $mixedReady
-                ? 'Media ownership columns match the configured partition mode.'
-                : 'Media sharing or platform mode requires the adopted mixed ownership schema.',
-        );
-        $grantLocksReady = Schema::hasTable(MediaTables::get(MediaTables::TenantGrantLocks));
-        $checks[] = new MediaDoctorCheckData(
-            'tenancy.schema.catalog_grant_locks',
-            'error',
-            $grantLocksReady,
-            $grantLocksReady
-                ? 'Media catalog grant identity locks are installed.'
-                : 'Media catalog grant identity locks are missing.',
-        );
-
-        return $checks;
-    }
 
     /**
      * Warn when automatic vendor loading overlaps a published migration copy.
      */
-    private function migrationOwnershipCheck(): MediaDoctorCheckData
+    private function migrationOwnershipCheck(): array
     {
         $duplicates = config('nvl-media.migrations.enabled') === true
             ? $this->publishedMigrationDuplicates(dirname(__DIR__, 2).'/database/migrations')
             : [];
 
-        return new MediaDoctorCheckData(
-            'migrations.ownership',
-            'warning',
-            $duplicates === [],
-            $duplicates === []
+        return ['key' => 'migrations.ownership', 'severity' => 'warning', 'passed' => $duplicates === [], 'message' => $duplicates === []
                 ? 'Automatic vendor migration loading does not overlap a published host copy.'
                 : sprintf(
                     'Automatic vendor migration loading overlaps published host migration(s): %s. Disable media.migrations.enabled before running host-owned copies.',
                     implode(', ', $duplicates),
-                ),
-        );
+                )];
     }
 
     /**
@@ -284,7 +196,7 @@ final readonly class MediaDoctor
     }
 
     /**
-     * @return list<MediaDoctorCheckData>
+     * @return list<array{key: string, severity: string, passed: bool, message: string}>
      */
     private function integrityChecks(bool $production): array
     {
@@ -295,18 +207,13 @@ final readonly class MediaDoctor
             && in_array($providerChecksum, ['prefer', 'ignore'], true)
             && $readback === true;
 
-        return [new MediaDoctorCheckData(
-            'integrity.policy',
-            $production ? 'error' : 'warning',
-            $safe,
-            $safe
+        return [['key' => 'integrity.policy', 'severity' => $production ? 'error' : 'warning', 'passed' => $safe, 'message' => $safe
                 ? 'Stored objects require size/checksum verification with streamed fallback.'
-                : 'Media integrity must remain required with streamed readback fallback enabled.',
-        )];
+                : 'Media integrity must remain required with streamed readback fallback enabled.']];
     }
 
     /**
-     * @return list<MediaDoctorCheckData>
+     * @return list<array{key: string, severity: string, passed: bool, message: string}>
      */
     private function ownerSlotChecks(): array
     {
@@ -325,14 +232,9 @@ final readonly class MediaDoctor
             && $pruneChunk <= 1_000;
 
         return [
-            new MediaDoctorCheckData(
-                'owner_slots.idempotency.bounds',
-                'error',
-                $valid,
-                $valid
+            ['key' => 'owner_slots.idempotency.bounds', 'severity' => 'error', 'passed' => $valid, 'message' => $valid
                     ? 'Owner-slot processing, retention, and pruning bounds are valid.'
-                    : 'Owner-slot processing timeout must be 1-1440 minutes, retention must be positive, and prune chunk must be 1-1000.',
-            ),
+                    : 'Owner-slot processing timeout must be 1-1440 minutes, retention must be positive, and prune chunk must be 1-1000.'],
             $this->ownerSlotRegistrationCheck(),
         ];
     }
@@ -340,7 +242,7 @@ final readonly class MediaDoctor
     /**
      * Validate the bounded set of owner type and slot pairs observed by the ledger.
      */
-    private function ownerSlotRegistrationCheck(): MediaDoctorCheckData
+    private function ownerSlotRegistrationCheck(): array
     {
         try {
             $registrations = MediaOwnerSlotOperation::query()
@@ -352,12 +254,7 @@ final readonly class MediaDoctor
                 ->get();
 
             if ($registrations->count() > 100) {
-                return new MediaDoctorCheckData(
-                    'owner_slots.registrations',
-                    'error',
-                    false,
-                    'Owner-slot diagnostics support at most 100 observed owner type and slot pairs.',
-                );
+                return ['key' => 'owner_slots.registrations', 'severity' => 'error', 'passed' => false, 'message' => 'Owner-slot diagnostics support at most 100 observed owner type and slot pairs.'];
             }
 
             $invalid = [];
@@ -376,7 +273,7 @@ final readonly class MediaDoctor
                 }
 
                 $owner = new $ownerClass;
-                $slot = $owner->nvlMedia()->slot($slotName);
+                $slot = MediaRegistration::forOwner($owner)->getSlot($slotName);
 
                 if (! $slot instanceof MediaSlot
                     || ! $slot->isSingleFile
@@ -385,30 +282,20 @@ final readonly class MediaDoctor
                 }
             }
 
-            return new MediaDoctorCheckData(
-                'owner_slots.registrations',
-                'error',
-                $invalid === [],
-                $invalid === []
+            return ['key' => 'owner_slots.registrations', 'severity' => 'error', 'passed' => $invalid === [], 'message' => $invalid === []
                     ? 'Observed owner-slot registrations resolve to single-file model slots.'
-                    : 'Invalid observed owner-slot registrations: '.implode(', ', $invalid),
-            );
+                    : 'Invalid observed owner-slot registrations: '.implode(', ', $invalid)];
         } catch (Throwable $exception) {
-            return new MediaDoctorCheckData(
-                'owner_slots.registrations',
-                'error',
-                false,
-                'Owner-slot registration inspection failed: '.mb_substr(
-                    $exception->getMessage(),
-                    0,
-                    500,
-                ),
-            );
+            return ['key' => 'owner_slots.registrations', 'severity' => 'error', 'passed' => false, 'message' => 'Owner-slot registration inspection failed: '.mb_substr(
+                $exception->getMessage(),
+                0,
+                500,
+            )];
         }
     }
 
     /**
-     * @return list<MediaDoctorCheckData>
+     * @return list<array{key: string, severity: string, passed: bool, message: string}>
      */
     private function schemaChecks(): array
     {
@@ -489,12 +376,7 @@ final readonly class MediaDoctor
             foreach ($requirements as $table => $columns) {
                 $schema = Schema::connection($connections[$table] ?? null);
                 $exists = $schema->hasTable($table);
-                $checks[] = new MediaDoctorCheckData(
-                    "schema.table.{$table}",
-                    'error',
-                    $exists,
-                    $exists ? "Table [{$table}] is available." : "Table [{$table}] is missing.",
-                );
+                $checks[] = ['key' => "schema.table.{$table}", 'severity' => 'error', 'passed' => $exists, 'message' => $exists ? "Table [{$table}] is available." : "Table [{$table}] is missing."];
 
                 if (! $exists) {
                     continue;
@@ -502,14 +384,9 @@ final readonly class MediaDoctor
 
                 foreach ($columns as $column) {
                     $present = $schema->hasColumn($table, $column);
-                    $checks[] = new MediaDoctorCheckData(
-                        "schema.column.{$table}.{$column}",
-                        'error',
-                        $present,
-                        $present
+                    $checks[] = ['key' => "schema.column.{$table}.{$column}", 'severity' => 'error', 'passed' => $present, 'message' => $present
                             ? "Column [{$table}.{$column}] is available."
-                            : "Column [{$table}.{$column}] is missing.",
-                    );
+                            : "Column [{$table}.{$column}] is missing."];
                 }
 
                 $indexes = $schema->getIndexes($table);
@@ -518,30 +395,20 @@ final readonly class MediaDoctor
                     $present = collect($indexes)->contains(
                         static fn (array $definition): bool => $definition['name'] === $index,
                     );
-                    $checks[] = new MediaDoctorCheckData(
-                        "schema.index.{$table}.{$index}",
-                        'error',
-                        $present,
-                        $present
+                    $checks[] = ['key' => "schema.index.{$table}.{$index}", 'severity' => 'error', 'passed' => $present, 'message' => $present
                             ? "Index [{$index}] is available on [{$table}]."
-                            : "Index [{$index}] is missing from [{$table}].",
-                    );
+                            : "Index [{$index}] is missing from [{$table}]."];
                 }
             }
         } catch (Throwable $exception) {
-            $checks[] = new MediaDoctorCheckData(
-                'schema.connection',
-                'error',
-                false,
-                'Database inspection failed: '.mb_substr($exception->getMessage(), 0, 500),
-            );
+            $checks[] = ['key' => 'schema.connection', 'severity' => 'error', 'passed' => false, 'message' => 'Database inspection failed: '.mb_substr($exception->getMessage(), 0, 500)];
         }
 
         return $checks;
     }
 
     /**
-     * @return list<MediaDoctorCheckData>
+     * @return list<array{key: string, severity: string, passed: bool, message: string}>
      */
     private function diskChecks(bool $production): array
     {
@@ -549,12 +416,7 @@ final readonly class MediaDoctor
         $disks = is_array($configured) ? $configured : [];
 
         if ($disks === []) {
-            return [new MediaDoctorCheckData(
-                'storage.allowed_disks',
-                'error',
-                false,
-                'No media storage disk is allowlisted.',
-            )];
+            return [['key' => 'storage.allowed_disks', 'severity' => 'error', 'passed' => false, 'message' => 'No media storage disk is allowlisted.']];
         }
 
         $checks = [];
@@ -562,14 +424,9 @@ final readonly class MediaDoctor
         foreach ($disks as $disk) {
             $name = is_string($disk) ? $disk : '';
             $defined = $name !== '' && config("filesystems.disks.{$name}") !== null;
-            $checks[] = new MediaDoctorCheckData(
-                'storage.disk.'.($name !== '' ? $name : 'invalid'),
-                'error',
-                $defined,
-                $defined
+            $checks[] = ['key' => 'storage.disk.'.($name !== '' ? $name : 'invalid'), 'severity' => 'error', 'passed' => $defined, 'message' => $defined
                     ? "Media disk [{$name}] is configured."
-                    : "Media disk [{$name}] is not configured.",
-            );
+                    : "Media disk [{$name}] is not configured."];
 
             if (! $defined) {
                 continue;
@@ -577,46 +434,20 @@ final readonly class MediaDoctor
 
             $driver = config("filesystems.disks.{$name}.driver");
             $throws = config("filesystems.disks.{$name}.throw") === true;
-            $checks[] = new MediaDoctorCheckData(
-                "storage.{$name}.throw",
-                $production ? 'error' : 'warning',
-                ! $production || $throws,
-                $throws
+            $checks[] = ['key' => "storage.{$name}.throw", 'severity' => $production ? 'error' : 'warning', 'passed' => ! $production || $throws, 'message' => $throws
                     ? "Media disk [{$name}] throws write exceptions."
-                    : "Set media disk [{$name}] throw option to true.",
-            );
-            $safePublicLocal = $driver !== 'local'
-                || (bool) config('nvl-media.routes.assets_enabled', true);
-            $checks[] = new MediaDoctorCheckData(
-                "storage.{$name}.public_local_delivery",
-                $production ? 'error' : 'warning',
-                $safePublicLocal,
-                $safePublicLocal
-                    ? "Media disk [{$name}] uses controlled asset delivery."
-                    : "Local media disk [{$name}] requires route-backed asset delivery.",
-            );
-
+                    : "Set media disk [{$name}] throw option to true."];
             if ($driver !== 's3') {
                 continue;
             }
 
             $bucket = config("filesystems.disks.{$name}.bucket");
-            $checks[] = new MediaDoctorCheckData(
-                "storage.s3.{$name}.adapter",
-                'error',
-                class_exists(AwsS3V3Adapter::class),
-                class_exists(AwsS3V3Adapter::class)
+            $checks[] = ['key' => "storage.s3.{$name}.adapter", 'severity' => 'error', 'passed' => class_exists(AwsS3V3Adapter::class), 'message' => class_exists(AwsS3V3Adapter::class)
                     ? 'The S3 Flysystem adapter is installed.'
-                    : 'S3 is active but league/flysystem-aws-s3-v3 is unavailable.',
-            );
-            $checks[] = new MediaDoctorCheckData(
-                "storage.s3.{$name}.bucket",
-                'error',
-                is_string($bucket) && $bucket !== '',
-                is_string($bucket) && $bucket !== ''
+                    : 'S3 is active but league/flysystem-aws-s3-v3 is unavailable.'];
+            $checks[] = ['key' => "storage.s3.{$name}.bucket", 'severity' => 'error', 'passed' => is_string($bucket) && $bucket !== '', 'message' => is_string($bucket) && $bucket !== ''
                     ? "S3 disk [{$name}] has a bucket configured."
-                    : "S3 disk [{$name}] requires a non-empty bucket.",
-            );
+                    : "S3 disk [{$name}] requires a non-empty bucket."];
         }
 
         return $checks;
@@ -625,15 +456,10 @@ final readonly class MediaDoctor
     /**
      * Verify representative live media paths against the configured root folder.
      */
-    private function representativeStoragePathCheck(bool $production): MediaDoctorCheckData
+    private function representativeStoragePathCheck(bool $production): array
     {
         if (! Schema::hasTable(MediaTables::get(MediaTables::Media))) {
-            return new MediaDoctorCheckData(
-                'storage.persisted_paths',
-                $production ? 'error' : 'warning',
-                true,
-                'Persisted media paths are unavailable until the media table exists.',
-            );
+            return ['key' => 'storage.persisted_paths', 'severity' => $production ? 'error' : 'warning', 'passed' => true, 'message' => 'Persisted media paths are unavailable until the media table exists.'];
         }
 
         $limit = MediaConfiguration::integer('nvl-media.adoption.path_sample_size', 25, 1);
@@ -649,21 +475,11 @@ final readonly class MediaDoctor
                 ->limit($limit)
                 ->get($columns);
         } catch (Throwable $exception) {
-            return new MediaDoctorCheckData(
-                'storage.persisted_paths',
-                $production ? 'error' : 'warning',
-                false,
-                'Persisted media paths cannot be inspected: '.mb_substr($exception->getMessage(), 0, 500),
-            );
+            return ['key' => 'storage.persisted_paths', 'severity' => $production ? 'error' : 'warning', 'passed' => false, 'message' => 'Persisted media paths cannot be inspected: '.mb_substr($exception->getMessage(), 0, 500)];
         }
 
         if ($samples->isEmpty()) {
-            return new MediaDoctorCheckData(
-                'storage.persisted_paths',
-                $production ? 'error' : 'warning',
-                true,
-                'No live persisted media rows require representative path verification.',
-            );
+            return ['key' => 'storage.persisted_paths', 'severity' => $production ? 'error' : 'warning', 'passed' => true, 'message' => 'No live persisted media rows require representative path verification.'];
         }
 
         $missing = [];
@@ -689,25 +505,20 @@ final readonly class MediaDoctor
             }
             $rootLabel = implode(', ', $roots);
         } catch (InvalidArgumentException|MediaUploadException $exception) {
-            return new MediaDoctorCheckData('storage.persisted_paths', 'error', false, $exception->getMessage());
+            return ['key' => 'storage.persisted_paths', 'severity' => 'error', 'passed' => false, 'message' => $exception->getMessage()];
         }
 
-        return new MediaDoctorCheckData(
-            'storage.persisted_paths',
-            $production ? 'error' : 'warning',
-            $passed,
-            $passed
+        return ['key' => 'storage.persisted_paths', 'severity' => $production ? 'error' : 'warning', 'passed' => $passed, 'message' => $passed
                 ? "Representative live media paths exist with root_folder [{$rootLabel}]."
                 : sprintf(
                     'Representative live persisted paths are missing with root_folder [%s]: %s. Existing complete folders require an empty media.root_folder, or move the objects through nvl:media:migrate-disk before cutover.',
                     $rootLabel,
                     implode(', ', array_slice($missing, 0, 5)),
-                ),
-        );
+                )];
     }
 
     /**
-     * @return list<MediaDoctorCheckData>
+     * @return list<array{key: string, severity: string, passed: bool, message: string}>
      */
     private function imageChecks(): array
     {
@@ -718,14 +529,9 @@ final readonly class MediaDoctor
                 MediaImageDriver::Imagick => extension_loaded('imagick'),
                 MediaImageDriver::Vips => class_exists('Jcupitt\\Vips\\Image'),
             };
-            $checks = [new MediaDoctorCheckData(
-                'images.driver',
-                'error',
-                $driverAvailable,
-                $driverAvailable
+            $checks = [['key' => 'images.driver', 'severity' => 'error', 'passed' => $driverAvailable, 'message' => $driverAvailable
                     ? "Image driver [{$driver->value}] is available."
-                    : "Configured image driver [{$driver->value}] is unavailable.",
-            )];
+                    : "Configured image driver [{$driver->value}] is unavailable."]];
 
             if (! $driverAvailable) {
                 return $checks;
@@ -750,31 +556,21 @@ final readonly class MediaDoctor
 
             foreach ($formats as $format) {
                 $available = $this->encoderAvailable($driver, $format);
-                $checks[] = new MediaDoctorCheckData(
-                    "images.encoder.{$format->value}",
-                    $available === null ? 'warning' : 'error',
-                    $available !== false,
-                    $available === true
+                $checks[] = ['key' => "images.encoder.{$format->value}", 'severity' => $available === null ? 'warning' : 'error', 'passed' => $available !== false, 'message' => $available === true
                         ? "The [{$driver->value}] driver can encode {$format->value}."
                         : ($available === false
                             ? "The [{$driver->value}] driver cannot encode {$format->value}."
-                            : "Run a smoke conversion to verify the {$format->value} codec."),
-                );
+                            : "Run a smoke conversion to verify the {$format->value} codec.")];
             }
 
             return $checks;
         } catch (Throwable $exception) {
-            return [new MediaDoctorCheckData(
-                'images.configuration',
-                'error',
-                false,
-                'Image configuration is invalid: '.mb_substr($exception->getMessage(), 0, 500),
-            )];
+            return [['key' => 'images.configuration', 'severity' => 'error', 'passed' => false, 'message' => 'Image configuration is invalid: '.mb_substr($exception->getMessage(), 0, 500)]];
         }
     }
 
     /**
-     * @return list<MediaDoctorCheckData>
+     * @return list<array{key: string, severity: string, passed: bool, message: string}>
      */
     private function queueChecks(bool $production): array
     {
@@ -784,22 +580,12 @@ final readonly class MediaDoctor
         $backgroundEnabled = MediaQueueConfiguration::enabled();
         $durable = ! $production || ! $backgroundEnabled || $connection !== 'sync';
         $checks = [
-            new MediaDoctorCheckData(
-                'queue.connection',
-                'error',
-                $defined,
-                $defined
+            ['key' => 'queue.connection', 'severity' => 'error', 'passed' => $defined, 'message' => $defined
                     ? "Media queue connection [{$connection}] is configured."
-                    : "Media queue connection [{$connection}] is not configured.",
-            ),
-            new MediaDoctorCheckData(
-                'queue.durable',
-                $production ? 'error' : 'warning',
-                $durable,
-                $durable
+                    : "Media queue connection [{$connection}] is not configured."],
+            ['key' => 'queue.durable', 'severity' => $production ? 'error' : 'warning', 'passed' => $durable, 'message' => $durable
                     ? 'Background media work uses a durable queue or is disabled.'
-                    : 'Background media work requires a non-sync queue in production.',
-            ),
+                    : 'Background media work requires a non-sync queue in production.'],
         ];
 
         if (! $defined || ! $backgroundEnabled || $connection === 'sync') {
@@ -816,67 +602,26 @@ final readonly class MediaDoctor
         if ($driver === 'sqs') {
             $visibilityTimeout = $definition['visibility_timeout'] ?? null;
             $safe = is_int($visibilityTimeout) && $visibilityTimeout > $maximumTimeout;
-            $checks[] = new MediaDoctorCheckData(
-                'queue.visibility_timeout',
-                'error',
-                $safe,
-                $safe
+            $checks[] = ['key' => 'queue.visibility_timeout', 'severity' => 'error', 'passed' => $safe, 'message' => $safe
                     ? 'SQS visibility timeout exceeds every Media job timeout.'
-                    : "SQS visibility_timeout must exceed {$maximumTimeout} seconds.",
-            );
+                    : "SQS visibility_timeout must exceed {$maximumTimeout} seconds."];
         } else {
             $retryAfter = $definition['retry_after'] ?? null;
             $safe = is_int($retryAfter) && $retryAfter > $maximumTimeout;
-            $checks[] = new MediaDoctorCheckData(
-                'queue.retry_after',
-                'error',
-                $safe,
-                $safe
+            $checks[] = ['key' => 'queue.retry_after', 'severity' => 'error', 'passed' => $safe, 'message' => $safe
                     ? 'Queue retry_after exceeds every Media job timeout.'
-                    : "Queue retry_after must exceed {$maximumTimeout} seconds.",
-            );
+                    : "Queue retry_after must exceed {$maximumTimeout} seconds."];
         }
 
         return $checks;
     }
 
     /**
-     * @return list<MediaDoctorCheckData>
+     * @return list<array{key: string, severity: string, passed: bool, message: string}>
      */
-    private function routeChecks(): array
-    {
-        $managementEnabled = (bool) config('nvl-media.routes.api_enabled', false);
-        $middleware = config('nvl-media.routes.management_middleware', []);
-        $middlewareProtected = ! $managementEnabled
-            || (is_array($middleware) && in_array('auth', $middleware, true));
-
-        return [
-            new MediaDoctorCheckData(
-                'routes.management.authorization',
-                'error',
-                $middlewareProtected,
-                $middlewareProtected
-                    ? 'Media management routes are disabled or protected by auth middleware.'
-                    : 'Enabled Media management routes must include auth middleware.',
-            ),
-            new MediaDoctorCheckData(
-                'routes.management.loaded',
-                'error',
-                ! $managementEnabled || Route::has('nvl.media.management.index'),
-                'Media management route state matches configuration.',
-            ),
-            new MediaDoctorCheckData(
-                'routes.assets.loaded',
-                'error',
-                ! (bool) config('nvl-media.routes.assets_enabled', true)
-                    || Route::has('nvl.media.assets.show'),
-                'Media asset route state was inspected.',
-            ),
-        ];
-    }
 
     /**
-     * @return list<MediaDoctorCheckData>
+     * @return list<array{key: string, severity: string, passed: bool, message: string}>
      */
     private function sourceChecks(bool $production): array
     {
@@ -910,27 +655,17 @@ final readonly class MediaDoctor
             && $verifyConnectedIp === true;
 
         return [
-            new MediaDoctorCheckData(
-                'sources.remote.curl',
-                $production ? 'error' : 'warning',
-                ! $enabled || extension_loaded('curl'),
-                ! $enabled || extension_loaded('curl')
+            ['key' => 'sources.remote.curl', 'severity' => $production ? 'error' : 'warning', 'passed' => ! $enabled || extension_loaded('curl'), 'message' => ! $enabled || extension_loaded('curl')
                     ? 'Remote media cURL requirement is satisfied.'
-                    : 'Remote media sources require ext-curl.',
-            ),
-            new MediaDoctorCheckData(
-                'sources.remote.configuration',
-                $production ? 'error' : 'warning',
-                ! $enabled || ($safePorts && $boundsSafe),
-                ! $enabled || ($safePorts && $boundsSafe)
+                    : 'Remote media sources require ext-curl.'],
+            ['key' => 'sources.remote.configuration', 'severity' => $production ? 'error' : 'warning', 'passed' => ! $enabled || ($safePorts && $boundsSafe), 'message' => ! $enabled || ($safePorts && $boundsSafe)
                     ? 'Remote media bounds are configured.'
-                    : 'Remote media ports, redirects, byte limit, timeouts, and connected-IP attestation must be safe.',
-            ),
+                    : 'Remote media ports, redirects, byte limit, timeouts, and connected-IP attestation must be safe.'],
         ];
     }
 
     /**
-     * @return list<MediaDoctorCheckData>
+     * @return list<array{key: string, severity: string, passed: bool, message: string}>
      */
     private function lockChecks(bool $production): array
     {
@@ -949,27 +684,17 @@ final readonly class MediaDoctor
         }
 
         return [
-            new MediaDoctorCheckData(
-                'locks.mutation.central',
-                $production && $multiNode ? 'error' : 'warning',
-                ! $multiNode || $central,
-                ! $multiNode || $central
+            ['key' => 'locks.mutation.central', 'severity' => $production && $multiNode ? 'error' : 'warning', 'passed' => ! $multiNode || $central, 'message' => ! $multiNode || $central
                     ? 'Media mutation lock topology matches deployment mode.'
-                    : 'Multi-node media deployments require a central atomic lock store.',
-            ),
-            new MediaDoctorCheckData(
-                'locks.mutation.atomic',
-                'error',
-                $atomic,
-                $atomic
+                    : 'Multi-node media deployments require a central atomic lock store.'],
+            ['key' => 'locks.mutation.atomic', 'severity' => 'error', 'passed' => $atomic, 'message' => $atomic
                     ? 'The configured Media mutation store supports atomic locks.'
-                    : 'The configured Media mutation store must implement atomic locks.',
-            ),
+                    : 'The configured Media mutation store must implement atomic locks.'],
         ];
     }
 
     /**
-     * @return list<MediaDoctorCheckData>
+     * @return list<array{key: string, severity: string, passed: bool, message: string}>
      */
     private function bindingChecks(bool $production): array
     {
@@ -983,47 +708,22 @@ final readonly class MediaDoctor
                 || (bool) config('nvl-media.scanner.allow_noop', false));
 
         return [
-            new MediaDoctorCheckData(
-                'scanner.required',
-                'error',
-                ! (bool) config('nvl-media.scanner.required', false) || ($scanner instanceof MediaContentScanner && ! $scanner instanceof NullMediaContentScanner),
-                'Required scanner readiness needs a real scanner in every environment; allow_noop is a development bypass only.',
-            ),
-            new MediaDoctorCheckData(
-                'binding.authorization',
-                'error',
-                $authorization instanceof MediaAuthorization,
-                'MediaAuthorization is bound.',
-            ),
-            new MediaDoctorCheckData(
-                'binding.scanner',
-                'error',
-                $scanner instanceof MediaContentScanner,
-                'MediaContentScanner is bound.',
-            ),
-            new MediaDoctorCheckData(
-                'scanner.production',
-                $production ? 'error' : 'warning',
-                $scannerSafe,
-                $scannerSafe
+            ['key' => 'scanner.required', 'severity' => 'error', 'passed' => ! (bool) config('nvl-media.scanner.required', false) || ($scanner instanceof MediaContentScanner && ! $scanner instanceof NullMediaContentScanner), 'message' => 'Required scanner readiness needs a real scanner in every environment; allow_noop is a development bypass only.'],
+            ['key' => 'binding.authorization', 'severity' => 'error', 'passed' => $authorization instanceof MediaAuthorization, 'message' => 'MediaAuthorization is bound.'],
+            ['key' => 'binding.scanner', 'severity' => 'error', 'passed' => $scanner instanceof MediaContentScanner, 'message' => 'MediaContentScanner is bound.'],
+            ['key' => 'scanner.production', 'severity' => $production ? 'error' : 'warning', 'passed' => $scannerSafe, 'message' => $scannerSafe
                     ? 'Media scanner policy is safe for enabled ingestion paths.'
-                    : 'Untrusted uploads are enabled but only the no-op scanner is configured.',
-            ),
+                    : 'Untrusted uploads are enabled but only the no-op scanner is configured.'],
         ];
     }
 
     /**
-     * @return list<MediaDoctorCheckData>
+     * @return list<array{key: string, severity: string, passed: bool, message: string}>
      */
     private function multipartChecks(bool $production): array
     {
         if (! (bool) config('nvl-media.multipart.enabled', false)) {
-            return [new MediaDoctorCheckData(
-                'multipart.disabled',
-                'warning',
-                true,
-                'Multipart uploads are disabled; server-proxied ingestion remains available.',
-            )];
+            return [['key' => 'multipart.disabled', 'severity' => 'warning', 'passed' => true, 'message' => 'Multipart uploads are disabled; server-proxied ingestion remains available.']];
         }
 
         $gateway = $this->resolve(MultipartUploadGateway::class);
@@ -1033,29 +733,14 @@ final readonly class MediaDoctor
         $centralLock = in_array($driver, ['redis', 'memcached', 'dynamodb'], true);
 
         return [
-            new MediaDoctorCheckData(
-                'multipart.gateway.recoverable',
-                $production ? 'error' : 'warning',
-                $gateway instanceof RecoverableMultipartUploadGateway,
-                $gateway instanceof RecoverableMultipartUploadGateway
+            ['key' => 'multipart.gateway.recoverable', 'severity' => $production ? 'error' : 'warning', 'passed' => $gateway instanceof RecoverableMultipartUploadGateway, 'message' => $gateway instanceof RecoverableMultipartUploadGateway
                     ? 'Multipart gateway supports completion recovery.'
-                    : 'Enabled multipart uploads require a recoverable gateway.',
-            ),
-            new MediaDoctorCheckData(
-                'multipart.lock.central',
-                $production ? 'error' : 'warning',
-                $centralLock,
-                $centralLock
+                    : 'Enabled multipart uploads require a recoverable gateway.'],
+            ['key' => 'multipart.lock.central', 'severity' => $production ? 'error' : 'warning', 'passed' => $centralLock, 'message' => $centralLock
                     ? 'Multipart transitions use a central lock store.'
-                    : 'Enabled multipart uploads require a central lock store.',
-            ),
-            new MediaDoctorCheckData(
-                'multipart.scanner.attestation',
-                $production ? 'error' : 'warning',
-                ! $scanner instanceof NullMediaContentScanner
-                    && (bool) config('nvl-media.multipart.required_scan', true),
-                'Enabled multipart uploads require scanner attestation.',
-            ),
+                    : 'Enabled multipart uploads require a central lock store.'],
+            ['key' => 'multipart.scanner.attestation', 'severity' => $production ? 'error' : 'warning', 'passed' => ! $scanner instanceof NullMediaContentScanner
+                    && (bool) config('nvl-media.multipart.required_scan', true), 'message' => 'Enabled multipart uploads require scanner attestation.'],
         ];
     }
 

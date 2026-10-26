@@ -4,14 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Enums;
 
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
-
 /**
  * Persisted lifecycle state for a media binary.
  *
  * @api
  */
-#[TypeScript]
 enum MediaLifecycleStatus: string
 {
     case PendingUpload = 'pending_upload';

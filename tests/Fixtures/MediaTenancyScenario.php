@@ -8,10 +8,11 @@ use Closure;
 use Illuminate\Contracts\Foundation\MaintenanceMode;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-use Nvl\Media\Actions\UploadMediaAction;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Services\MediaUploader;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Tests\Stubs\TestMediaModel;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Tenancy\Services\TenantAdoptionCoordinator;
 use Nvl\Tenancy\Services\TenantBoundary;
 use Nvl\Tenancy\Services\TenantResourceRegistry;
@@ -29,11 +30,8 @@ final readonly class MediaTenancyScenario
     /** Adopt Media plus its canonical owner fixture. */
     public static function install(bool $catalogCopies = false): self
     {
-        expect(config('nvl-tenancy.enabled'))->toBeTrue()
-            ->and(config('nvl-tenancy.sharing.media'))->toBe($catalogCopies ? 'copy' : 'none');
-
+        expect(config('nvl-tenancy.enabled'))->toBeTrue()->and(config('nvl-tenancy.sharing.media'))->toBe($catalogCopies ? 'copy' : 'none');
         app(TenantResourceRegistry::class)->get('test.media-owners');
-
         $operation = new PlatformOperation('fixture.adoption', 'test', 'fixture');
         $coordinator = app(TenantAdoptionCoordinator::class);
         $plan = $coordinator->prepare(['resource-fixture-owners', 'media'], [], $operation);
@@ -98,19 +96,10 @@ final readonly class MediaTenancyScenario
             if (! is_string($path) || file_put_contents($path, $bytes) === false) {
                 throw new \RuntimeException('Unable to create the Media upload fixture.');
             }
-
             try {
                 $file = new UploadedFile($path, 'sample.txt', 'text/plain', null, true);
 
-                return app(UploadMediaAction::class)->execute(
-                    file: $file,
-                    disk: 'tenant-disk',
-                    model: $owner,
-                    slot: new MediaSlot('default'),
-                    fileName: 'sample.txt',
-                    isPublic: $public,
-                    skipAutoVariations: true,
-                );
+                return app(MediaUploader::class)->upload(auth()->user() ?? SystemActor::Background, file: $file, disk: 'tenant-disk', model: $owner, slot: new MediaSlot('default'), fileName: 'sample.txt', isPublic: $public, skipAutoVariations: true);
             } finally {
                 if (is_file($path)) {
                     unlink($path);

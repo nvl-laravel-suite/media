@@ -7,8 +7,8 @@ namespace Nvl\Media\Tests\Stubs;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Nvl\Media\Contracts\HasMedia;
-use Nvl\Media\Traits\InteractsWithMedia;
+use Nvl\Media\Tests\Fixtures\Consumer\Contracts\HasMedia;
+use Nvl\Media\Tests\Fixtures\Consumer\Traits\InteractsWithMedia;
 
 /**
  * Minimal test model for verifying InteractsWithMedia trait behavior.

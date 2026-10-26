@@ -1,7 +1,6 @@
 <?php
 
 declare(strict_types=1);
-
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -20,7 +19,6 @@ use Nvl\Ownership\Services\OwnershipRunner;
 use Symfony\Component\Process\Process;
 
 uses(OwnershipTestCase::class);
-
 it('runs real captured Media workers and concurrent receipts on native PostgreSQL', function (): void {
     if (getenv('NVL_OWNERSHIP_TEST_DRIVER') !== 'pgsql') {
         $this->markTestSkipped('Requires the explicitly isolated PostgreSQL persistence database.');

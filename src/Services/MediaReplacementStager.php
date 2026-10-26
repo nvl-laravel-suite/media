@@ -6,9 +6,9 @@ namespace Nvl\Media\Services;
 
 use Illuminate\Http\UploadedFile;
 use Nvl\Media\Contracts\HasNvlMedia;
-use Nvl\Media\Data\Ingestion\StagedMediaFileData;
 use Nvl\Media\Exceptions\MediaStorageException;
 use Nvl\Media\Exceptions\MediaUploadException;
+use Nvl\Media\MediaRegistration;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaHashGenerator;
@@ -38,7 +38,7 @@ final class MediaReplacementStager
      * @throws MediaUploadException
      * @throws MediaStorageException
      */
-    public function stage(Media $media, UploadedFile $file): StagedMediaFileData
+    public function stage(Media $media, UploadedFile $file): array
     {
         $this->diskGuard->assertAllowed($media->disk);
         $this->disks->ensureDefined($media->disk);
@@ -56,7 +56,7 @@ final class MediaReplacementStager
             $slotName = is_string($configuredSlot) && $configuredSlot !== ''
                 ? $configuredSlot
                 : $association->collection;
-            $slot = $associable->nvlMedia()->slot($slotName);
+            $slot = MediaRegistration::forOwner($associable)->getSlot($slotName);
 
             if ($slot instanceof MediaSlot) {
                 $slots[] = $slot;
@@ -69,7 +69,7 @@ final class MediaReplacementStager
             $file->getClientOriginalName(),
         );
 
-        $hash = MediaHashGenerator::generateForExtension($validatedFile->extension);
+        $hash = MediaHashGenerator::generateForExtension($validatedFile['extension']);
         $storageFolder = $this->pathResolver->storageFolder($media->folder ?? '', $media->disk);
         $stored = $this->files->store(
             $file,
@@ -91,15 +91,15 @@ final class MediaReplacementStager
             $storedDigest = $this->disks->checksum($media->disk, $path);
             $storedSize = $this->disks->size($media->disk, $path);
 
-            if (! hash_equals($validatedFile->digest, $storedDigest)
-                || $storedSize !== $validatedFile->size) {
+            if (! hash_equals($validatedFile['digest'], $storedDigest)
+                || $storedSize !== $validatedFile['size']) {
                 $this->packageLogger->log('media', 'error', 'nvl.media.replacement_integrity.failed', [
                     'media_id' => $media->id,
                     'disk' => $media->disk,
                     'path' => $path,
-                    'expected_checksum' => $validatedFile->digest,
+                    'expected_checksum' => $validatedFile['digest'],
                     'actual_checksum' => $storedDigest,
-                    'expected_size' => $validatedFile->size,
+                    'expected_size' => $validatedFile['size'],
                     'actual_size' => $storedSize,
                 ], 'normal');
 
@@ -129,10 +129,6 @@ final class MediaReplacementStager
             throw $exception;
         }
 
-        return new StagedMediaFileData(
-            validatedFile: $validatedFile,
-            hash: $hash,
-            path: $path,
-        );
+        return ['validatedFile' => $validatedFile, 'hash' => $hash, 'path' => $path];
     }
 }

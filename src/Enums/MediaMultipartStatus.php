@@ -4,12 +4,9 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Enums;
 
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
-
 /**
  * Persisted state of a direct multipart upload session.
  */
-#[TypeScript]
 enum MediaMultipartStatus: string
 {
     case Initiated = 'initiated';

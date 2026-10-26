@@ -7,30 +7,25 @@ namespace Nvl\Media\Tests\Fixtures;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Contracts\MultipartUploadGateway;
-use Nvl\Media\Data\Multipart\CompletedMultipartObjectData;
-use Nvl\Media\Data\Multipart\CompleteMultipartUploadData;
-use Nvl\Media\Data\Multipart\MultipartUploadSessionData;
-use Nvl\Media\Data\Multipart\SignedMultipartPartData;
-use Nvl\Media\Data\Multipart\SignMultipartPartData;
 
 /** Deterministic provider boundary; all package receipts and scanning remain real. */
 final readonly class OwnershipMultipartGateway implements MultipartUploadGateway
 {
     public function __construct(private string $contents) {}
 
-    public function initiate(MultipartUploadSessionData $session): void {}
+    public function initiate(array $session): void {}
 
-    public function signPart(MultipartUploadSessionData $session, SignMultipartPartData $part): SignedMultipartPartData
+    public function signPart(array $session, array $part): array
     {
-        return new SignedMultipartPartData($part->partNumber, 'https://storage.example.test/part', [], new DateTimeImmutable('+5 minutes'));
+        return ['partNumber' => $part['partNumber'], 'url' => 'https://storage.example.test/part', 'headers' => [], 'expiresAt' => new DateTimeImmutable('+5 minutes')];
     }
 
-    public function complete(MultipartUploadSessionData $session, CompleteMultipartUploadData $completion): CompletedMultipartObjectData
+    public function complete(array $session, array $completion): array
     {
-        Storage::disk($session->disk)->put($session->objectKey, $this->contents);
+        Storage::disk($session['disk'])->put($session['objectKey'], $this->contents);
 
-        return new CompletedMultipartObjectData($session->objectKey, hash('sha256', $this->contents), strlen($this->contents), 'text/plain', 'fixture-object');
+        return ['path' => $session['objectKey'], 'checksum' => hash('sha256', $this->contents), 'size' => strlen($this->contents), 'mimeType' => 'text/plain', 'objectIdentity' => 'fixture-object'];
     }
 
-    public function abort(MultipartUploadSessionData $session): void {}
+    public function abort(array $session): void {}
 }

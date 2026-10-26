@@ -1,0 +1,23 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Nvl\Media\Tests\Fixtures\Data;
+
+/**
+ * Exact importer-owned staged object tuple.
+ *
+ * @api
+ */
+final readonly class StagedCatalogMedia
+{
+    public function __construct(
+        public string $operationId,
+        public string $tenantId,
+        public string $disk,
+        public string $storagePath,
+        public string $digest,
+        public int $size,
+        public ?string $ownerScopeKey = null,
+    ) {}
+}

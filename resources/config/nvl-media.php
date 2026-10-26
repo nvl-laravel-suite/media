@@ -11,18 +11,6 @@ use Nvl\Support\Config\PackageEnvironment;
 
 return [
     'models' => ['media' => Media::class],
-    'tenancy' => [
-        // Ownership classification is separate from HTTP association allowlists.
-        'owner_types' => [],
-        // Hosts may replace MediaTenantWorklist; the package never guesses a directory table.
-        'active_tenant_worklist' => [],
-    ],
-    /*
-    |--------------------------------------------------------------------------
-    | Optional HTTP Routes
-    |--------------------------------------------------------------------------
-    */
-    'routes' => ['api_enabled' => false, 'api_prefix' => 'nvl/api/v1', 'api_middleware' => ['api'], 'management_middleware' => ['auth', 'throttle:60,1'], 'assets_enabled' => true, 'assets_prefix' => 'nvl/media'],
     /*
     |--------------------------------------------------------------------------
     | Authorization

@@ -1,8 +1,8 @@
 <?php
 
 declare(strict_types=1);
-
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -11,13 +11,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Nvl\Media\Contracts\ListOwnerMediaContract;
-use Nvl\Media\Contracts\ListOwnerMediaSlotsContract;
 use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Contracts\MediaBatchAuthorization;
-use Nvl\Media\Data\Display\OwnerMediaSlotItemData;
-use Nvl\Media\Data\Display\OwnerMediaSlots;
-use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Exceptions\MediaBatchReadException;
 use Nvl\Media\Models\Media;
@@ -26,7 +21,9 @@ use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Providers\MediaServiceProvider;
 use Nvl\Media\Services\MediaBatchQueryBuilder;
+use Nvl\Media\Services\MediaOwnerBatchReader;
 use Nvl\Media\Services\MediaUrlResolver;
+use Nvl\Media\Services\OwnerMediaReader;
 use Nvl\Media\Services\UnsupportedMediaBatchAuthorization;
 use Nvl\Media\Support\MediaBatchOwnerAdmission;
 use Nvl\Media\Tests\Stubs\BatchMediaAuthorization;
@@ -37,9 +34,10 @@ use Nvl\Media\Tests\Stubs\IntegerBatchMediaOwner;
 use Nvl\Media\Tests\Stubs\NumericBatchMediaOwner;
 use Nvl\Media\Tests\Stubs\OtherBatchStringMediaOwner;
 use Nvl\Media\Tests\Stubs\OwnerSlotWorkflowModel;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Owners\OwnerBatch;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
-use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
+use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 
 beforeEach(function (): void {
     $this->batchMorphMap = Relation::morphMap();
@@ -52,61 +50,49 @@ beforeEach(function (): void {
         expect((new OwnerSlotWorkflowModel)->getConnection()->getDriverName())->toBe($driver);
     }
 });
-
 afterEach(function (): void {
     Relation::morphMap($this->batchMorphMap, false);
     Relation::requireMorphMap($this->batchRequiresMorphMap);
 });
-
 it('provides the bounded many owner media contract', function (int $count): void {
     $owners = [];
     for ($index = 0; $index < $count; $index++) {
         $owners[] = OwnerSlotWorkflowModel::query()->create(['name' => 'Owner']);
     }
-    $result = app(ListOwnerMediaSlotsContract::class)->execute($owners, ['document'], MediaActorData::system());
-    expect($result->order)->toHaveCount($count);
+    $result = app(MediaOwnerBatchReader::class)->read($owners, ['document'], SystemActor::Background);
+    expect($result['order'])->toHaveCount($count);
 })->with([1, 25, 100]);
-
 it('returns an object map without storage for an empty batch', function (): void {
-    $result = app(ListOwnerMediaSlotsContract::class)->execute([], ['document'], MediaActorData::system());
-    expect(json_encode($result->owners))->toBe('{}');
+    $result = app(MediaOwnerBatchReader::class)->read([], ['document'], SystemActor::Background);
+    expect($result['owners'])->toBe([]);
 });
-
 it('contains pre-existing caller ORs for direct and scoped host reads', function (bool $direct): void {
     $deleted = BatchMediaOwner::query()->create(['name' => 'Deleted']);
     $live = BatchMediaOwner::query()->create(['name' => 'Live']);
     batchMediaAssociation($live, Media::factory()->create(['is_public' => false]));
     DB::table($deleted->getTable())->where('id', $deleted->id)->update(['deleted_at' => now()]);
     $query = BatchMediaOwner::query()->withoutGlobalScopes()->whereKey($deleted->id)->orWhere($live->getQualifiedKeyName(), $live->id);
-    $actor = MediaActorData::system();
+    $actor = SystemActor::Background;
     $policy = app(MediaBatchAuthorization::class);
-
     if ($direct) {
         app(MediaBatchQueryBuilder::class)->has($query, 'document', $actor, $policy);
     } else {
         $query->hasNvlMedia('document', $actor, $policy);
     }
-
     expect($query->pluck('id')->all())->toBe([$live->id]);
 })->with([true, false]);
-
 /** Attach seeded storage without entering filesystem ingestion in read-focused tests. */
 function batchMediaAssociation(Model $owner, Media $asset, string $slot = 'document', int $order = 0, bool $active = true): MediaAssociation
 {
-    return MediaAssociation::query()->create([
-        'media_id' => $asset->id, 'associable_type' => $owner->getMorphClass(), 'associable_id' => (string) $owner->getKey(),
-        'collection' => $slot, 'order' => $order, 'is_active' => $active,
-    ]);
+    return MediaAssociation::query()->create(['media_id' => $asset->id, 'associable_type' => $owner->getMorphClass(), 'associable_id' => (string) $owner->getKey(), 'collection' => $slot, 'order' => $order, 'is_active' => $active]);
 }
-
 /** Read exact native identity fields from a public object map.
  * @return list<OwnerMediaSlotItemData>
  */
-function batchMediaItems(OwnerMediaSlots $result, Model $owner, string $slot = 'document'): array
+function batchMediaItems(array $result, Model $owner, string $slot = 'document'): array
 {
-    return $result->owners->{$owner->getMorphClass()}->{(string) $owner->getKey()}->slots->{$slot};
+    return $result['owners'][$owner->getMorphClass()][(string) $owner->getKey()]['slots']->{$slot};
 }
-
 /** Count logical package table reads independent of driver quoting.
  * @return list<array{query: string, bindings: array<int, mixed>, time: float}>
  */
@@ -125,7 +111,6 @@ function batchMediaStorageQueries(): array
         return false;
     }));
 }
-
 it('paginates every authorized owner collection and counts distinct original bytes beyond previews', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $other = BatchMediaOwner::query()->create(['name' => 'Other']);
@@ -142,33 +127,22 @@ it('paginates every authorized owner collection and counts distinct original byt
     $denied = Media::factory()->create(['size' => 999]);
     batchMediaAssociation($owner, $denied, 'unbounded');
     app(MediaBatchAuthorization::class)->deniedAssets = [$denied->id];
-    $reader = app(ListOwnerMediaContract::class);
+    $reader = app(OwnerMediaReader::class);
     $received = [];
-
     foreach ([1, 2, 3] as $page) {
-        $result = $reader->execute(MediaActorData::system(), $owner, page: $page, perPage: 5);
-        expect($result->page)->toBe($page)
-            ->and($result->perPage)->toBe(5)
-            ->and($result->total)->toBe(14)
-            ->and($result->collectionCounts->unbounded)->toBe(13)
-            ->and($result->collectionCounts->library)->toBe(1)
-            ->and($result->distinctAssetCount)->toBe(13)
-            ->and($result->originalBytes)->toBe(1300)
-            ->and($result->items)->toHaveCount($page === 3 ? 4 : 5);
-        foreach ($result->items as $item) {
-            $received[] = $item->media->associationId;
-            expect($item->media)->toBeInstanceOf(OwnerMediaSlotItemData::class)
-                ->and($item->media->url)->toBeNull();
+        $result = $reader->read(SystemActor::Background, $owner, page: $page, perPage: 5);
+        expect($result['page'])->toBe($page)->and($result['perPage'])->toBe(5)->and($result['total'])->toBe(14)->and($result['collectionCounts']->unbounded)->toBe(13)->and($result['collectionCounts']->library)->toBe(1)->and($result['distinctAssetCount'])->toBe(13)->and($result['originalBytes'])->toBe(1300)->and($result['items'])->toHaveCount($page === 3 ? 4 : 5);
+        foreach ($result['items'] as $item) {
+            $received[] = $item['media']['associationId'];
+            expect($item['media'])->toBeArray()->and($item['media']['url'])->toBeNull();
         }
     }
     sort($received);
     sort($associations);
     expect($received)->toBe($associations);
-    $gallery = $reader->execute(MediaActorData::system(), $owner, collection: 'unbounded', perPage: 10000);
-    expect($gallery->total)->toBe(13)->and($gallery->perPage)->toBe(100)
-        ->and($gallery->distinctAssetCount)->toBe(13)->and($gallery->originalBytes)->toBe(1300);
+    $gallery = $reader->read(SystemActor::Background, $owner, collection: 'unbounded', perPage: 10000);
+    expect($gallery['total'])->toBe(13)->and($gallery['perPage'])->toBe(100)->and($gallery['distinctAssetCount'])->toBe(13)->and($gallery['originalBytes'])->toBe(1300);
 });
-
 it('returns requested current public variation URLs without private capabilities or missing fallbacks', function (bool $enabled): void {
     config(['nvl-media.assets.allowed_parameters' => $enabled ? ['v'] : []]);
     Storage::fake('public');
@@ -182,33 +156,21 @@ it('returns requested current public variation URLs without private capabilities
         Storage::disk($asset->disk)->put($variation->getPath(), 'thumbnail');
         $assets[] = $asset;
     }
-
-    $result = app(ListOwnerMediaContract::class)->execute(MediaActorData::system(), $owner, variations: ['thumbnail', 'missing']);
-    $items = collect($result->items)->keyBy(static fn ($item): string => $item->media->mediaId);
-
+    $result = app(OwnerMediaReader::class)->read(SystemActor::Background, $owner, variations: ['thumbnail', 'missing']);
+    $items = collect($result['items'])->keyBy(static fn ($item): string => $item['media']['mediaId']);
     if ($enabled) {
-        expect($items[$assets[0]->id]->variationUrls->thumbnail)->toBeString()->toContain('thumbnail');
+        expect($items[$assets[0]->id]['variationUrls']->thumbnail)->toBeString()->toContain('thumbnail');
     } else {
-        expect($items[$assets[0]->id]->variationUrls->thumbnail)->toBeNull();
+        expect($items[$assets[0]->id]['variationUrls']->thumbnail)->toBeNull();
     }
-    expect($items[$assets[0]->id]->variationUrls->missing)->toBeNull()
-        ->and($items[$assets[1]->id]->media->url)->toBeNull()
-        ->and(get_object_vars($items[$assets[1]->id]->variationUrls))->toBe(['thumbnail' => null, 'missing' => null])
-        ->and(json_encode($result))->not->toContain('signature=', 'uploadedBy', 'storagePath');
+    expect($items[$assets[0]->id]['variationUrls']->missing)->toBeNull()->and($items[$assets[1]->id]['media']['url'])->toBeNull()->and(get_object_vars($items[$assets[1]->id]['variationUrls']))->toBe(['thumbnail' => null, 'missing' => null])->and(json_encode($result))->not->toContain('signature=', 'uploadedBy', 'storagePath');
 })->with([true, false]);
-
 it('serializes owner variation maps as objects for empty and numeric labels', function (array $labels, string $expected): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     batchMediaAssociation($owner, Media::factory()->create(['is_public' => false]), 'unbounded');
-
-    $result = app(ListOwnerMediaContract::class)->execute(MediaActorData::system(), $owner, variations: $labels);
-
-    expect(json_encode($result->items[0]->variationUrls))->toBe($expected);
-})->with([
-    'empty' => [[], '{}'],
-    'numeric' => [['0', '1'], '{"0":null,"1":null}'],
-]);
-
+    $result = app(OwnerMediaReader::class)->read(SystemActor::Background, $owner, variations: $labels);
+    expect(json_encode($result['items'][0]['variationUrls']))->toBe($expected);
+})->with(['empty' => [[], '{}'], 'numeric' => [['0', '1'], '{"0":null,"1":null}']]);
 it('resolves exact numeric variation labels independently of a stale numerically equal label', function (): void {
     Storage::fake('public');
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
@@ -222,42 +184,26 @@ it('resolves exact numeric variation labels independently of a stale numerically
             $asset->save();
         }
     }
-
-    $result = app(ListOwnerMediaContract::class)->execute(MediaActorData::system(), $owner, variations: ['0', '00']);
-
-    expect($result->items[0]->variationUrls->{'0'})->toBeNull()
-        ->and($result->items[0]->variationUrls->{'00'})->toBeString()->toContain('v=00')
-        ->and($asset->getVariation('00')?->label)->toBe('00')
-        ->and($asset->getVariation('0e0'))->toBeNull()
-        ->and($asset->hasVariation('0e0'))->toBeFalse();
+    $result = app(OwnerMediaReader::class)->read(SystemActor::Background, $owner, variations: ['0', '00']);
+    expect($result['items'][0]['variationUrls']->{'0'})->toBeNull()->and($result['items'][0]['variationUrls']->{'00'})->toBeString()->toContain('v=00')->and($asset->getVariation('00')?->label)->toBe('00')->and($asset->getVariation('0e0'))->toBeNull()->and($asset->hasVariation('0e0'))->toBeFalse();
 });
-
 it('fails complete owner media reads closed without a query authorization adapter', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     app()->instance(MediaBatchAuthorization::class, new UnsupportedMediaBatchAuthorization);
-
-    expect(fn () => app(ListOwnerMediaContract::class)->execute(MediaActorData::system(), $owner))
-        ->toThrow(MediaBatchReadException::class);
+    expect(fn () => app(OwnerMediaReader::class)->read(SystemActor::Background, $owner))->toThrow(MediaBatchReadException::class);
 });
-
 it('bounds complete owner collection aggregates before projecting an oversized result', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $asset = Media::factory()->create(['is_public' => false]);
     $rows = [];
     for ($index = 0; $index < 1001; $index++) {
-        $rows[] = [
-            'id' => (string) Str::uuid(), 'media_id' => $asset->id, 'associable_type' => $owner->getMorphClass(),
-            'associable_id' => (string) $owner->getKey(), 'collection' => 'collection-'.$index, 'is_active' => true, 'order' => 0,
-        ];
+        $rows[] = ['id' => (string) Str::uuid(), 'media_id' => $asset->id, 'associable_type' => $owner->getMorphClass(), 'associable_id' => (string) $owner->getKey(), 'collection' => 'collection-'.$index, 'is_active' => true, 'order' => 0];
     }
     foreach (array_chunk($rows, 200) as $chunk) {
         DB::table((new MediaAssociation)->getTable())->insert($chunk);
     }
-
-    expect(fn () => app(ListOwnerMediaContract::class)->execute(MediaActorData::system(), $owner))
-        ->toThrow(MediaBatchReadException::class, '1,000');
+    expect(fn () => app(OwnerMediaReader::class)->read(SystemActor::Background, $owner))->toThrow(MediaBatchReadException::class, '1,000');
 });
-
 it('holds total localized queries fixed and projects nine safe fields', function (int $count): void {
     Storage::fake('public');
     $owners = [];
@@ -272,98 +218,79 @@ it('holds total localized queries fixed and projects nine safe fields', function
         $owners[] = $owner;
         $assets[] = [$asset, $association];
     }
-    app(TenantBoundary::class)->query(Media::query(), 'media.assets');
+    app(OwnershipBoundary::class)->query(Media::query(), 'media.assets');
     DB::enableQueryLog();
     DB::flushQueryLog();
-    $result = app(ListOwnerMediaSlotsContract::class)->execute($owners, ['document', '0'], MediaActorData::system(), 'bg');
-    expect(DB::getQueryLog())->toHaveCount(4);
+    $result = app(MediaOwnerBatchReader::class)->read($owners, ['document', '0'], SystemActor::Background, 'bg');
+    expect(batchMediaStorageQueries())->toHaveCount(3);
     foreach ($owners as $index => $owner) {
         $item = batchMediaItems($result, $owner)[0];
         [$asset, $association] = $assets[$index];
-        expect(array_keys($item->toArray()))->toBe(['associationId', 'mediaId', 'title', 'altText', 'caption', 'mimeType', 'size', 'isPublic', 'url'])
-            ->and($item->associationId)->toBe($association->id)
-            ->and($item->title)->toBe('Заглавие')->and($item->altText)->toBe('Accessible')->and($item->caption)->toBe('')
-            ->and($item->url === null)->toBe(! $asset->is_public)
-            ->and(batchMediaItems($result, $owner, '0'))->toBe([]);
+        expect(array_keys($item))->toBe(['associationId', 'mediaId', 'title', 'altText', 'caption', 'mimeType', 'size', 'isPublic', 'url'])->and($item['associationId'])->toBe($association->id)->and($item['title'])->toBe('Заглавие')->and($item['altText'])->toBe('Accessible')->and($item['caption'])->toBe('')->and($item['url'] === null)->toBe(! $asset->is_public)->and(batchMediaItems($result, $owner, '0'))->toBe([]);
     }
-    expect(DB::getQueryLog())->toHaveCount(4);
+    expect(batchMediaStorageQueries())->toHaveCount(3);
     foreach (DB::getQueryLog() as $entry) {
         expect($entry['query'])->not->toContain((new MediaImageVariation)->getTable());
     }
 })->with([1, 25, 100]);
-
 it('builds standalone original URLs from existing folder and hash columns', function (): void {
-    config([
-        'nvl-media.root_folder' => 'media',
-        'filesystems.disks.public.url' => 'https://assets.example.test/objects',
-    ]);
+    config(['nvl-media.root_folder' => 'media', 'filesystems.disks.public.url' => 'https://assets.example.test/objects']);
     Storage::fake('public', ['url' => 'https://assets.example.test/objects']);
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $asset = Media::factory()->create(['is_public' => true, 'folder' => 'documents', 'hash' => 'report.pdf']);
     batchMediaAssociation($owner, $asset);
-    expect(Schema::connection($asset->getConnectionName())->hasColumn($asset->getTable(), 'storage_path'))->toBeFalse()
-        ->and(app(MediaUrlResolver::class)->publicUrl($asset, []))->toBe('https://assets.example.test/objects/media/documents/report.pdf');
-    app(TenantBoundary::class)->query(Media::query(), 'media.assets');
+    expect(Schema::connection($asset->getConnectionName())->hasColumn($asset->getTable(), 'storage_path'))->toBeFalse()->and(app(MediaUrlResolver::class)->publicUrl($asset, []))->toBe('https://assets.example.test/objects/media/documents/report.pdf');
+    app(OwnershipBoundary::class)->query(Media::query(), 'media.assets');
     DB::enableQueryLog();
     DB::flushQueryLog();
-
-    $result = app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['document'], MediaActorData::system());
-
-    expect(batchMediaItems($result, $owner)[0]->url)->toBe('https://assets.example.test/objects/media/documents/report.pdf')
-        ->and(DB::getQueryLog())->toHaveCount(4);
+    $result = app(MediaOwnerBatchReader::class)->read([$owner], ['document'], SystemActor::Background);
+    expect(batchMediaItems($result, $owner)[0]['url'])->toBe('https://assets.example.test/objects/media/documents/report.pdf')->and(batchMediaStorageQueries())->toHaveCount(3);
     foreach (batchMediaStorageQueries() as $entry) {
         expect($entry['query'])->not->toContain('storage_path');
     }
 });
-
-it('accounts for the fixed disabled tenancy cold safety probe separately', function (): void {
+it('bounds protected reads on a cold native ownership scope', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $asset = Media::factory()->create(['is_public' => false]);
     batchMediaAssociation($owner, $asset);
     app()->forgetScopedInstances();
     DB::enableQueryLog();
     DB::flushQueryLog();
-    app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['document'], MediaActorData::system());
-    expect(DB::getQueryLog())->toHaveCount(5);
+    app(MediaOwnerBatchReader::class)->read([$owner], ['document'], SystemActor::Background);
+    expect(batchMediaStorageQueries())->toHaveCount(3);
 });
-
 it('returns an empty batch with unsupported policy and no queries', function (): void {
     app()->instance(MediaBatchAuthorization::class, new UnsupportedMediaBatchAuthorization);
     DB::enableQueryLog();
     DB::flushQueryLog();
-    $result = app(ListOwnerMediaSlotsContract::class)->execute([], [], MediaActorData::system(), 'unsupported');
-    expect($result->owners)->toBeInstanceOf(stdClass::class)->and(DB::getQueryLog())->toBe([]);
+    $result = app(MediaOwnerBatchReader::class)->read([], [], SystemActor::Background, 'unsupported');
+    expect($result['owners'])->toBeArray()->and(DB::getQueryLog())->toBe([]);
 });
-
 it('fails unsupported authorization before package storage', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     app()->instance(MediaBatchAuthorization::class, new UnsupportedMediaBatchAuthorization);
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['document'], MediaActorData::system()))
-        ->toThrow(MediaBatchReadException::class, 'explicit MediaBatchAuthorization');
+    expect(fn () => app(MediaOwnerBatchReader::class)->read([$owner], ['document'], SystemActor::Background))->toThrow(MediaBatchReadException::class, 'explicit MediaBatchAuthorization');
     expect(batchMediaStorageQueries())->toBe([]);
 });
-
 it('rejects owner denial before package storage', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     app(MediaBatchAuthorization::class)->denyOwners = true;
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['document'], MediaActorData::system()))->toThrow(AuthorizationException::class);
+    expect(fn () => app(MediaOwnerBatchReader::class)->read([$owner], ['document'], SystemActor::Background))->toThrow(AuthorizationException::class);
     expect(batchMediaStorageQueries())->toBe([]);
 });
-
 it('validates every canonical owner declaration and ignores forged caller facts', function (): void {
     $good = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $restricted = BatchMediaOwner::query()->create(['name' => 'Restricted']);
     $restricted->name = 'Owner';
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => app(ListOwnerMediaSlotsContract::class)->execute([$good, $restricted], ['document'], MediaActorData::system()))->toThrow(InvalidArgumentException::class, 'Every canonical');
+    expect(fn () => app(MediaOwnerBatchReader::class)->read([$good, $restricted], ['document'], SystemActor::Background))->toThrow(InvalidArgumentException::class, 'Every canonical');
     expect(batchMediaStorageQueries())->toBe([])->and(app(MediaBatchAuthorization::class)->admitted[1]->name)->toBe('Restricted');
 });
-
 it('rejects absent and soft deleted owners before package storage', function (bool $deleted): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     if ($deleted) {
@@ -373,10 +300,9 @@ it('rejects absent and soft deleted owners before package storage', function (bo
     }
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['document'], MediaActorData::system()))->toThrow(TenantBoundaryViolation::class);
+    expect(fn () => app(MediaOwnerBatchReader::class)->read([$owner], ['document'], SystemActor::Background))->toThrow(OwnershipViolation::class);
     expect(batchMediaStorageQueries())->toBe([]);
 })->with([false, true]);
-
 it('validates malformed owners and finite slots before storage', function (string $mode): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $owners = [$owner];
@@ -409,10 +335,9 @@ it('validates malformed owners and finite slots before storage', function (strin
     }
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => app(ListOwnerMediaSlotsContract::class)->execute($owners, $slots, MediaActorData::system()))->toThrow($mode === 'foreign_connection' || $mode === 'foreign_table' ? TenantBoundaryViolation::class : InvalidArgumentException::class);
+    expect(fn () => app(MediaOwnerBatchReader::class)->read($owners, $slots, SystemActor::Background))->toThrow($mode === 'foreign_connection' || $mode === 'foreign_table' ? OwnershipViolation::class : InvalidArgumentException::class);
     expect(batchMediaStorageQueries())->toBe([]);
 })->with(['unpersisted', '101', 'conflict', 'empty_slots', '21_slots', 'bad_slot', 'foreign_connection', 'foreign_table']);
-
 it('bounds dense slot rows in SQL using each declaration and stable ordering', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $expected = [];
@@ -425,30 +350,27 @@ it('bounds dense slot rows in SQL using each declaration and stable ordering', f
             }
         }
     }
-    app(TenantBoundary::class)->query(Media::query(), 'media.assets');
+    app(OwnershipBoundary::class)->query(Media::query(), 'media.assets');
     $hydrated = 0;
     Media::retrieved(static function () use (&$hydrated): void {
         $hydrated++;
     });
     DB::enableQueryLog();
     DB::flushQueryLog();
-    $result = app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['document', 'library', 'unbounded'], MediaActorData::system());
+    $result = app(MediaOwnerBatchReader::class)->read([$owner], ['document', 'library', 'unbounded'], SystemActor::Background);
     foreach ($expected as $slot => $ids) {
-        expect(array_map(static fn ($item): string => $item->associationId, batchMediaItems($result, $owner, $slot)))->toBe($ids);
+        expect(array_map(static fn ($item): string => $item['associationId'], batchMediaItems($result, $owner, $slot)))->toBe($ids);
     }
-    expect($hydrated)->toBe(14)->and(DB::getQueryLog())->toHaveCount(4)
-        ->and(DB::getQueryLog()[1]['query'])->toContain('ROW_NUMBER()', 'nvl_media_rank');
+    expect($hydrated)->toBe(14)->and(batchMediaStorageQueries())->toHaveCount(3)->and(batchMediaStorageQueries()[0]['query'])->toContain('ROW_NUMBER()', 'nvl_media_rank');
 });
-
 it('uses canonical collection identity rather than stale slot metadata', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $asset = Media::factory()->create(['is_public' => false]);
     $association = batchMediaAssociation($owner, $asset, 'library');
     $association->update(['metadata' => ['slot' => 'document']]);
-    $result = app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['document', 'library'], MediaActorData::system());
-    expect(batchMediaItems($result, $owner))->toBe([])->and(batchMediaItems($result, $owner, 'library')[0]->mediaId)->toBe($asset->id);
+    $result = app(MediaOwnerBatchReader::class)->read([$owner], ['document', 'library'], SystemActor::Background);
+    expect(batchMediaItems($result, $owner))->toBe([])->and(batchMediaItems($result, $owner, 'library')[0]['mediaId'])->toBe($asset->id);
 });
-
 it('excludes inactive denied deleted and unavailable assets before rank and host existence', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $policy = app(MediaBatchAuthorization::class);
@@ -469,11 +391,9 @@ it('excludes inactive denied deleted and unavailable assets before rank and host
             $asset->delete();
         }
     }
-    $result = app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['unbounded'], MediaActorData::system());
-    expect(batchMediaItems($result, $owner, 'unbounded'))->toHaveCount(2)
-        ->and(BatchMediaOwner::query()->select(['id', 'name'])->hasNvlMedia('unbounded', MediaActorData::system(), $policy)->first()?->getAttributes())->toBe(['id' => $owner->id, 'name' => 'Owner']);
+    $result = app(MediaOwnerBatchReader::class)->read([$owner], ['unbounded'], SystemActor::Background);
+    expect(batchMediaItems($result, $owner, 'unbounded'))->toHaveCount(2)->and(BatchMediaOwner::query()->select(['id', 'name'])->hasNvlMedia('unbounded', SystemActor::Background, $policy)->first()?->getAttributes())->toBe(['id' => $owner->id, 'name' => 'Owner']);
 });
-
 it('requires both association and asset view in batch and host queries', function (string $denial): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $asset = Media::factory()->create(['is_public' => true]);
@@ -484,21 +404,18 @@ it('requires both association and asset view in batch and host queries', functio
     } else {
         $policy->deniedAssociations[] = $assoc->id;
     }
-    $result = app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['document'], MediaActorData::system());
-    expect(batchMediaItems($result, $owner))->toBe([])
-        ->and(BatchMediaOwner::query()->hasNvlMedia('document', MediaActorData::system(), $policy)->exists())->toBeFalse();
+    $result = app(MediaOwnerBatchReader::class)->read([$owner], ['document'], SystemActor::Background);
+    expect(batchMediaItems($result, $owner))->toBe([])->and(BatchMediaOwner::query()->hasNvlMedia('document', SystemActor::Background, $policy)->exists())->toBeFalse();
 })->with(['asset', 'association']);
-
 it('fails unsupported host asset view without calling scopeMedia with an empty batch', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $policy = app(MediaBatchAuthorization::class);
     $policy->unsupportedHost = true;
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => BatchMediaOwner::query()->hasNvlMedia('document', MediaActorData::system(), $policy))->toThrow(MediaBatchReadException::class, 'host View adapter');
+    expect(fn () => BatchMediaOwner::query()->hasNvlMedia('document', SystemActor::Background, $policy))->toThrow(MediaBatchReadException::class, 'host View adapter');
     expect(batchMediaStorageQueries())->toBe([]);
 });
-
 it('returns null when a public original URL is unavailable and never calls private delivery', function (): void {
     Storage::fake('public');
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
@@ -506,25 +423,20 @@ it('returns null when a public original URL is unavailable and never calls priva
     batchMediaAssociation($owner, $asset);
     config()->set('filesystems.disks.public.url', null);
     config()->set('nvl-media.assets.public_route_name', 'missing.public.asset');
-    $result = app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['document'], MediaActorData::system());
-    expect(batchMediaItems($result, $owner)[0]->url)->toBeNull();
+    $result = app(MediaOwnerBatchReader::class)->read([$owner], ['document'], SystemActor::Background);
+    expect(batchMediaItems($result, $owner)[0]['url'])->toBeNull();
 });
-
 it('preserves object map identities order duplicates and numeric slots', function (): void {
     Relation::morphMap([], false);
     try {
         $owner = NumericBatchMediaOwner::query()->create(['name' => 'Owner']);
-        $result = app(ListOwnerMediaSlotsContract::class)->execute([$owner, $owner], ['0', 'document', '0'], MediaActorData::system());
-        $json = json_decode($result->toJson());
-        expect($result->order)->toBe([['type' => '7', 'id' => $owner->id]])
-            ->and($json->owners)->toBeInstanceOf(stdClass::class)->and($json->owners->{'7'})->toBeInstanceOf(stdClass::class)
-            ->and($json->owners->{'7'}->{$owner->id}->slots)->toBeInstanceOf(stdClass::class)
-            ->and($json->owners->{'7'}->{$owner->id}->slots->{'0'})->toBe([]);
+        $result = app(MediaOwnerBatchReader::class)->read([$owner, $owner], ['0', 'document', '0'], SystemActor::Background);
+        $json = json_decode(json_encode($result));
+        expect($result['order'])->toBe([['type' => '7', 'id' => $owner->id]])->and($json->owners)->toBeInstanceOf(stdClass::class)->and($json->owners->{'7'})->toBeInstanceOf(stdClass::class)->and($json->owners->{'7'}->{$owner->id}->slots)->toBeInstanceOf(stdClass::class)->and($json->owners->{'7'}->{$owner->id}->slots->{'0'})->toBe([]);
     } finally {
         Relation::morphMap([], false);
     }
 });
-
 it('preserves imperative policy bindings before and after package registration', function (): void {
     $policy = Mockery::mock(MediaAuthorization::class);
     app()->instance(MediaAuthorization::class, $policy);
@@ -538,7 +450,6 @@ it('preserves imperative policy bindings before and after package registration',
     (new MediaServiceProvider(app()))->register();
     expect(app(MediaBatchAuthorization::class))->toBe($batch);
 });
-
 it('holds the absolute twenty thousand slot transfer ceiling before hydration', function (): void {
     $owners = [];
     for ($index = 0; $index < 100; $index++) {
@@ -557,14 +468,14 @@ it('holds the absolute twenty thousand slot transfer ceiling before hydration', 
     foreach (array_chunk($rows, 250) as $chunk) {
         DB::table((new MediaAssociation)->getTable())->insert($chunk);
     }
-    app(TenantBoundary::class)->query(Media::query(), 'media.assets');
+    app(OwnershipBoundary::class)->query(Media::query(), 'media.assets');
     DB::enableQueryLog();
     DB::flushQueryLog();
-    $result = app(ListOwnerMediaSlotsContract::class)->execute($owners, $slots, MediaActorData::system());
-    $queries = DB::getQueryLog();
-    expect($queries)->toHaveCount(4);
+    $result = app(MediaOwnerBatchReader::class)->read($owners, $slots, SystemActor::Background);
+    $queries = batchMediaStorageQueries();
+    expect($queries)->toHaveCount(3);
     DB::disableQueryLog();
-    $ranked = $queries[1];
+    $ranked = $queries[0];
     expect(DB::select($ranked['query'], $ranked['bindings']))->toHaveCount(20000);
     foreach ($owners as $owner) {
         foreach ($slots as $slot) {
@@ -572,7 +483,6 @@ it('holds the absolute twenty thousand slot transfer ceiling before hydration', 
         }
     }
 });
-
 it('rejects oversized locale fallback before any SQL', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $locales = ['en', 'bg', 'de', 'fr', 'es', 'it', 'pt', 'nl', 'sv', 'da', 'no'];
@@ -580,10 +490,9 @@ it('rejects oversized locale fallback before any SQL', function (): void {
     config()->set('nvl-translatable.fallback_locales', array_slice($locales, 1));
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['document'], MediaActorData::system(), 'en'))->toThrow(InvalidArgumentException::class, 'ten requested');
+    expect(fn () => app(MediaOwnerBatchReader::class)->read([$owner], ['document'], SystemActor::Background, 'en'))->toThrow(InvalidArgumentException::class, 'ten requested');
     expect(DB::getQueryLog())->toBe([]);
 });
-
 it('rejects actual host connection FROM alias and union drift before package SQL', function (string $mode): void {
     config(['database.connections.batch_foreign' => config('database.connections.testing')]);
     $query = BatchMediaOwner::query();
@@ -601,21 +510,19 @@ it('rejects actual host connection FROM alias and union drift before package SQL
     }
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => $query->hasNvlMedia('document', MediaActorData::system(), app(MediaBatchAuthorization::class)))->toThrow(TenantBoundaryViolation::class);
+    expect(fn () => $query->hasNvlMedia('document', SystemActor::Background, app(MediaBatchAuthorization::class)))->toThrow(OwnershipViolation::class);
     expect(DB::getQueryLog())->toBe([]);
 })->with(['connection', 'from', 'alias', 'union']);
-
 it('rejects declared connection removal with an unchanged effective connection', function (): void {
     config(['database.connections.batch_declared' => config('database.connections.testing'), 'nvl-media.connection' => 'batch_declared']);
     $prior = DB::getDefaultConnection();
     DB::setDefaultConnection('batch_declared');
     try {
-        expect(fn () => app(MediaBatchOwnerAdmission::class)->assertPrototype((new DeclaredConnectionBatchMediaOwner)->setConnection(null)))->toThrow(TenantBoundaryViolation::class);
+        expect(fn () => app(MediaBatchOwnerAdmission::class)->assertPrototype((new DeclaredConnectionBatchMediaOwner)->setConnection(null)))->toThrow(OwnershipViolation::class);
     } finally {
         DB::setDefaultConnection($prior);
     }
 });
-
 it('keeps two owner dependent private asset views paired across batch and host', function (): void {
     $allowed = BatchMediaOwner::query()->create(['name' => 'Allowed']);
     $denied = BatchMediaOwner::query()->create(['name' => 'Denied']);
@@ -626,22 +533,20 @@ it('keeps two owner dependent private asset views paired across batch and host',
     {
         public function __construct(private string $viewOwner) {}
 
-        public function scopeAssociations(Builder $query, OwnerBatch $batch, MediaActorData $actor): void
+        public function scopeAssociations(Builder $query, OwnerBatch $batch, Authenticatable|SystemActor $actor): void
         {
             $query->whereHas('media', fn (Builder $asset) => $asset->whereRaw($query->getModel()->qualifyColumn('associable_id').' = ?', [$this->viewOwner]));
         }
 
-        public function scopeHostAssociations(Builder $query, Model $ownerPrototype, MediaActorData $actor, string $slot): void
+        public function scopeHostAssociations(Builder $query, Model $ownerPrototype, Authenticatable|SystemActor $actor, string $slot): void
         {
             $query->whereHas('media', fn (Builder $asset) => $asset->whereRaw($query->getModel()->qualifyColumn('associable_id').' = ?', [$this->viewOwner]));
         }
     };
     app()->instance(MediaBatchAuthorization::class, $policy);
-    $result = app(ListOwnerMediaSlotsContract::class)->execute([$allowed, $denied], ['document'], MediaActorData::system());
-    expect(batchMediaItems($result, $allowed)[0]->url)->toBeNull()->and(batchMediaItems($result, $denied))->toBe([])
-        ->and(BatchMediaOwner::query()->hasNvlMedia('document', MediaActorData::system(), $policy)->pluck('id')->all())->toBe([$allowed->id]);
+    $result = app(MediaOwnerBatchReader::class)->read([$allowed, $denied], ['document'], SystemActor::Background);
+    expect(batchMediaItems($result, $allowed)[0]['url'])->toBeNull()->and(batchMediaItems($result, $denied))->toBe([])->and(BatchMediaOwner::query()->hasNvlMedia('document', SystemActor::Background, $policy)->pluck('id')->all())->toBe([$allowed->id]);
 });
-
 it('preserves host global scopes and selections and admits canonical loaded owners', function (): void {
     $visible = BatchMediaOwner::query()->create(['name' => 'Visible']);
     $hidden = BatchMediaOwner::query()->create(['name' => 'Hidden']);
@@ -650,15 +555,13 @@ it('preserves host global scopes and selections and admits canonical loaded owne
     }
     BatchMediaOwner::addGlobalScope('batch-visible', static fn (Builder $query) => $query->where('name', 'Visible'));
     $visible->name = 'Forged';
-    app(ListOwnerMediaSlotsContract::class)->execute([$visible], ['document'], MediaActorData::system());
-    expect(app(MediaBatchAuthorization::class)->admitted[0]->name)->toBe('Visible')
-        ->and(BatchMediaOwner::query()->select('id', 'name')->hasNvlMedia('document', MediaActorData::system(), app(MediaBatchAuthorization::class))->get()->modelKeys())->toBe([$visible->id]);
+    app(MediaOwnerBatchReader::class)->read([$visible], ['document'], SystemActor::Background);
+    expect(app(MediaBatchAuthorization::class)->admitted[0]->name)->toBe('Visible')->and(BatchMediaOwner::query()->select('id', 'name')->hasNvlMedia('document', SystemActor::Background, app(MediaBatchAuthorization::class))->get()->modelKeys())->toBe([$visible->id]);
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => app(ListOwnerMediaSlotsContract::class)->execute([$hidden], ['document'], MediaActorData::system()))->toThrow(TenantBoundaryViolation::class);
+    expect(fn () => app(MediaOwnerBatchReader::class)->read([$hidden], ['document'], SystemActor::Background))->toThrow(OwnershipViolation::class);
     expect(batchMediaStorageQueries())->toBe([]);
 });
-
 it('contains broad policy OR clauses within mandatory ownership active lifecycle and slot predicates', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $foreign = BatchMediaOwner::query()->create(['name' => 'Foreign']);
@@ -670,27 +573,25 @@ it('contains broad policy OR clauses within mandatory ownership active lifecycle
     batchMediaAssociation($owner, Media::factory()->create(), 'document', 0, false);
     $policy = new class extends BatchMediaAuthorization
     {
-        public function scopeAssociations(Builder $query, OwnerBatch $batch, MediaActorData $actor): void
+        public function scopeAssociations(Builder $query, OwnerBatch $batch, Authenticatable|SystemActor $actor): void
         {
             $query->whereRaw('1 = 0')->orWhereRaw('1 = 1');
         }
 
-        public function scopeMedia(Builder $query, OwnerBatch $batch, MediaActorData $actor): void
+        public function scopeMedia(Builder $query, OwnerBatch $batch, Authenticatable|SystemActor $actor): void
         {
             $query->whereRaw('1 = 0')->orWhereRaw('1 = 1');
         }
 
-        public function scopeHostAssociations(Builder $query, Model $ownerPrototype, MediaActorData $actor, string $slot): void
+        public function scopeHostAssociations(Builder $query, Model $ownerPrototype, Authenticatable|SystemActor $actor, string $slot): void
         {
             $query->whereRaw('1 = 0')->orWhereRaw('1 = 1');
         }
     };
     app()->instance(MediaBatchAuthorization::class, $policy);
-    $result = app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['document'], MediaActorData::system());
-    expect(batchMediaItems($result, $owner))->toHaveCount(1)->and(batchMediaItems($result, $owner)[0]->mediaId)->toBe($allowed->id)
-        ->and(BatchMediaOwner::query()->whereKey($owner->id)->hasNvlMedia('document', MediaActorData::system(), $policy)->pluck('id')->all())->toBe([$owner->id]);
+    $result = app(MediaOwnerBatchReader::class)->read([$owner], ['document'], SystemActor::Background);
+    expect(batchMediaItems($result, $owner))->toHaveCount(1)->and(batchMediaItems($result, $owner)[0]['mediaId'])->toBe($allowed->id)->and(BatchMediaOwner::query()->whereKey($owner->id)->hasNvlMedia('document', SystemActor::Background, $policy)->pluck('id')->all())->toBe([$owner->id]);
 });
-
 it('uses byte exact morph and string keys without Cartesian or collation leakage', function (): void {
     Schema::create('batch_string_media_owners', function (Blueprint $table): void {
         $id = $table->string('id')->primary();
@@ -716,18 +617,16 @@ it('uses byte exact morph and string keys without Cartesian or collation leakage
         $trailing->update(['associable_id' => 'A ']);
         $stale = batchMediaAssociation($owners[0], Media::factory()->create(['is_public' => false]), 'unbounded');
         $stale->update(['associable_type' => 'Host:Strings', 'collection' => 'document']);
-        $partial = app(ListOwnerMediaSlotsContract::class)->execute([$owners[0], $other], ['document'], MediaActorData::system());
+        $partial = app(MediaOwnerBatchReader::class)->read([$owners[0], $other], ['document'], SystemActor::Background);
         expect(batchMediaItems($partial, $owners[0]))->toHaveCount(1)->and(batchMediaItems($partial, $other))->toHaveCount(1);
-        $all = app(ListOwnerMediaSlotsContract::class)->execute($owners, ['document'], MediaActorData::system());
+        $all = app(MediaOwnerBatchReader::class)->read($owners, ['document'], SystemActor::Background);
         foreach ($owners as $owner) {
-            expect(batchMediaItems($all, $owner))->toHaveCount(1)
-                ->and(BatchStringMediaOwner::query()->whereKey($owner->id)->hasNvlMedia('document', MediaActorData::system(), app(MediaBatchAuthorization::class))->count())->toBe(1);
+            expect(batchMediaItems($all, $owner))->toHaveCount(1)->and(BatchStringMediaOwner::query()->whereKey($owner->id)->hasNvlMedia('document', SystemActor::Background, app(MediaBatchAuthorization::class))->count())->toBe(1);
         }
     } finally {
         Relation::morphMap([], false);
     }
 });
-
 it('casts native integer keys for host correlation and excludes noncanonical textual keys', function (): void {
     Schema::create('batch_integer_media_owners', function (Blueprint $table): void {
         $table->id();
@@ -739,21 +638,19 @@ it('casts native integer keys for host correlation and excludes noncanonical tex
     $good = batchMediaAssociation($owner, Media::factory()->create(['is_public' => false]));
     $legacy = batchMediaAssociation($owner, Media::factory()->create(['is_public' => false]));
     $legacy->update(['associable_id' => '00'.$owner->getKey()]);
-    $result = app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['document'], MediaActorData::system());
-    expect(batchMediaItems($result, $owner))->toHaveCount(1)->and(batchMediaItems($result, $owner)[0]->associationId)->toBe($good->id)
-        ->and(IntegerBatchMediaOwner::query()->hasNvlMedia('document', MediaActorData::system(), app(MediaBatchAuthorization::class))->count())->toBe(1);
-    $json = json_decode($result->toJson());
+    $result = app(MediaOwnerBatchReader::class)->read([$owner], ['document'], SystemActor::Background);
+    expect(batchMediaItems($result, $owner))->toHaveCount(1)->and(batchMediaItems($result, $owner)[0]['associationId'])->toBe($good->id)->and(IntegerBatchMediaOwner::query()->hasNvlMedia('document', SystemActor::Background, app(MediaBatchAuthorization::class))->count())->toBe(1);
+    $json = json_decode(json_encode($result));
     expect($json->owners->{$owner->getMorphClass()})->toBeInstanceOf(stdClass::class);
 });
-
 it('compiles exact canonical keys window partitions and host correlation for supported drivers', function (string $driver): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     config(['database.connections.batch_compile' => ['driver' => $driver, 'host' => '127.0.0.1', 'database' => 'never_connect', 'username' => 'unused', 'password' => '', 'prefix' => '']]);
     $prior = DB::getDefaultConnection();
-    Media::addGlobalScope('tenant', static function (Builder $query): void {});
-    MediaAssociation::addGlobalScope('tenant', static function (Builder $query): void {});
+    Media::addGlobalScope('ownership', static function (Builder $query): void {});
+    MediaAssociation::addGlobalScope('ownership', static function (Builder $query): void {});
     DB::setDefaultConnection('batch_compile');
-    app()->instance(TenantBoundary::class, new class implements TenantBoundary
+    app()->instance(OwnershipBoundary::class, new class implements OwnershipBoundary
     {
         public function query(Builder $query, string $resource): Builder
         {
@@ -777,13 +674,11 @@ it('compiles exact canonical keys window partitions and host correlation for sup
         $batch = OwnerBatch::fromModels([$owner]);
         $ceilings = [$owner->getMorphClass() => [$owner->id => ['document' => 1]]];
         $policy = app(MediaBatchAuthorization::class);
-        $ranked = $builder->bounded($builder->batch($batch, $ceilings, MediaActorData::system(), $policy), $batch, $ceilings);
+        $ranked = $builder->bounded($builder->batch($batch, $ceilings, SystemActor::Background, $policy), $batch, $ceilings);
         $query = BatchMediaOwner::query();
         MediaBatchOwnerAdmission::exact($query, $query->getModel()->getQualifiedKeyName(), $owner->id);
-        expect($query->toSql())->toContain('CAST(')
-            ->and($ranked->toSql())->toContain('ROW_NUMBER() OVER', 'PARTITION BY', 'nvl_media_rank', 'is_active', 'deleted_at')
-            ->and($ranked->getBindings())->toContain(1);
-        $host = BatchMediaOwner::query()->select('id')->hasNvlMedia('document', MediaActorData::system(), $policy)->toSql();
+        expect($query->toSql())->toContain('CAST(')->and($ranked->toSql())->toContain('ROW_NUMBER() OVER', 'PARTITION BY', 'nvl_media_rank', 'is_active', 'deleted_at')->and($ranked->getBindings())->toContain(1);
+        $host = BatchMediaOwner::query()->select('id')->hasNvlMedia('document', SystemActor::Background, $policy)->toSql();
         match ($driver) {
             'pgsql' => expect($host)->toContain('AS TEXT)', 'COLLATE "C"', 'OCTET_LENGTH'),
             'mysql', 'mariadb' => expect($host)->toContain('AS CHAR)', 'BINARY', 'OCTET_LENGTH'),
@@ -793,7 +688,6 @@ it('compiles exact canonical keys window partitions and host correlation for sup
         DB::setDefaultConnection($prior);
     }
 })->with(['sqlite', 'pgsql', 'mysql', 'mariadb']);
-
 it('breaks equal order ties deterministically by association id', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $expected = [];
@@ -804,17 +698,15 @@ it('breaks equal order ties deterministically by association id', function (): v
         $expected[] = $id;
     }
     sort($expected);
-    $result = app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['library'], MediaActorData::system());
-    expect(array_map(static fn ($item): string => $item->associationId, batchMediaItems($result, $owner, 'library')))->toBe(array_slice($expected, 0, 3));
+    $result = app(MediaOwnerBatchReader::class)->read([$owner], ['library'], SystemActor::Background);
+    expect(array_map(static fn ($item): string => $item['associationId'], batchMediaItems($result, $owner, 'library')))->toBe(array_slice($expected, 0, 3));
 });
-
 it('keeps canonical soft deleted owners outside host existence after scope removal', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     batchMediaAssociation($owner, Media::factory()->create(['is_public' => false]));
     DB::table($owner->getTable())->where('id', $owner->id)->update(['deleted_at' => now()]);
-    expect(BatchMediaOwner::query()->withoutGlobalScopes()->hasNvlMedia('document', MediaActorData::system(), app(MediaBatchAuthorization::class))->exists())->toBeFalse();
+    expect(BatchMediaOwner::query()->withoutGlobalScopes()->hasNvlMedia('document', SystemActor::Background, app(MediaBatchAuthorization::class))->exists())->toBeFalse();
 });
-
 it('keeps total queries dependent on concrete class groups rather than owner count', function (int $count): void {
     $owners = [];
     for ($index = 0; $index < $count; $index++) {
@@ -823,16 +715,15 @@ it('keeps total queries dependent on concrete class groups rather than owner cou
         batchMediaAssociation($owner, Media::factory()->create(['is_public' => false]));
         $owners[] = $owner;
     }
-    app(TenantBoundary::class)->query(Media::query(), 'media.assets');
+    app(OwnershipBoundary::class)->query(Media::query(), 'media.assets');
     DB::enableQueryLog();
     DB::flushQueryLog();
-    $result = app(ListOwnerMediaSlotsContract::class)->execute($owners, ['document'], MediaActorData::system());
-    expect(DB::getQueryLog())->toHaveCount($count === 1 ? 4 : 5)->and($result->order)->toHaveCount($count);
+    $result = app(MediaOwnerBatchReader::class)->read($owners, ['document'], SystemActor::Background);
+    expect(batchMediaStorageQueries())->toHaveCount(3)->and(DB::getQueryLog())->toHaveCount($count === 1 ? 14 : 15)->and($result['order'])->toHaveCount($count);
     foreach ($owners as $owner) {
         expect(batchMediaItems($result, $owner))->toHaveCount(1);
     }
 })->with([1, 25, 100]);
-
 it('bounds translation transfer to the requested locale chain before projection', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $asset = Media::factory()->create(['is_public' => false]);
@@ -840,17 +731,16 @@ it('bounds translation transfer to the requested locale chain before projection'
     foreach (['en', 'bg', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'sv', 'da', 'no'] as $locale) {
         MediaTranslation::query()->create(['media_id' => $asset->id, 'locale' => $locale, 'title' => $locale]);
     }
-    app(TenantBoundary::class)->query(Media::query(), 'media.assets');
+    app(OwnershipBoundary::class)->query(Media::query(), 'media.assets');
     DB::enableQueryLog();
     DB::flushQueryLog();
-    $result = app(ListOwnerMediaSlotsContract::class)->execute([$owner], ['document'], MediaActorData::system(), 'bg');
-    $queries = DB::getQueryLog();
+    $result = app(MediaOwnerBatchReader::class)->read([$owner], ['document'], SystemActor::Background, 'bg');
+    $queries = batchMediaStorageQueries();
     DB::disableQueryLog();
-    expect($queries)->toHaveCount(4)->and(batchMediaItems($result, $owner)[0]->title)->toBe('bg');
-    $translations = $queries[3];
+    expect($queries)->toHaveCount(3)->and(batchMediaItems($result, $owner)[0]['title'])->toBe('bg');
+    $translations = $queries[2];
     expect(DB::select($translations['query'], $translations['bindings']))->toHaveCount(2);
 });
-
 it('lets a complete host SQL adapter express canonical attribute dependent slot eligibility', function (): void {
     $good = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $restricted = BatchMediaOwner::query()->create(['name' => 'Restricted']);
@@ -859,11 +749,11 @@ it('lets a complete host SQL adapter express canonical attribute dependent slot 
     }
     $policy = new class extends BatchMediaAuthorization
     {
-        public function scopeHostAssociations(Builder $query, Model $ownerPrototype, MediaActorData $actor, string $slot): void
+        public function scopeHostAssociations(Builder $query, Model $ownerPrototype, Authenticatable|SystemActor $actor, string $slot): void
         {
             parent::scopeHostAssociations($query, $ownerPrototype, $actor, $slot);
             $query->where($ownerPrototype->qualifyColumn('name'), '!=', 'Restricted');
         }
     };
-    expect(BatchMediaOwner::query()->hasNvlMedia('document', MediaActorData::system(), $policy)->pluck('id')->all())->toBe([$good->id]);
+    expect(BatchMediaOwner::query()->hasNvlMedia('document', SystemActor::Background, $policy)->pluck('id')->all())->toBe([$good->id]);
 });

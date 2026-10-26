@@ -1,7 +1,7 @@
 <?php
 
 declare(strict_types=1);
-
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Nvl\Media\Contracts\MediaCatalogAccess;
@@ -13,10 +13,10 @@ use Nvl\Media\Tests\Fixtures\CatalogOwnershipMedia;
 use Nvl\Media\Tests\Fixtures\OwnershipActor;
 use Nvl\Media\Tests\Fixtures\OwnershipCompany;
 use Nvl\Ownership\Services\OwnershipRunner;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 
 uses(CatalogMediaTestCase::class);
-
 it('defaults grant issuance to deny and keeps copied bytes independent after revocation', function (): void {
     Storage::fake('public');
     $runner = app(OwnershipRunner::class);
@@ -27,36 +27,44 @@ it('defaults grant issuance to deny and keeps copied bytes independent after rev
 
         return $media;
     });
-    $runner->run(OwnershipCompany::query()->findOrFail(7), $actor, fn () => expect(fn () => app(MediaOwnerCatalog::class)->grant($source->id, 1))->toThrow(OwnershipViolation::class));
+    $runner->run(OwnershipCompany::query()->findOrFail(7), $actor, fn () => expect(fn () => app(MediaOwnerCatalog::class)->grant(SystemActor::Background, $source->id, 1))->toThrow(OwnershipViolation::class));
     app()->bind(MediaCatalogAccess::class, fn () => new class implements MediaCatalogAccess
     {
-        public function assertCanGrant(string $sourceId, int $revision): void {}
+        public function assertCanGrant(Authenticatable|SystemActor $actor, string $sourceId, int $revision): void {}
 
-        public function assertCanRevoke(string $grantId): void {}
+        public function assertCanRevoke(Authenticatable|SystemActor $actor, string $grantId): void {}
     });
     app()->forgetScopedInstances();
     $foreignGrant = null;
     $runner->run(OwnershipCompany::query()->findOrFail(7), $actor, function () use ($source, &$foreignGrant): void {
         $catalog = app(MediaOwnerCatalog::class);
-        $grant = $catalog->grant($source->id, 1);
+        $grant = $catalog->grant(SystemActor::Background, $source->id, 1);
         $foreignGrant = $grant->id;
-        $snapshot = $catalog->inspect($grant->id);
-        $file = $catalog->stage($snapshot);
+        $snapshot = $catalog->inspect(SystemActor::Background, $grant->id);
+        $file = $catalog->stage(SystemActor::Background, $snapshot);
         $key = (string) Str::uuid();
         $copy = MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($catalog, $snapshot, $file, $key) {
-            $copy = $catalog->persist($snapshot, $file, $key);
-            $catalog->discard($file);
+            $copy = $catalog->persist(SystemActor::Background, $snapshot, $file, $key);
+            $catalog->discard(SystemActor::Background, $file);
             Storage::disk('public')->assertExists($copy->storage_path);
 
             return $copy;
         });
         expect($copy::class)->toBe(CatalogOwnershipMedia::class)->and($copy->id)->not->toBe($source->id)->and($copy->storage_path)->not->toBe($source->storage_path);
-        $staged = $catalog->stage($snapshot);
-        $catalog->revoke($grant->id, $grant->revision);
-        expect(fn () => MediaModelRegistry::newInstance()->getConnection()->transaction(fn () => $catalog->persist($snapshot, $staged, (string) Str::uuid())))->toThrow(OwnershipViolation::class);
-        $catalog->discard($staged);
+        $before = Storage::disk('public')->allFiles();
+        $replayed = $catalog->import(SystemActor::Background, $grant->id, $grant->revision, $source->revision, $key);
+        expect($replayed->id)->toBe($copy->id)->and(Storage::disk('public')->allFiles())->toBe($before);
+        expect(fn () => MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($catalog, $grant, $source): void {
+            $catalog->import(SystemActor::Background, $grant->id, $grant->revision, $source->revision, (string) Str::uuid());
+            throw new RuntimeException('rollback catalog import');
+        }))->toThrow(RuntimeException::class, 'rollback catalog import');
+        expect(MediaModelRegistry::query()->count())->toBe(1)->and(Storage::disk('public')->allFiles())->toBe($before);
+        $staged = $catalog->stage(SystemActor::Background, $snapshot);
+        $catalog->revoke(SystemActor::Background, $grant->id, $grant->revision);
+        expect(fn () => MediaModelRegistry::newInstance()->getConnection()->transaction(fn () => $catalog->persist(SystemActor::Background, $snapshot, $staged, (string) Str::uuid())))->toThrow(OwnershipViolation::class);
+        $catalog->discard(SystemActor::Background, $staged);
         Storage::disk('public')->assertExists($copy->storage_path);
         expect(MediaModelRegistry::query()->count())->toBe(1);
     });
-    $runner->run(OwnershipCompany::query()->findOrFail(8), $actor, fn () => expect(fn () => app(MediaOwnerCatalog::class)->inspect($foreignGrant))->toThrow(OwnershipViolation::class));
+    $runner->run(OwnershipCompany::query()->findOrFail(8), $actor, fn () => expect(fn () => app(MediaOwnerCatalog::class)->inspect(SystemActor::Background, $foreignGrant))->toThrow(OwnershipViolation::class));
 });

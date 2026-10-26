@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Nvl\Media\Tests\Fixtures;
 
 use Illuminate\Http\UploadedFile;
-use Nvl\Media\Actions\UploadMediaAction;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Services\MediaUploader;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Ownership\Services\OwnershipWriter;
 use Nvl\Ownership\ValueObjects\OwnershipAssignment;
@@ -23,6 +23,6 @@ final class OwnershipMediaScenario
     {
         $file = $image ? UploadedFile::fake()->image('source.png', 32, 32) : UploadedFile::fake()->createWithContent('secret.txt', 'private bytes');
 
-        return app(UploadMediaAction::class)->execute($file, 'public', $owner, new MediaSlot('documents'), $file->getClientOriginalName(), deduplicateExisting: $deduplicateExisting, skipAutoVariations: true, uploadedBy: '1');
+        return app(MediaUploader::class)->upload(OwnershipActor::query()->firstOrFail(), $file, 'public', $owner, new MediaSlot('documents'), $file->getClientOriginalName(), deduplicateExisting: $deduplicateExisting, skipAutoVariations: true);
     }
 }

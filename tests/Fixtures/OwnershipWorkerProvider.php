@@ -21,22 +21,7 @@ final class OwnershipWorkerProvider extends ServiceProvider
 
     public function register(): void
     {
-        $this->app->make('config')->set([
-            'database.default' => 'sqlite', 'database.connections.sqlite' => self::$source,
-            'nvl-core.owners' => [OwnershipCompany::class, OwnershipActor::class],
-            'nvl-ownership.enabled' => true, 'nvl-ownership.migrations.enabled' => false,
-            'nvl-tenancy.enabled' => false, 'nvl-media.models.media' => OwnershipMedia::class,
-            'nvl-media.migrations.enabled' => false, 'nvl-media.routes.api_enabled' => false,
-            'nvl-media.deduplication_lock.store' => 'array',
-            'nvl-ownership.central_operations' => ['media-maintain'],
-            'auth.providers.users.model' => OwnershipActor::class,
-            'filesystems.disks.public' => ['driver' => 'local', 'root' => self::$root, 'throw' => true],
-            'queue.default' => 'database', 'queue.connections.database.connection' => 'sqlite',
-            'queue.failed' => ['driver' => 'database-uuids', 'database' => 'sqlite', 'table' => 'failed_jobs'],
-            'cache.default' => 'database', 'cache.stores.database.connection' => 'sqlite',
-            'cache.stores.database.lock_connection' => 'sqlite',
-            'cache.stores.database.table' => 'cache', 'cache.stores.database.lock_table' => 'cache_locks',
-        ]);
+        $this->app->make('config')->set(['database.default' => 'sqlite', 'database.connections.sqlite' => self::$source, 'nvl-core.owners' => [OwnershipCompany::class, OwnershipActor::class], 'nvl-ownership.enabled' => true, 'nvl-ownership.migrations.enabled' => false, 'nvl-tenancy.enabled' => false, 'nvl-media.models.media' => OwnershipMedia::class, 'nvl-media.migrations.enabled' => false, 'nvl-media.routes.api_enabled' => false, 'nvl-media.deduplication_lock.store' => 'array', 'nvl-ownership.central_operations' => ['media-maintain'], 'auth.providers.users.model' => OwnershipActor::class, 'filesystems.disks.public' => ['driver' => 'local', 'root' => self::$root, 'throw' => true], 'queue.default' => 'database', 'queue.connections.database.connection' => 'sqlite', 'queue.failed' => ['driver' => 'database-uuids', 'database' => 'sqlite', 'table' => 'failed_jobs'], 'cache.default' => 'database', 'cache.stores.database.connection' => 'sqlite', 'cache.stores.database.lock_connection' => 'sqlite', 'cache.stores.database.table' => 'cache', 'cache.stores.database.lock_table' => 'cache_locks']);
         $this->app->bind(OwnerAccess::class, static fn () => new class implements OwnerAccess
         {
             public function assertCanEnter(Authenticatable $actor, Model $owner): void

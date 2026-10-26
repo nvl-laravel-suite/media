@@ -4,11 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Contracts;
 
-use Nvl\Media\Data\Multipart\CompletedMultipartObjectData;
-use Nvl\Media\Data\Multipart\CompleteMultipartUploadData;
-use Nvl\Media\Data\Multipart\MultipartUploadSessionData;
-use Nvl\Media\Data\Multipart\SignedMultipartPartData;
-use Nvl\Media\Data\Multipart\SignMultipartPartData;
+use Nvl\Media\Enums\MediaVisibility;
 
 /**
  * Object-storage adapter for direct multipart uploads.
@@ -19,27 +15,39 @@ interface MultipartUploadGateway
 {
     /**
      * Initiate a provider multipart upload.
+     *
+     * @param  array{uploadId: string, disk: string, objectKey: string, filename: string, mimeType: string, size: int, checksum: string, visibility: MediaVisibility, uploaderId: int|string|null, uploaderType: string|null, expiresAt: \DateTimeImmutable, minimumPartSize: int, maximumParts: int}  $session
      */
-    public function initiate(MultipartUploadSessionData $session): void;
+    public function initiate(array $session): void;
 
     /**
      * Sign one part upload.
+     *
+     * @param  array{uploadId: string, disk: string, objectKey: string, filename: string, mimeType: string, size: int, checksum: string, visibility: MediaVisibility, uploaderId: int|string|null, uploaderType: string|null, expiresAt: \DateTimeImmutable, minimumPartSize: int, maximumParts: int}  $session
+     * @param  array{uploadId: string, partNumber: int, checksum: string, byteLength: int}  $part
+     * @return array{partNumber: int, url: string, headers: array<string, string>, expiresAt: \DateTimeImmutable}
      */
     public function signPart(
-        MultipartUploadSessionData $session,
-        SignMultipartPartData $part,
-    ): SignedMultipartPartData;
+        array $session,
+        array $part,
+    ): array;
 
     /**
      * Complete and server-verify an uploaded object.
+     *
+     * @param  array{uploadId: string, disk: string, objectKey: string, filename: string, mimeType: string, size: int, checksum: string, visibility: MediaVisibility, uploaderId: int|string|null, uploaderType: string|null, expiresAt: \DateTimeImmutable, minimumPartSize: int, maximumParts: int}  $session
+     * @param  array{uploadId: string, parts: list<array{partNumber: int, etag: string, checksum?: string|null}>}  $completion
+     * @return array{path: string, checksum: string, size: int, mimeType: string, objectIdentity: string|null}
      */
     public function complete(
-        MultipartUploadSessionData $session,
-        CompleteMultipartUploadData $completion,
-    ): CompletedMultipartObjectData;
+        array $session,
+        array $completion,
+    ): array;
 
     /**
      * Idempotently abort an unfinished provider upload, treating provider absence as success.
+     *
+     * @param  array{uploadId: string, disk: string, objectKey: string, filename: string, mimeType: string, size: int, checksum: string, visibility: MediaVisibility, uploaderId: int|string|null, uploaderType: string|null, expiresAt: \DateTimeImmutable, minimumPartSize: int, maximumParts: int}  $session
      */
-    public function abort(MultipartUploadSessionData $session): void;
+    public function abort(array $session): void;
 }

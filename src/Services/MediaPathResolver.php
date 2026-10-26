@@ -13,17 +13,13 @@ use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Ownership\MediaOwnership;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaConfiguration;
-use Nvl\Support\Tenancy\Contracts\TenantContext;
-use Nvl\Support\Tenancy\Enums\TenantContextMode;
-use Nvl\Support\Tenancy\Exceptions\TenantContextMissing;
+use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Stringable;
 use UnitEnum;
 
 /** MediaPathResolver: single authority for all media storage path construction and validation. */
 final readonly class MediaPathResolver
 {
-    public function __construct(private ?TenantContext $tenantContext = null) {}
-
     /* ---------------------------------------------------------------
      * Collection-Based Resolution (template interpolation)
      * ------------------------------------------------------------- */
@@ -219,31 +215,14 @@ final readonly class MediaPathResolver
      * @return string Disk-relative physical folder
      *
      * @throws MediaUploadException When a path is unsafe
-     * @throws TenantContextMissing When tenant-aware storage has no active ownership context
+     * @throws OwnershipViolation When owned storage has no active ownership context
      */
     public function storageFolder(string $folder, ?string $disk = null): string
     {
         $folder = $this->normalizeFolder($folder);
-        if (config('nvl-ownership.enabled') === true) {
-            $partition = MediaOwnership::storagePartition();
+        $partition = MediaOwnership::storagePartition();
 
-            return implode('/', array_filter([self::rootFolder($disk), $partition, $folder], static fn (?string $part): bool => $part !== null && $part !== ''));
-        }
-        if (config('nvl-tenancy.enabled') !== true) {
-            return self::storagePath($folder, $disk);
-        }
-
-        if (! $this->tenantContext instanceof TenantContext) {
-            throw new TenantContextMissing('Tenant-aware Media paths require an injected tenant context.');
-        }
-        $snapshot = $this->tenantContext->snapshot();
-        $partition = match ($snapshot->mode) {
-            TenantContextMode::Tenant => 'tenants/'.$snapshot->tenantId?->value,
-            TenantContextMode::Platform => 'platform',
-            default => throw new TenantContextMissing,
-        };
-
-        return implode('/', array_filter([self::rootFolder($disk), $partition, $folder], static fn (string $part): bool => $part !== ''));
+        return implode('/', array_filter([self::rootFolder($disk), $partition, $folder], static fn (?string $part): bool => $part !== null && $part !== ''));
     }
 
     /**
@@ -254,7 +233,7 @@ final readonly class MediaPathResolver
      * @return string Reusable logical folder
      *
      * @throws MediaUploadException When a path is unsafe
-     * @throws TenantContextMissing When the active ownership context is missing
+     * @throws OwnershipViolation When the active ownership context is missing
      */
     public function logicalFolderFromStoragePath(string $storagePath, ?string $disk = null): string
     {
@@ -262,16 +241,8 @@ final readonly class MediaPathResolver
         $folder = dirname(trim($storagePath, '/'));
         $root = self::rootFolder($disk);
         $prefix = $root;
-        if (config('nvl-ownership.enabled') === true) {
+        if (MediaOwnership::active()) {
             $prefix = implode('/', array_filter([$root, MediaOwnership::storagePartition()], static fn (?string $part): bool => $part !== null && $part !== ''));
-        } elseif (config('nvl-tenancy.enabled') === true) {
-            $snapshot = $this->tenantContext?->snapshot() ?? throw new TenantContextMissing;
-            $partition = match ($snapshot->mode) {
-                TenantContextMode::Tenant => 'tenants/'.$snapshot->tenantId?->value,
-                TenantContextMode::Platform => 'platform',
-                default => throw new TenantContextMissing,
-            };
-            $prefix = implode('/', array_filter([$root, $partition], static fn (string $part): bool => $part !== ''));
         }
         if ($prefix !== '' && ($folder === $prefix || str_starts_with($folder, $prefix.'/'))) {
             $folder = ltrim(substr($folder, strlen($prefix)), '/');

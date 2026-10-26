@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Contracts;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
-use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Enums\MediaAbility;
 use Nvl\Media\Models\Media;
+use Nvl\Support\Enums\SystemActor;
 
 /**
  * Consumer-owned authorization policy for media capabilities.
@@ -20,7 +21,7 @@ interface MediaAuthorization
      * Determine whether an actor may perform a media ability.
      */
     public function allows(
-        MediaActorData $actor,
+        Authenticatable|SystemActor $actor,
         MediaAbility $ability,
         ?Media $media = null,
         ?Model $owner = null,

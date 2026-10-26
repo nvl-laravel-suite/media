@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use LogicException;
 use Nvl\Media\Contracts\HasNvlMedia;
+use Nvl\Media\MediaRegistration;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Ownership\MediaOwnershipParentResolver;
 use Nvl\Media\Slots\MediaSlot;
@@ -36,7 +37,7 @@ final readonly class MediaOwnerSlotResolver
             );
         }
 
-        $resolved = $owner->nvlMedia()->slot($slot);
+        $resolved = MediaRegistration::forOwner($owner)->getSlot($slot);
 
         if (! $resolved instanceof MediaSlot) {
             throw new InvalidArgumentException(
@@ -130,6 +131,9 @@ final readonly class MediaOwnerSlotResolver
     /** Return an ownership-verified Media-capable owner. */
     private function canonical(Model&HasNvlMedia $owner, bool $lock = false): Model&HasNvlMedia
     {
+        if (! $owner->exists || $owner->getKey() === null) {
+            throw new InvalidArgumentException('Media owner-slot workflows require a persisted owner with a scalar key.');
+        }
         $canonical = $this->owners->resolve($owner, $lock);
         if (! $canonical instanceof HasNvlMedia) {
             throw new InvalidArgumentException('A Media-capable owner is required.');

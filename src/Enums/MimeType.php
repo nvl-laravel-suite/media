@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Enums;
 
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
-
 /**
  * MimeType: developer-facing enum for common MIME types used in media slot
  * configuration, upload validation, and format conversion.
@@ -15,7 +13,6 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
  *
  * @api
  */
-#[TypeScript]
 enum MimeType: string
 {
     // ── Images ───────────────────────────────────────────────────────

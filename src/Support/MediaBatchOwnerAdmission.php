@@ -15,17 +15,15 @@ use Nvl\Media\Relations\ExactMediaText;
 use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Support\Owners\OwnerBatch;
 use Nvl\Support\Owners\OwnerIdentity;
-use Nvl\Support\Ownership\Compatibility\LegacyResourceDefinitions;
-use Nvl\Support\Ownership\Compatibility\OwnershipFailures;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
+use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
-use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 
-/** Reloads exact captured identities through canonical host and tenant scopes. */
+/** Reloads exact captured identities through canonical host and native owner scopes. */
 final readonly class MediaBatchOwnerAdmission
 {
     /** Retain the registered ownership runtime. */
-    public function __construct(private OwnershipBoundary $boundary, private OwnershipResourceRegistry $resources, private LegacyResourceDefinitions $legacyResources, private OwnershipFailures $failures, private MediaOwnershipParentResolver $parents) {}
+    public function __construct(private OwnershipBoundary $boundary, private OwnershipResourceRegistry $resources, private MediaOwnershipParentResolver $parents) {}
 
     /** Canonically reload each concrete owner class once. */
     public function admit(OwnerBatch $input): OwnerBatch
@@ -52,7 +50,7 @@ final readonly class MediaBatchOwnerAdmission
         $canonical = [];
         foreach ($input->identities() as $identity) {
             $canonical[] = $loaded[$identity->type][$identity->id]
-                ?? throw new TenantBoundaryViolation('A Media batch owner is absent, deleted or outside the active host/tenant scope.');
+                ?? throw new OwnershipViolation('A Media batch owner is absent, deleted or outside the active host/owner scope.');
         }
 
         return OwnerBatch::fromModels($canonical);
@@ -71,7 +69,7 @@ final readonly class MediaBatchOwnerAdmission
             || $owner->getTable() !== $prototype->getTable()
             || $owner->getConnection() !== $media->getConnection()
             || $prototype->getConnection() !== $media->getConnection()) {
-            throw new TenantBoundaryViolation('Media owners must retain their canonical table and package connection.');
+            throw new OwnershipViolation('Media owners must retain their canonical table and package connection.');
         }
         if (MediaOwnership::active()) {
             if ($this->resource($prototype) === null) {
@@ -80,7 +78,7 @@ final readonly class MediaBatchOwnerAdmission
         }
     }
 
-    /** Apply mandatory registered tenant ownership around retained host scopes.
+    /** Apply mandatory registered native ownership around retained host scopes.
      * @template T of Model
      *
      * @param  Builder<T>  $query
@@ -93,7 +91,7 @@ final readonly class MediaBatchOwnerAdmission
         if (in_array(SoftDeletes::class, class_uses_recursive($owner), true) && method_exists($owner, 'getQualifiedDeletedAtColumn')) {
             $column = $owner->getQualifiedDeletedAtColumn();
             if (! is_string($column)) {
-                throw new TenantBoundaryViolation('A canonical Media owner requires a valid soft-delete column.');
+                throw new OwnershipViolation('A canonical Media owner requires a valid soft-delete column.');
             }
             $query->whereNull($column);
         }
@@ -114,14 +112,10 @@ final readonly class MediaBatchOwnerAdmission
                 return $definition->ownership->strategy === 'unscoped' && config('nvl-ownership.enabled') === true ? null : $definition->key;
             }
         }
-        $legacy = $this->legacyResources->forModel($model::class);
-        if ($legacy !== null) {
-            return $legacy->key;
-        }
         if (config('nvl-ownership.enabled') === true) {
             return null;
         }
-        throw $this->failures->violation('The Media host record has no canonical ownership resource.');
+        throw new OwnershipViolation('The Media host record has no canonical ownership resource.');
     }
 
     /** Keep caller OR clauses inside each mandatory owner guard without changing other query state.

@@ -11,8 +11,6 @@ final class RestrictedMediaModel extends TestMediaModel
 {
     public function registerMediaSlots(): void
     {
-        $this->addMediaSlot('documents')
-            ->acceptsMimeTypes(['text/plain'])
-            ->maxFileSize(1024);
+        $this->addMediaSlot('documents')->acceptsMimeTypes(['text/plain'])->maxFileSize(1024);
     }
 }

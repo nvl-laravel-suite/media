@@ -5,18 +5,20 @@ declare(strict_types=1);
 namespace Nvl\Media\Services;
 
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\MediaAuthorization;
-use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Enums\MediaAbility;
 use Nvl\Media\Exceptions\FileUnacceptableForCollection;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Slots\MediaSlot;
+use Nvl\Media\Support\MediaActors;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Support\Enums\SystemActor;
 
 /**
  * Validates existing Media against slot policy and identifies removable staging associations.
@@ -38,7 +40,7 @@ final readonly class MediaStagingPolicy
      * @throws MediaUploadException
      */
     public function removableAssociations(
-        MediaActorData $actor,
+        Authenticatable|SystemActor $actor,
         Model&HasNvlMedia $owner,
         MediaSlot $slot,
         Media $media,
@@ -62,7 +64,7 @@ final readonly class MediaStagingPolicy
         }
 
         if ($associations->isEmpty()) {
-            if ($actor->system || $this->matchesUploader($actor, $media)) {
+            if (($actor instanceof SystemActor) || $this->matchesUploader($actor, $media)) {
                 return $associations;
             }
 
@@ -153,11 +155,11 @@ final readonly class MediaStagingPolicy
         }
     }
 
-    private function matchesUploader(MediaActorData $actor, Media $media): bool
+    private function matchesUploader(Authenticatable|SystemActor $actor, Media $media): bool
     {
         return $this->identifiable($actor)
-            && hash_equals((string) $media->uploaded_by_type, (string) $actor->type)
-            && hash_equals((string) $media->uploaded_by, (string) $actor->id);
+            && hash_equals((string) $media->uploaded_by_type, (string) MediaActors::type($actor))
+            && hash_equals((string) $media->uploaded_by, (string) MediaActors::id($actor));
     }
 
     /**
@@ -165,7 +167,7 @@ final readonly class MediaStagingPolicy
      */
     private function allBelongToActor(
         Collection $associations,
-        MediaActorData $actor,
+        Authenticatable|SystemActor $actor,
     ): bool {
         if (! $this->identifiable($actor)) {
             return false;
@@ -174,10 +176,10 @@ final readonly class MediaStagingPolicy
         return $associations->every(
             static fn (MediaAssociation $association): bool => hash_equals(
                 $association->associable_type,
-                (string) $actor->type,
+                (string) MediaActors::type($actor),
             ) && hash_equals(
                 (string) $association->associable_id,
-                (string) $actor->id,
+                (string) MediaActors::id($actor),
             ),
         );
     }
@@ -207,11 +209,11 @@ final readonly class MediaStagingPolicy
         );
     }
 
-    private function identifiable(MediaActorData $actor): bool
+    private function identifiable(Authenticatable|SystemActor $actor): bool
     {
-        return is_string($actor->type)
-            && $actor->type !== ''
-            && (is_int($actor->id) || is_string($actor->id))
-            && (string) $actor->id !== '';
+        return is_string(MediaActors::type($actor))
+            && MediaActors::type($actor) !== ''
+            && (is_int(MediaActors::id($actor)) || is_string(MediaActors::id($actor)))
+            && (string) MediaActors::id($actor) !== '';
     }
 }

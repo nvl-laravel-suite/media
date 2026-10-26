@@ -26,7 +26,6 @@ use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
 use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Support\MediaAssetUrl;
-use Nvl\Media\Traits\MediaFilters;
 use Nvl\Support\Config\PackageStorage;
 use Nvl\Support\Ownership\Contracts\Ownable;
 use Nvl\Support\Ownership\Traits\HasOwnership;
@@ -109,7 +108,6 @@ class Media extends Model implements Ownable, TranslatableModel
 
     use HasOwnership;
     use HasUuids;
-    use MediaFilters;
     use SoftDeletes;
     use Translatable;
 
@@ -171,7 +169,7 @@ class Media extends Model implements Ownable, TranslatableModel
             foreignKey: 'media_id',
             fields: ['title', 'alt', 'caption', 'description'],
             mutationPolicy: TranslationMutationPolicy::OwningServiceOnly,
-            ownershipResource: 'media.assets',
+            ownershipResource: static::ownershipDefinition()->strategy === 'unscoped' ? null : 'media.assets',
         );
     }
 

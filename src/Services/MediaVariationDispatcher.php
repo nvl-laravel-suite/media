@@ -5,27 +5,27 @@ declare(strict_types=1);
 namespace Nvl\Media\Services;
 
 use Illuminate\Database\Eloquent\Model;
-use Nvl\Media\Actions\GenerateImageVariationAction;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Jobs\GenerateImageVariationJob;
+use Nvl\Media\MediaRegistration;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaQueueConfiguration;
+use Nvl\Media\Support\MediaQueueEnvelope;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Logging\PackageLogger;
-use Nvl\Support\Tenancy\Contracts\TenantContext;
-use Nvl\Support\Tenancy\ValueObjects\TenantJobEnvelope;
+use Nvl\Support\Ownership\ValueObjects\OwnershipJobEnvelope;
 use Throwable;
 
 /** MediaVariationDispatcher resolves and dispatches variation definitions for existing media records. */
 final class MediaVariationDispatcher
 {
     public function __construct(
-        private readonly GenerateImageVariationAction $generateVariation,
+        private readonly MediaVariations $generateVariation,
         private readonly MediaConfiguredVariationService $configuredVariationService,
         private readonly MediaFileEffectScheduler $fileEffects,
         private readonly MediaVariationDefinitionNormalizer $definitionNormalizer,
-        private readonly TenantContext $tenantContext,
         private PackageLogger $packageLogger,
     ) {}
 
@@ -117,7 +117,7 @@ final class MediaVariationDispatcher
         /** @var array<string, ConversionDefinition> $definitions */
         $definitions = [];
 
-        $slotConfig = $model->nvlMedia()->slot($slotName);
+        $slotConfig = MediaRegistration::forOwner($model)->getSlot($slotName);
 
         if ($slotConfig instanceof MediaSlot) {
             foreach ($slotConfig->getConversionDefinitions() as $name => $definition) {
@@ -125,7 +125,7 @@ final class MediaVariationDispatcher
             }
         }
 
-        foreach ($model->nvlMedia()->conversions($media) as $conversion) {
+        foreach (MediaRegistration::forOwner($model, $media)->conversions() as $conversion) {
             if ($conversion->shouldBePerformedOn($slotName)) {
                 $definitions[$conversion->name] = $conversion;
             }
@@ -164,7 +164,7 @@ final class MediaVariationDispatcher
      */
     private function dispatchDefinitions(Media $media, array $definitions, bool $missingOnly = false): void
     {
-        $envelope = TenantJobEnvelope::capture($this->tenantContext);
+        $envelope = MediaQueueEnvelope::ownership();
         $this->fileEffects->afterCommit(function () use ($media, $definitions, $missingOnly, $envelope): void {
             $this->dispatchDefinitionsNow($media, $definitions, $missingOnly, $envelope);
         });
@@ -179,7 +179,7 @@ final class MediaVariationDispatcher
         Media $media,
         array $definitions,
         bool $missingOnly = false,
-        ?TenantJobEnvelope $envelope = null,
+        ?OwnershipJobEnvelope $envelope = null,
     ): void {
         if (! $media->isAvailable()
             || ! $media->type->supportsConversions()
@@ -222,7 +222,7 @@ final class MediaVariationDispatcher
                     continue;
                 }
 
-                $this->generateVariation->execute($media, $definition);
+                $this->generateVariation->generate(SystemActor::Background, $media, $definition);
             } catch (Throwable $e) {
                 $this->packageLogger->log('media', 'warning', 'nvl.media.variation_dispatch.failed', ['media_id' => $media->id, 'exception' => $e::class], 'normal');
             }

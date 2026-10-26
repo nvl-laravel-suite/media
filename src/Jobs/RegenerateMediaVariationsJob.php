@@ -21,8 +21,6 @@ use Nvl\Media\Support\MediaQueueEnvelope;
 use Nvl\Support\Facades\PackageLog;
 use Nvl\Support\Ownership\Contracts\OwnershipQueuedJob;
 use Nvl\Support\Ownership\ValueObjects\OwnershipJobEnvelope;
-use Nvl\Support\Tenancy\Contracts\TenantQueuedJob;
-use Nvl\Support\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
 
 /**
@@ -32,7 +30,7 @@ use Throwable;
  * instances for each requested preset. Supports filtering by type, disk, date range,
  * and specific preset names.
  */
-final class RegenerateMediaVariationsJob implements OwnershipQueuedJob, ShouldQueue, TenantQueuedJob
+final class RegenerateMediaVariationsJob implements OwnershipQueuedJob, ShouldQueue
 {
     use Batchable;
     use Dispatchable;
@@ -43,8 +41,6 @@ final class RegenerateMediaVariationsJob implements OwnershipQueuedJob, ShouldQu
     public int $tries;
 
     public int $timeout;
-
-    private readonly TenantJobEnvelope $envelope;
 
     private readonly OwnershipJobEnvelope $ownershipEnvelope;
 
@@ -71,10 +67,9 @@ final class RegenerateMediaVariationsJob implements OwnershipQueuedJob, ShouldQu
         private readonly ?string $createdBefore = null,
         private readonly ?array $presetNames = null,
         private readonly int $chunkSize = 500,
-        ?TenantJobEnvelope $envelope = null,
+        ?OwnershipJobEnvelope $envelope = null,
     ) {
-        $this->envelope = MediaQueueEnvelope::fallback($envelope);
-        $this->ownershipEnvelope = MediaQueueEnvelope::ownership();
+        $this->ownershipEnvelope = $envelope ?? MediaQueueEnvelope::ownership();
         $this->tries = MediaQueueConfiguration::jobInteger('regenerate', 'tries', 1);
         $this->timeout = MediaQueueConfiguration::jobInteger('regenerate', 'timeout', 60);
         $this->onQueue(MediaQueueConfiguration::name());
@@ -126,7 +121,7 @@ final class RegenerateMediaVariationsJob implements OwnershipQueuedJob, ShouldQu
                         (string) $name,
                         $preset,
                         $media->revision,
-                        $this->envelope,
+                        $this->ownershipEnvelope,
                     )->afterCommit();
                 }
 
@@ -183,11 +178,6 @@ final class RegenerateMediaVariationsJob implements OwnershipQueuedJob, ShouldQu
     public function tags(): array
     {
         return ['media-regenerate-batch'];
-    }
-
-    public function tenantJobEnvelope(): TenantJobEnvelope
-    {
-        return $this->envelope;
     }
 
     /**

@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\MediaRegistration;
 use Nvl\Media\Models\Media;
-use Nvl\Media\Traits\InteractsWithNvlMedia;
+use Nvl\Media\Tests\Fixtures\Consumer\Traits\InteractsWithNvlMedia;
 use Nvl\Support\Ownership\Contracts\Ownable;
 use Nvl\Support\Ownership\Traits\HasOwnership;
 use Nvl\Support\Ownership\ValueObjects\OwnershipDefinition;

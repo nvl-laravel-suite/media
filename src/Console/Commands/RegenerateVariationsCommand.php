@@ -7,19 +7,15 @@ namespace Nvl\Media\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Bus;
-use Nvl\Media\Actions\GenerateImageVariationAction;
-use Nvl\Media\Contracts\MediaTenantWorklist;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Jobs\RegenerateMediaVariationsJob;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
 use Nvl\Media\Services\MediaModelRegistry;
-use Nvl\Support\Tenancy\Contracts\TenantContext;
-use Nvl\Support\Tenancy\Contracts\TenantRunner;
-use Nvl\Support\Tenancy\ValueObjects\PlatformOperation;
-use Nvl\Support\Tenancy\ValueObjects\TenantId;
-use Nvl\Support\Tenancy\ValueObjects\TenantJobEnvelope;
+use Nvl\Media\Services\MediaVariations;
+use Nvl\Media\Support\MediaQueueEnvelope;
+use Nvl\Support\Enums\SystemActor;
 use Throwable;
 
 /**
@@ -39,22 +35,14 @@ class RegenerateVariationsCommand extends Command
         {--before= : Only process media created before this date (Y-m-d)}
         {--dry-run : Show what would be processed without acting}
         {--sync : Process inline instead of dispatching to queue}
-        {--force : Skip confirmation prompt}
-        {--tenant= : Regenerate media for one explicit tenant UUID}
-        {--all-tenants : Regenerate media independently for every active tenant}
-        {--actor-type=system : Platform operation actor type for --all-tenants}
-        {--actor-id=media-regenerator : Platform operation actor identifier for --all-tenants}
-        {--purpose=media.variations.regenerate : Platform operation purpose for --all-tenants}';
+        {--force : Skip confirmation prompt}';
 
     /** @var string */
     protected $description = 'Regenerate image variations for media records matching the given filters.';
 
     public function __construct(
-        private readonly GenerateImageVariationAction $generateVariationAction,
+        private readonly MediaVariations $generateVariationAction,
         private readonly MediaConfiguredVariationService $configuredVariationService,
-        private readonly TenantRunner $tenantRunner,
-        private readonly MediaTenantWorklist $tenantWorklist,
-        private readonly TenantContext $tenantContext,
     ) {
         parent::__construct();
     }
@@ -66,41 +54,7 @@ class RegenerateVariationsCommand extends Command
      */
     public function handle(): int
     {
-        if (config('nvl-tenancy.enabled') !== true) {
-            return $this->handleBounded();
-        }
-
-        $tenant = $this->option('tenant');
-        $tenantProvided = is_string($tenant) && $tenant !== '';
-        $allTenants = (bool) $this->option('all-tenants');
-        if ($tenantProvided === $allTenants) {
-            $this->components->error('Tenant-aware regeneration requires exactly one of --tenant or --all-tenants.');
-
-            return self::INVALID;
-        }
-
-        if ($tenantProvided) {
-            return $this->tenantRunner->run(new TenantId($tenant), fn (): int => $this->handleBounded());
-        }
-
-        $tenantIds = $this->tenantRunner->platform(
-            new PlatformOperation(
-                (string) $this->option('purpose'),
-                (string) $this->option('actor-type'),
-                (string) $this->option('actor-id'),
-            ),
-            fn (): array => $this->tenantWorklist->activeTenantIds(),
-        );
-        $exitCode = self::SUCCESS;
-        foreach ($tenantIds as $tenantId) {
-            $this->components->info("Tenant {$tenantId}");
-            $result = $this->tenantRunner->run(new TenantId($tenantId), fn (): int => $this->handleBounded());
-            if ($result !== self::SUCCESS) {
-                $exitCode = $result;
-            }
-        }
-
-        return $exitCode;
+        return $this->handleBounded();
     }
 
     /** Execute regeneration inside an already-established ownership boundary. */
@@ -182,7 +136,7 @@ class RegenerateVariationsCommand extends Command
                     $definition = ConversionDefinition::fromPreset((string) $name, $config);
 
                     try {
-                        $this->generateVariationAction->execute($media, $definition);
+                        $this->generateVariationAction->generate(SystemActor::Background, $media, $definition);
                     } catch (Throwable $e) {
                         $errors++;
                         $this->newLine();
@@ -219,7 +173,7 @@ class RegenerateVariationsCommand extends Command
             createdAfter: $after,
             createdBefore: $before,
             presetNames: ! empty($presetNames) ? $presetNames : null,
-            envelope: TenantJobEnvelope::capture($this->tenantContext),
+            envelope: MediaQueueEnvelope::ownership(),
         );
 
         Bus::dispatch($job);

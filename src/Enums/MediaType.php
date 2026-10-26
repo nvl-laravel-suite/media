@@ -4,14 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Enums;
 
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
-
 /**
  * MediaType: classification of stored files by content category.
  *
  * @api
  */
-#[TypeScript]
 enum MediaType: string
 {
     case IMAGE = 'image';

@@ -5,11 +5,6 @@ declare(strict_types=1);
 namespace Nvl\Media\Services;
 
 use Nvl\Media\Contracts\MultipartUploadGateway;
-use Nvl\Media\Data\Multipart\CompletedMultipartObjectData;
-use Nvl\Media\Data\Multipart\CompleteMultipartUploadData;
-use Nvl\Media\Data\Multipart\MultipartUploadSessionData;
-use Nvl\Media\Data\Multipart\SignedMultipartPartData;
-use Nvl\Media\Data\Multipart\SignMultipartPartData;
 use Nvl\Media\Exceptions\MediaUploadException;
 
 /**
@@ -17,26 +12,26 @@ use Nvl\Media\Exceptions\MediaUploadException;
  */
 final class UnsupportedMultipartUploadGateway implements MultipartUploadGateway
 {
-    public function initiate(MultipartUploadSessionData $session): void
+    public function initiate(array $session): void
     {
         $this->unsupported();
     }
 
     public function signPart(
-        MultipartUploadSessionData $session,
-        SignMultipartPartData $part,
-    ): SignedMultipartPartData {
+        array $session,
+        array $part,
+    ): array {
         $this->unsupported();
     }
 
     public function complete(
-        MultipartUploadSessionData $session,
-        CompleteMultipartUploadData $completion,
-    ): CompletedMultipartObjectData {
+        array $session,
+        array $completion,
+    ): array {
         $this->unsupported();
     }
 
-    public function abort(MultipartUploadSessionData $session): void
+    public function abort(array $session): void
     {
         $this->unsupported();
     }

@@ -12,11 +12,12 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Nvl\Media\Actions\UploadMediaAction;
 use Nvl\Media\Jobs\GenerateImageVariationJob;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Services\MediaUploader;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Tests\Stubs\TestMediaModel;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Tenancy\Contracts\TenantContext;
 use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
 use Nvl\Tenancy\Services\TenantAdoptionCoordinator;
@@ -35,13 +36,8 @@ final class MediaTenancyConsumerSetupCommand extends Command
     protected $description = 'Prepare the isolated Media tenancy worker fixture.';
 
     /** Build, adopt, seed, and optionally queue the worker proof. */
-    public function handle(
-        TenantAdoptionCoordinator $coordinator,
-        TenantRunner $runner,
-        TenantBoundary $boundary,
-        MaintenanceMode $maintenance,
-        TenantContext $context,
-    ): int {
+    public function handle(TenantAdoptionCoordinator $coordinator, TenantRunner $runner, TenantBoundary $boundary, MaintenanceMode $maintenance, TenantContext $context): int
+    {
         $this->createInfrastructure();
         $maintenance->activate([]);
         try {
@@ -58,17 +54,14 @@ final class MediaTenancyConsumerSetupCommand extends Command
         } finally {
             $maintenance->deactivate();
         }
-
         $a = $this->seed($runner, $boundary, MediaTenancyScenario::A, 'a.png');
         $b = $this->seed($runner, $boundary, MediaTenancyScenario::B, 'b.png');
         $failing = $this->seed($runner, $boundary, MediaTenancyScenario::A, 'failing.png');
         Storage::disk($failing->disk)->put($failing->buildPath(), 'invalid image bytes');
-
         $queue = $this->stringOption('queue');
         if ($queue !== null) {
             $this->publishProbes($queue, $a, $b, $failing, $runner, $context);
         }
-
         $this->line('driver='.DB::connection()->getDriverName().' setup=ok'.($queue !== null ? ' queue='.$queue : ''));
 
         return self::SUCCESS;
@@ -77,8 +70,7 @@ final class MediaTenancyConsumerSetupCommand extends Command
     /** Create tenancy, Media, queue, failure, and probe schema explicitly. */
     private function createInfrastructure(): void
     {
-        $tenancyPath = InstalledVersions::getInstallPath('nvl/tenancy')
-            ?? throw new RuntimeException('The worker fixture requires the installed optional Tenancy package.');
+        $tenancyPath = InstalledVersions::getInstallPath('nvl/tenancy') ?? throw new RuntimeException('The worker fixture requires the installed optional Tenancy package.');
         $schema = DB::connection()->getSchemaBuilder();
         $schema->create('migrations', static function (Blueprint $table): void {
             $table->increments('id');
@@ -86,8 +78,7 @@ final class MediaTenancyConsumerSetupCommand extends Command
             $table->integer('batch');
         });
         $this->runMigration($tenancyPath.'/database/migrations/tenancy/2026_09_16_000001_nvl_tenancy_create_tenancy_core_tables.php');
-        $mediaPath = InstalledVersions::getInstallPath('nvl/media')
-            ?? throw new RuntimeException('The worker fixture requires the installed Media package.');
+        $mediaPath = InstalledVersions::getInstallPath('nvl/media') ?? throw new RuntimeException('The worker fixture requires the installed Media package.');
         foreach (glob($mediaPath.'/database/migrations/*.php') ?: [] as $migration) {
             $this->runMigration($migration);
         }
@@ -132,7 +123,6 @@ final class MediaTenancyConsumerSetupCommand extends Command
             $owner = new TestMediaModel(['name' => 'Owner '.$name]);
             $owner->forceFill($boundary->attributes('test.media-owners'));
             $owner->saveOrFail();
-
             $path = tempnam(sys_get_temp_dir(), 'nvl-media-worker-');
             $image = imagecreatetruecolor(2, 2);
             if (! is_string($path) || $image === false || ! imagepng($image, $path)) {
@@ -140,14 +130,7 @@ final class MediaTenancyConsumerSetupCommand extends Command
             }
             imagedestroy($image);
             try {
-                return app(UploadMediaAction::class)->execute(
-                    new UploadedFile($path, $name, 'image/png', null, true),
-                    'tenant-disk',
-                    $owner,
-                    new MediaSlot('default'),
-                    $name,
-                    skipAutoVariations: true,
-                );
+                return app(MediaUploader::class)->upload(auth()->user() ?? SystemActor::Background, new UploadedFile($path, $name, 'image/png', null, true), 'tenant-disk', $owner, new MediaSlot('default'), $name, skipAutoVariations: true);
             } finally {
                 if (is_file($path)) {
                     unlink($path);
@@ -157,32 +140,18 @@ final class MediaTenancyConsumerSetupCommand extends Command
     }
 
     /** Publish A, B, stale, failing, and corrupted-envelope queue records. */
-    private function publishProbes(
-        string $queue,
-        Media $a,
-        Media $b,
-        Media $failing,
-        TenantRunner $runner,
-        TenantContext $context,
-    ): void {
+    private function publishProbes(string $queue, Media $a, Media $b, Media $failing, TenantRunner $runner, TenantContext $context): void
+    {
         try {
-            Bus::dispatch((new GenerateImageVariationJob(
-                $a->id,
-                'unresolved',
-                ['width' => 1, 'height' => 1, 'format' => 'png'],
-                $a->revision,
-                TenantJobEnvelope::capture($context),
-            ))->onConnection('database')->onQueue($queue));
+            Bus::dispatch((new GenerateImageVariationJob($a->id, 'unresolved', ['width' => 1, 'height' => 1, 'format' => 'png'], $a->revision, TenantJobEnvelope::capture($context)))->onConnection('database')->onQueue($queue));
             throw new RuntimeException('Missing tenant context unexpectedly dispatched.');
         } catch (TenantBoundaryViolation) {
         }
-
         $this->dispatch($runner, $context, MediaTenancyScenario::A, $a, 'proof', $queue);
         $this->dispatch($runner, $context, MediaTenancyScenario::B, $b, 'proof', $queue);
         $this->dispatch($runner, $context, MediaTenancyScenario::A, $a, 'stale', $queue, $a->revision + 1);
         $this->dispatch($runner, $context, MediaTenancyScenario::A, $failing, 'failure', $queue);
         $this->dispatch($runner, $context, MediaTenancyScenario::A, $a, 'corrupt-before-read', $queue);
-
         $connection = DB::connection();
         $job = $connection->table('jobs')->where('queue', $queue)->orderByDesc('id')->first();
         if (! is_object($job) || ! is_string($job->payload ?? null)) {
@@ -193,29 +162,14 @@ final class MediaTenancyConsumerSetupCommand extends Command
             throw new RuntimeException('The final serialized Media probe has no tenant envelope.');
         }
         data_set($payload, 'data.nvl_tenancy.tenant_id', MediaTenancyScenario::B);
-        $connection->table('jobs')->where('id', $job->id)->update([
-            'payload' => json_encode($payload, JSON_THROW_ON_ERROR),
-        ]);
+        $connection->table('jobs')->where('id', $job->id)->update(['payload' => json_encode($payload, JSON_THROW_ON_ERROR)]);
     }
 
     /** Dispatch one scalar variation job from an admitted producer tenant. */
-    private function dispatch(
-        TenantRunner $runner,
-        TenantContext $context,
-        string $tenant,
-        Media $media,
-        string $label,
-        string $queue,
-        ?int $revision = null,
-    ): void {
+    private function dispatch(TenantRunner $runner, TenantContext $context, string $tenant, Media $media, string $label, string $queue, ?int $revision = null): void
+    {
         $runner->run(new TenantId($tenant), static function () use ($media, $label, $queue, $revision, $context): void {
-            Bus::dispatch((new GenerateImageVariationJob(
-                $media->id,
-                $label,
-                ['width' => 1, 'height' => 1, 'format' => 'png', 'quality' => 80],
-                $revision ?? $media->revision,
-                TenantJobEnvelope::capture($context),
-            ))->onConnection('database')->onQueue($queue));
+            Bus::dispatch((new GenerateImageVariationJob($media->id, $label, ['width' => 1, 'height' => 1, 'format' => 'png', 'quality' => 80], $revision ?? $media->revision, TenantJobEnvelope::capture($context)))->onConnection('database')->onQueue($queue));
         });
     }
 

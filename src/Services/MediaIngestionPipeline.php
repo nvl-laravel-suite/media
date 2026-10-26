@@ -6,7 +6,6 @@ namespace Nvl\Media\Services;
 
 use Illuminate\Http\UploadedFile;
 use Nvl\Media\Contracts\MediaContentScanner;
-use Nvl\Media\Data\Ingestion\ValidatedMediaFileData;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Support\Logging\PackageLogger;
 use Throwable;
@@ -33,7 +32,7 @@ final class MediaIngestionPipeline
         UploadedFile $file,
         array $slots,
         ?string $displayFilename = null,
-    ): ValidatedMediaFileData {
+    ): array {
         $primarySlot = $slots[0];
         $validatedFile = $this->validator->validate(
             $file,
@@ -49,15 +48,15 @@ final class MediaIngestionPipeline
             $this->scannerPolicy->assertReady();
             $this->contentScanner->scan($file);
 
-            if ($validatedFile->extension === 'svg'
-                || $validatedFile->mimeType === 'image/svg+xml') {
-                $this->svgScanner->scan($validatedFile->realPath);
+            if ($validatedFile['extension'] === 'svg'
+                || $validatedFile['mimeType'] === 'image/svg+xml') {
+                $this->svgScanner->scan($validatedFile['realPath']);
             }
         } catch (Throwable $exception) {
             $this->packageLogger->log('media', 'warning', 'nvl.media.ingestion_scan.rejected', [
-                'filename' => $validatedFile->displayFilename,
-                'mime_type' => $validatedFile->mimeType,
-                'size' => $validatedFile->size,
+                'filename' => $validatedFile['displayFilename'],
+                'mime_type' => $validatedFile['mimeType'],
+                'size' => $validatedFile['size'],
                 'scanner' => $this->contentScanner::class,
                 'exception' => $exception::class,
                 'error' => mb_substr($exception->getMessage(), 0, 1000),

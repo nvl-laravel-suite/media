@@ -12,6 +12,7 @@ use Illuminate\Support\Str;
 use Nvl\Media\Exceptions\DiskNotDefinedException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
+use Nvl\Media\Ownership\MediaOwnership;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDiskGuard;
 use Nvl\Media\Services\MediaFileExistence;
@@ -20,9 +21,7 @@ use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\MediaUrlResolver;
 use Nvl\Media\Support\MediaConfiguration;
-use Nvl\Support\Tenancy\Contracts\TenantContext;
-use Nvl\Support\Tenancy\Enums\TenantContextMode;
-use Nvl\Support\Tenancy\Exceptions\TenantContextMissing;
+use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Throwable;
 
 /**
@@ -61,7 +60,6 @@ final class StorageHealthCommand extends Command
         private readonly MediaFileOperator $files,
         private readonly MediaPathResolver $pathResolver,
         private readonly MediaUrlResolver $urlResolver,
-        private readonly TenantContext $tenantContext,
     ) {
         parent::__construct();
     }
@@ -700,23 +698,13 @@ final class StorageHealthCommand extends Command
      * Resolve the only storage prefix this execution may inventory destructively.
      *
      * @param  string  $disk  Selected filesystem disk
-     * @return string Disk-specific root restricted to the active tenant when enabled
+     * @return string Disk-specific root restricted to the active owner when enabled
      *
-     * @throws TenantContextMissing When tenant reconciliation has no active tenant
+     * @throws OwnershipViolation When owned reconciliation has no active owner
      */
     private function orphanInventoryRoot(string $disk): string
     {
-        $root = MediaPathResolver::rootFolder($disk);
-        if (config('nvl-tenancy.enabled') !== true) {
-            return $root;
-        }
-
-        $snapshot = $this->tenantContext->snapshot();
-        if ($snapshot->mode !== TenantContextMode::Tenant || $snapshot->tenantId === null) {
-            throw new TenantContextMissing('Tenant orphan reconciliation requires one active tenant context.');
-        }
-
-        return implode('/', array_filter([$root, 'tenants', $snapshot->tenantId->value], static fn (string $part): bool => $part !== ''));
+        return implode('/', array_filter([MediaPathResolver::rootFolder($disk), MediaOwnership::storagePartition()], static fn (?string $part): bool => $part !== null && $part !== ''));
     }
 
     /**

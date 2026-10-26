@@ -17,32 +17,11 @@ use Nvl\Support\Config\PackageEnvironment;
 /** Complete runtime defaults; publication sections are declared in ../resources/config/sections.json. */
 return [
     'models' => ['media' => Media::class],
-    'tenancy' => [
-        // Ownership classification is separate from HTTP association allowlists.
-        'owner_types' => [],
-        // Hosts may replace MediaTenantWorklist; the package never guesses a directory table.
-        'active_tenant_worklist' => [],
-    ],
-
     'catalog' => [
         // Only reviewed user-facing scalars cross from the platform catalog.
         'metadata_keys' => ['alt', 'attribution', 'caption', 'copyright', 'description', 'title'],
         'max_tags' => 25,
         'max_tag_length' => 100,
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Optional HTTP Routes
-    |--------------------------------------------------------------------------
-    */
-    'routes' => [
-        'api_enabled' => false,
-        'api_prefix' => 'nvl/api/v1',
-        'api_middleware' => ['api'],
-        'management_middleware' => ['auth', 'throttle:60,1'],
-        'assets_enabled' => true,
-        'assets_prefix' => 'nvl/media',
     ],
 
     /*
@@ -578,7 +557,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Prevent ordinary global deletion while a public asset is attached to
-    | multiple owners. DeleteMediaAction accepts force: true for intentional
+    | multiple owners. MediaLibrary accepts force: true for intentional
     | administrative removal.
     |
     */

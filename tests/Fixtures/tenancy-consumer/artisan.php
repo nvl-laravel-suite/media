@@ -1,7 +1,6 @@
 <?php
 
 declare(strict_types=1);
-
 use Illuminate\Foundation\Application;
 use Nvl\Data\Providers\DataServiceProvider;
 use Nvl\Filterable\Providers\FilterableServiceProvider;
@@ -19,19 +18,5 @@ if (! is_string($vendor) || $vendor === '' || ! is_file($vendor.'/autoload.php')
 }
 require $vendor.'/autoload.php';
 putenv('COMPOSER_VENDOR_DIR='.$vendor);
-
-$app = Application::configure(basePath: __DIR__)
-    ->withProviders([
-        LocaleServiceProvider::class, SupportServiceProvider::class,
-        DataServiceProvider::class,
-        FilterableServiceProvider::class,
-        TenancyServiceProvider::class,
-        MediaTenancyConsumerServiceProvider::class,
-        TranslatableServiceProvider::class,
-        MediaServiceProvider::class,
-    ])
-    ->withExceptions()
-    ->withMiddleware()
-    ->create();
-
+$app = Application::configure(basePath: __DIR__)->withProviders([LocaleServiceProvider::class, SupportServiceProvider::class, DataServiceProvider::class, FilterableServiceProvider::class, TenancyServiceProvider::class, MediaTenancyConsumerServiceProvider::class, TranslatableServiceProvider::class, MediaServiceProvider::class])->withExceptions()->withMiddleware()->create();
 exit($app->handleCommand(new ArgvInput));

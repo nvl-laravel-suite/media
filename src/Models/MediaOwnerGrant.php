@@ -4,18 +4,90 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Models;
 
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
+use Nvl\Media\Database\Factories\MediaOwnerGrantFactory;
+use Nvl\Media\Definitions\Tables\MediaTables;
+use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
+use Nvl\Media\Services\MediaModelRegistry;
+use Nvl\Support\Config\PackageStorage;
 use Nvl\Support\Ownership\Contracts\Ownable;
 use Nvl\Support\Ownership\Traits\HasOwnership;
 
 /**
- * @property-read string|null $owner_scope_key Technical immutable partition.
- * @property-read string|null $owner_reference Captured scalar reference.
+ * Records a recipient owner's revocable permission to inspect and copy one platform asset.
  *
- * Recipient-owned copy capability; the historical tenant grant API remains a V1 bridge.
+ * @property string $id Persisted UUID.
+ * @property-read string|null $owner_scope_key Recipient ownership partition.
+ * @property string $media_id Platform source asset UUID.
+ * @property int $source_revision Granted source revision.
+ * @property int $revision Optimistic grant revision.
+ * @property bool $enabled Whether new inspection and import is allowed.
+ * @property Carbon|null $revoked_at Revocation time.
+ * @property Carbon|null $created_at Creation time.
+ * @property Carbon|null $updated_at Update time.
+ * @property-read Media $media Platform source asset.
  *
  * @api
  */
-final class MediaOwnerGrant extends MediaTenantGrant implements Ownable
+final class MediaOwnerGrant extends Model implements Ownable
 {
+    use GuardsTenantOwnership;
+
+    /** @use HasFactory<MediaOwnerGrantFactory> */
+    use HasFactory;
+
     use HasOwnership;
+    use HasUuids;
+
+    public const string TABLE = MediaTables::OwnerGrants;
+
+    protected $table = self::TABLE;
+
+    /** @var list<string> */
+    protected $fillable = [];
+
+    /** @return BelongsTo<Media, $this> */
+    public function media(): BelongsTo
+    {
+        return $this->belongsTo(MediaModelRegistry::modelClass(), 'media_id')->withTrashed();
+    }
+
+    /** @return array<string, string> */
+    protected function casts(): array
+    {
+        return [
+            'source_revision' => 'integer',
+            'revision' => 'integer',
+            'enabled' => 'boolean',
+            'revoked_at' => 'immutable_datetime',
+            'created_at' => 'immutable_datetime',
+            'updated_at' => 'immutable_datetime',
+        ];
+    }
+
+    /** Resolve the configured package storage table. */
+    public function getTable(): string
+    {
+        return MediaTables::get(MediaTables::OwnerGrants);
+    }
+
+    /** Resolve the package connection through shared infrastructure defaults. */
+    public function getConnectionName(): ?string
+    {
+        return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('media') ?? parent::getConnectionName());
+    }
+
+    /**
+     * Return the package's runtime fixture factory.
+     *
+     * @internal
+     */
+    protected static function newFactory(): MediaOwnerGrantFactory
+    {
+        return MediaOwnerGrantFactory::new();
+    }
 }

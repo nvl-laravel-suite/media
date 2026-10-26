@@ -35,7 +35,7 @@ final class PruneExpiredMultipartUploadsCommand extends Command
     public function handle(): int
     {
         $limit = max(1, (int) $this->option('limit'));
-        $expiredAt = now();
+        $expiredAt = now()->utc();
         $sessionIds = MediaMultipartUpload::query()
             ->where(function (Builder $query) use ($expiredAt): void {
                 $query

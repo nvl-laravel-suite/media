@@ -1,202 +1,69 @@
 <?php
 
 declare(strict_types=1);
-
 use Illuminate\Config\Repository;
 use Illuminate\Container\Container;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Filesystem\FilesystemServiceProvider;
 use Illuminate\Foundation\Application;
-use Nvl\Media\Actions\AbortMultipartUploadAction;
-use Nvl\Media\Actions\AdoptSpatieMediaAction;
-use Nvl\Media\Actions\AttachMediaAction;
-use Nvl\Media\Actions\BulkDeleteMediaAction;
-use Nvl\Media\Actions\BulkMoveMediaAction;
-use Nvl\Media\Actions\BulkTagMediaAction;
-use Nvl\Media\Actions\ClearOwnerMediaSlotAction;
-use Nvl\Media\Actions\CompleteMultipartUploadAction;
-use Nvl\Media\Actions\CopyOwnerMediaSlotAction;
-use Nvl\Media\Actions\DeleteMediaAction;
-use Nvl\Media\Actions\DetachMediaAction;
-use Nvl\Media\Actions\FinalizeMediaScanAction;
-use Nvl\Media\Actions\GenerateImageVariationAction;
-use Nvl\Media\Actions\GetOwnerMediaSlotAction;
-use Nvl\Media\Actions\GrantMediaToTenantAction;
-use Nvl\Media\Actions\ImportPlatformMediaAction;
-use Nvl\Media\Actions\InitiateMultipartUploadAction;
-use Nvl\Media\Actions\ListOwnerMediaAction;
-use Nvl\Media\Actions\ListOwnerMediaSlotsAction;
-use Nvl\Media\Actions\MutateMediaTagsAction;
-use Nvl\Media\Actions\RelocateMediaAction;
-use Nvl\Media\Actions\RemoveOwnerMediaAction;
-use Nvl\Media\Actions\RenameMediaAction;
-use Nvl\Media\Actions\ReplaceMediaFileAction;
-use Nvl\Media\Actions\ReplaceOwnerMediaSlotAction;
-use Nvl\Media\Actions\ReusePublicMediaAction;
-use Nvl\Media\Actions\RevokeMediaTenantGrantAction;
-use Nvl\Media\Actions\SignMultipartPartAction;
-use Nvl\Media\Actions\UpdateMediaMetadataAction;
-use Nvl\Media\Actions\UploadMediaAction;
-use Nvl\Media\Contracts\AbortMultipartUploadContract;
-use Nvl\Media\Contracts\AdoptSpatieMediaContract;
-use Nvl\Media\Contracts\AttachMediaContract;
-use Nvl\Media\Contracts\BulkDeleteMediaContract;
-use Nvl\Media\Contracts\BulkMoveMediaContract;
-use Nvl\Media\Contracts\BulkTagMediaContract;
-use Nvl\Media\Contracts\ClearOwnerMediaSlotContract;
-use Nvl\Media\Contracts\CompleteMultipartUploadContract;
-use Nvl\Media\Contracts\CopyOwnerMediaSlotContract;
-use Nvl\Media\Contracts\DeleteMediaContract;
-use Nvl\Media\Contracts\DetachMediaContract;
-use Nvl\Media\Contracts\FinalizeMediaScanContract;
-use Nvl\Media\Contracts\GenerateImageVariationContract;
-use Nvl\Media\Contracts\GetOwnerMediaSlotContract;
-use Nvl\Media\Contracts\GrantMediaToTenantContract;
-use Nvl\Media\Contracts\ImportPlatformMediaContract;
-use Nvl\Media\Contracts\InitiateMultipartUploadContract;
-use Nvl\Media\Contracts\ListOwnerMediaContract;
-use Nvl\Media\Contracts\ListOwnerMediaSlotsContract;
-use Nvl\Media\Contracts\MutateMediaTagsContract;
-use Nvl\Media\Contracts\RelocateMediaContract;
-use Nvl\Media\Contracts\RemoveOwnerMediaContract;
-use Nvl\Media\Contracts\RenameMediaContract;
-use Nvl\Media\Contracts\ReplaceMediaFileContract;
-use Nvl\Media\Contracts\ReplaceOwnerMediaSlotContract;
-use Nvl\Media\Contracts\ReusePublicMediaContract;
-use Nvl\Media\Contracts\RevokeMediaTenantGrantContract;
-use Nvl\Media\Contracts\SignMultipartPartContract;
-use Nvl\Media\Contracts\UpdateMediaMetadataContract;
-use Nvl\Media\Contracts\UploadMediaContract;
+use Nvl\Media\Contracts\MediaCatalogImport;
+use Nvl\Media\Contracts\MediaHostResolver;
+use Nvl\Media\Contracts\MediaSearchDriver;
+use Nvl\Media\Contracts\MultipartUploadGateway;
+use Nvl\Media\Ownership\MediaOwnerCatalog;
 use Nvl\Media\Providers\MediaServiceProvider;
+use Nvl\Media\Services\MediaAttachments;
+use Nvl\Media\Services\MediaLibrary;
+use Nvl\Media\Services\MediaMultipart;
+use Nvl\Media\Services\MediaReader;
+use Nvl\Media\Services\MediaUploader;
+use Nvl\Media\Services\PortableMediaSearchDriver;
+use Nvl\Media\Services\SystemMediaHostResolver;
+use Nvl\Media\Services\UnsupportedMultipartUploadGateway;
 use Nvl\Media\Tests\MediaTestCase;
+use Nvl\Support\Enums\SystemActor;
 
 if (! in_array(dirname(__DIR__).'/Pest.php', get_included_files(), true)) {
     uses(MediaTestCase::class);
 }
-
 /** @return list<array{class-string, class-string}> */
 function nvlConsumerBindingsForMedia(): array
 {
     return [
-        [AbortMultipartUploadContract::class, AbortMultipartUploadAction::class],
-        [AdoptSpatieMediaContract::class, AdoptSpatieMediaAction::class],
-        [AttachMediaContract::class, AttachMediaAction::class],
-        [BulkDeleteMediaContract::class, BulkDeleteMediaAction::class],
-        [BulkMoveMediaContract::class, BulkMoveMediaAction::class],
-        [BulkTagMediaContract::class, BulkTagMediaAction::class],
-        [ClearOwnerMediaSlotContract::class, ClearOwnerMediaSlotAction::class],
-        [CompleteMultipartUploadContract::class, CompleteMultipartUploadAction::class],
-        [CopyOwnerMediaSlotContract::class, CopyOwnerMediaSlotAction::class],
-        [DeleteMediaContract::class, DeleteMediaAction::class],
-        [DetachMediaContract::class, DetachMediaAction::class],
-        [FinalizeMediaScanContract::class, FinalizeMediaScanAction::class],
-        [GenerateImageVariationContract::class, GenerateImageVariationAction::class],
-        [GetOwnerMediaSlotContract::class, GetOwnerMediaSlotAction::class],
-        [GrantMediaToTenantContract::class, GrantMediaToTenantAction::class],
-        [ImportPlatformMediaContract::class, ImportPlatformMediaAction::class],
-        [InitiateMultipartUploadContract::class, InitiateMultipartUploadAction::class],
-        [ListOwnerMediaSlotsContract::class, ListOwnerMediaSlotsAction::class],
-        [ListOwnerMediaContract::class, ListOwnerMediaAction::class],
-        [RemoveOwnerMediaContract::class, RemoveOwnerMediaAction::class],
-        [MutateMediaTagsContract::class, MutateMediaTagsAction::class],
-        [RelocateMediaContract::class, RelocateMediaAction::class],
-        [RenameMediaContract::class, RenameMediaAction::class],
-        [ReplaceMediaFileContract::class, ReplaceMediaFileAction::class],
-        [ReplaceOwnerMediaSlotContract::class, ReplaceOwnerMediaSlotAction::class],
-        [ReusePublicMediaContract::class, ReusePublicMediaAction::class],
-        [RevokeMediaTenantGrantContract::class, RevokeMediaTenantGrantAction::class],
-        [SignMultipartPartContract::class, SignMultipartPartAction::class],
-        [UpdateMediaMetadataContract::class, UpdateMediaMetadataAction::class],
-        [UploadMediaContract::class, UploadMediaAction::class],
+        [MediaCatalogImport::class, MediaOwnerCatalog::class],
+        [MediaHostResolver::class, SystemMediaHostResolver::class],
+        [MediaSearchDriver::class, PortableMediaSearchDriver::class],
+        [MultipartUploadGateway::class, UnsupportedMultipartUploadGateway::class],
     ];
 }
-
-test('published workflow contracts retain native signatures attributes and generic documentation', function (): void {
-    $genericDocumentation = static function (string|false $documentation): array {
-        if ($documentation === false) {
-            return [];
-        }
-        preg_match_all('/@param\s+([^\r\n]+?)\s+(\$[A-Za-z_][A-Za-z0-9_]*)\b/', $documentation, $parameters, PREG_SET_ORDER);
-        $result = [];
-        foreach ($parameters as $parameter) {
-            $type = preg_replace('/\s+/', '', $parameter[1]);
-            if (str_contains($type, '<') || str_contains($type, '{') || str_contains($type, '[]')) {
-                $result['@param'.$parameter[2]] = $type;
+test('published workflows expose native explicit actor signatures and document array boundaries', function (): void {
+    $workflows = [MediaUploader::class => ['upload', 'replace'], MediaAttachments::class => ['attach', 'detach', 'replaceSlot', 'clearSlot', 'copySlot'], MediaLibrary::class => ['rename', 'updateMetadata', 'relocate', 'delete', 'bulkDelete', 'tag'], MediaReader::class => ['get', 'paginate', 'slots'], MediaMultipart::class => ['initiate', 'signPart', 'complete', 'abort']];
+    foreach ($workflows as $class => $methods) {
+        foreach ($methods as $name) {
+            $method = new ReflectionMethod($class, $name);
+            expect($method->isPublic())->toBeTrue()->and($method->isStatic())->toBeFalse()->and($method->getReturnType())->not->toBeNull();
+            $actors = array_filter($method->getParameters(), static fn (ReflectionParameter $parameter): bool => str_contains((string) $parameter->getType(), Authenticatable::class));
+            expect($actors)->toHaveCount(1);
+            foreach ($actors as $actor) {
+                expect($actor->isOptional())->toBeFalse()->and((string) $actor->getType())->toContain(SystemActor::class);
             }
-        }
-        if (preg_match('/@return\s+([^\r\n]+)/', $documentation, $return) === 1) {
-            $type = '';
-            $depth = 0;
-            foreach (str_split($return[1]) as $character) {
-                if (preg_match('/\s/', $character) === 1 && $depth === 0) {
-                    break;
-                }
-                if (str_contains('<{([', $character)) {
-                    $depth++;
-                } elseif (str_contains('>})]', $character)) {
-                    $depth--;
-                }
-                if (preg_match('/\s/', $character) !== 1) {
-                    $type .= $character;
-                }
-            }
-            if (str_contains($type, '<') || str_contains($type, '{') || str_contains($type, '[]')) {
-                $result['@return'] = $type;
-            }
-        }
-
-        return $result;
-    };
-
-    foreach (nvlConsumerBindingsForMedia() as [$contract, $implementation]) {
-        $interface = new ReflectionClass($contract);
-        $concrete = new ReflectionClass($implementation);
-        expect($interface->isInterface())->toBeTrue()
-            ->and($concrete->implementsInterface($contract))->toBeTrue();
-        foreach ($interface->getMethods() as $method) {
-            $native = $concrete->getMethod($method->getName());
-            $return = (string) $method->getReturnType();
-            if ($contract !== AttachMediaContract::class) {
-                $publishedTypes = $genericDocumentation($method->getDocComment());
-                foreach ($genericDocumentation($native->getDocComment()) as $tag => $type) {
-                    expect($publishedTypes[$tag] ?? null)->toBe($type);
-                }
-            }
-            expect($native->isPublic())->toBeTrue()
-                ->and($native->isStatic())->toBeFalse()
-                ->and(count($method->getParameters()))->toBe($contract === AttachMediaContract::class ? count($native->getParameters()) - 1 : count($native->getParameters()));
-            if ($return !== 'self') {
-                expect((string) $native->getReturnType())->toBe($return);
-            } else {
-                $nativeReturn = (string) $native->getReturnType();
-                expect(is_a(in_array($nativeReturn, ['self', 'static'], true) ? $native->getDeclaringClass()->getName() : $nativeReturn, $contract, true))->toBeTrue();
-            }
-            foreach ($method->getParameters() as $position => $parameter) {
-                $actual = $native->getParameters()[$position];
-                expect($actual->getName())->toBe($parameter->getName())
-                    ->and((string) $actual->getType())->toBe((string) $parameter->getType())
-                    ->and($actual->isVariadic())->toBe($parameter->isVariadic())
-                    ->and($actual->isPassedByReference())->toBe($parameter->isPassedByReference())
-                    ->and($actual->isDefaultValueAvailable())->toBe($parameter->isDefaultValueAvailable())
-                    ->and(array_map(static fn (ReflectionAttribute $attribute): array => [$attribute->getName(), $attribute->getArguments()], $actual->getAttributes()))
-                    ->toBe(array_map(static fn (ReflectionAttribute $attribute): array => [$attribute->getName(), $attribute->getArguments()], $parameter->getAttributes()));
-                if ($parameter->isDefaultValueAvailable()) {
-                    expect($actual->getDefaultValue())->toEqual($parameter->getDefaultValue());
+            foreach ($method->getParameters() as $parameter) {
+                expect((string) $parameter->getType())->not->toContain('\\Data\\', 'Illuminate\\Http\\Request');
+                if ((string) $parameter->getType() === 'array') {
+                    expect($method->getDocComment())->toContain('$'.$parameter->getName());
                 }
             }
         }
     }
 });
-
 test('native provider defaults resolve each workflow while preserving late host substitutes', function (): void {
     foreach (nvlConsumerBindingsForMedia() as [$contract, $implementation]) {
-        expect($this->app->bound($contract))->toBeTrue()
-            ->and($this->app->make($contract))->toBeInstanceOf($implementation);
+        expect($this->app->bound($contract))->toBeTrue()->and($this->app->make($contract))->toBeInstanceOf($implementation);
         $host = Mockery::mock($contract);
         $this->app->instance($contract, $host);
         expect($this->app->make($contract))->toBe($host);
     }
 });
-
 test('provider registration preserves early interface bindings in a second native application', function (): void {
     $consumer = new Application($this->app->basePath());
     $consumer->instance('config', new Repository($this->app->make('config')->all()));

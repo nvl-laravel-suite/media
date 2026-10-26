@@ -10,11 +10,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
-use Nvl\Data\Providers\DataServiceProvider;
 use Nvl\Filterable\Providers\FilterableServiceProvider;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Providers\MediaServiceProvider;
 use Nvl\Media\Services\MediaModelRegistry;
+use Nvl\Media\Tests\Fixtures\ConsumerMediaProvider;
 use Nvl\Media\Tests\Fixtures\OwnershipActor;
 use Nvl\Media\Tests\Fixtures\OwnershipCompany;
 use Nvl\Media\Tests\Fixtures\OwnershipMedia;
@@ -34,6 +34,7 @@ use Nvl\Support\Providers\LocaleServiceProvider;
 use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Translatable\Providers\TranslatableServiceProvider;
 use Orchestra\Testbench\TestCase;
+use Spatie\LaravelData\LaravelDataServiceProvider as DataServiceProvider;
 
 /** Exercises committed ownership and audit behavior without NVL Tenancy or Auth providers. */
 abstract class OwnershipTestCase extends TestCase
@@ -49,7 +50,7 @@ abstract class OwnershipTestCase extends TestCase
     /** @return list<class-string> */
     protected function getPackageProviders($app): array
     {
-        return [LocaleServiceProvider::class, SupportServiceProvider::class, FilterableServiceProvider::class, TranslatableServiceProvider::class, DataServiceProvider::class, OwnershipServiceProvider::class, MediaServiceProvider::class];
+        return [LocaleServiceProvider::class, SupportServiceProvider::class, FilterableServiceProvider::class, TranslatableServiceProvider::class, DataServiceProvider::class, OwnershipServiceProvider::class, MediaServiceProvider::class, ConsumerMediaProvider::class];
     }
 
     /** @return class-string<Media> */
@@ -61,18 +62,7 @@ abstract class OwnershipTestCase extends TestCase
     /** Configure owned package roots before immutable resource registration. */
     protected function defineEnvironment($app): void
     {
-        $app['config']->set([
-            'database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:',
-            'nvl-core.owners' => [OwnershipCompany::class, OwnershipActor::class],
-            'nvl-ownership.enabled' => true, 'nvl-ownership.migrations.enabled' => false,
-            'nvl-ownership.central_operations' => ['media-maintain'],
-            'nvl-tenancy.enabled' => false,
-            'nvl-media.models.media' => $this->mediaClass(),
-            'nvl-media.migrations.enabled' => false,
-            'nvl-media.deduplication_lock.store' => 'array',
-            'nvl-media.routes.api_enabled' => false,
-            'auth.providers.users.model' => OwnershipActor::class,
-        ]);
+        $app['config']->set(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:', 'nvl-core.owners' => [OwnershipCompany::class, OwnershipActor::class], 'nvl-ownership.enabled' => true, 'nvl-ownership.migrations.enabled' => false, 'nvl-ownership.central_operations' => ['media-maintain'], 'nvl-tenancy.enabled' => false, 'nvl-media.models.media' => $this->mediaClass(), 'nvl-media.migrations.enabled' => false, 'nvl-media.deduplication_lock.store' => 'array', 'nvl-media.routes.api_enabled' => false, 'auth.providers.users.model' => OwnershipActor::class]);
         if (getenv('NVL_OWNERSHIP_TEST_DRIVER') === 'pgsql') {
             $database = getenv('NVL_OWNERSHIP_TEST_DATABASE');
             if (! is_string($database) || preg_match('/^nvl_own_test_[a-z0-9_]+$/D', $database) !== 1) {

@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
+use Nvl\Media\Ownership\MediaOwnership;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDiskGuard;
 use Nvl\Media\Services\MediaFileExistence;
@@ -324,7 +325,7 @@ class MigrateDiskCommand extends Command
             if ($rewritePaths) {
                 foreach ((clone $query)->with('imageVariations')->get() as $media) {
                     $paths = $this->pathsForMedia($media, $to);
-                    if (config('nvl-tenancy.enabled') === true) {
+                    if (MediaOwnership::active()) {
                         (clone $query)->whereKey($media->id)->update(['storage_path' => $paths[$media->buildPath()]]);
                     }
                     foreach ($media->imageVariations as $variation) {

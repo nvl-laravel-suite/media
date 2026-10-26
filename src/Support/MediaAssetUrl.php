@@ -12,7 +12,6 @@ use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Ownership\MediaOwnership;
-use Nvl\Support\Tenancy\Exceptions\TenantContextMissing;
 use RuntimeException;
 use Throwable;
 
@@ -35,8 +34,6 @@ final class MediaAssetUrl
         ?Closure $exists = null,
         ?Closure $diskUrl = null,
         ?Closure $temporaryUrl = null,
-        ?string $tenantId = null,
-        ?string $canonicalOrigin = null,
     ): string {
         self::assertAvailable($media);
 
@@ -51,8 +48,6 @@ final class MediaAssetUrl
                 $exists,
                 $diskUrl,
                 $temporaryUrl,
-                $tenantId,
-                $canonicalOrigin,
             );
         }
 
@@ -75,8 +70,6 @@ final class MediaAssetUrl
         ?Closure $exists = null,
         ?Closure $diskUrl = null,
         ?Closure $temporaryUrl = null,
-        ?string $tenantId = null,
-        ?string $canonicalOrigin = null,
     ): string {
         MediaOwnership::assertVariationOwner($variation);
         /** @var Media $media */
@@ -84,16 +77,16 @@ final class MediaAssetUrl
         self::assertAvailable($media);
 
         if (! self::isCurrentAvailableVariation($media, $variation)) {
-            return self::forMedia($media, '', $exists, $diskUrl, $temporaryUrl, $tenantId, $canonicalOrigin);
+            return self::forMedia($media, '', $exists, $diskUrl, $temporaryUrl);
         }
 
         $path = $variation->getPath();
 
         if (! self::objectExists($media->disk, $path, $exists)) {
-            return self::forMedia($media, '', $exists, $diskUrl, $temporaryUrl, $tenantId, $canonicalOrigin);
+            return self::forMedia($media, '', $exists, $diskUrl, $temporaryUrl);
         }
 
-        return self::buildUrl($media, ['v' => $variation->label], null, null, $exists, $diskUrl, $temporaryUrl, $tenantId, $canonicalOrigin);
+        return self::buildUrl($media, ['v' => $variation->label], null, null, $exists, $diskUrl, $temporaryUrl);
     }
 
     /**
@@ -112,8 +105,6 @@ final class MediaAssetUrl
         ?Closure $exists = null,
         ?Closure $diskUrl = null,
         ?Closure $temporaryUrl = null,
-        ?string $tenantId = null,
-        ?string $canonicalOrigin = null,
     ): string {
         self::assertAvailable($media);
 
@@ -121,7 +112,7 @@ final class MediaAssetUrl
             return self::publicUrl($media, $parameters, $exists, $diskUrl);
         }
 
-        return self::privateUrl($media, $parameters, $expiration, $owner, $exists, $diskUrl, $temporaryUrl, $tenantId, $canonicalOrigin);
+        return self::privateUrl($media, $parameters, $expiration, $owner, $exists, $diskUrl, $temporaryUrl);
     }
 
     /**
@@ -174,8 +165,6 @@ final class MediaAssetUrl
         ?Closure $exists = null,
         ?Closure $diskUrl = null,
         ?Closure $temporaryUrl = null,
-        ?string $tenantId = null,
-        ?string $canonicalOrigin = null,
     ): string {
         self::assertAvailable($media);
 
@@ -186,17 +175,9 @@ final class MediaAssetUrl
         $resolvedOwner = $owner ?? $media->uploaded_by ?? $defaultOwner;
         $normalized = self::normalizeAssetParameters($parameters);
         $normalized = self::withoutUnavailableVariation($media, $normalized);
-        $tenantAware = config('nvl-tenancy.enabled') === true;
-        if ($tenantAware && ($tenantId === null || $canonicalOrigin === null)) {
-            throw new TenantContextMissing('Tenant-aware private Media URLs require a verified canonical site origin.');
-        }
         $payload = [
             'owner' => (string) $resolvedOwner,
             'media' => $media->id,
-            ...($tenantAware ? [
-                'tenant' => $tenantId,
-                'revision' => $media->revision,
-            ] : []),
             ...(config('nvl-ownership.enabled') === true && MediaOwnership::active() ? ['scope' => MediaOwnership::privateCapabilityKey(), 'revision' => $media->revision] : []),
             ...$normalized,
         ];
@@ -213,14 +194,7 @@ final class MediaAssetUrl
         $expiresAt = $expiration ?? now()->addMinutes(max(1, $ttlMinutes));
 
         try {
-            if (! $tenantAware) {
-                return URL::temporarySignedRoute($routeName, $expiresAt, $payload);
-            }
-
-            $relative = URL::temporarySignedRoute($routeName, $expiresAt, $payload, absolute: false);
-            $origin = rtrim($canonicalOrigin, '/');
-
-            return $origin.'/'.ltrim($relative, '/');
+            return URL::temporarySignedRoute($routeName, $expiresAt, $payload);
         } catch (Throwable $routeException) {
             if (config('nvl-ownership.enabled') === true && MediaOwnership::active()) {
                 throw new RuntimeException('Owned private Media requires its scoped signed application route.', previous: $routeException);
@@ -250,8 +224,6 @@ final class MediaAssetUrl
         string $variation = '',
         ?Closure $diskUrl = null,
         ?Closure $temporaryUrl = null,
-        ?string $tenantId = null,
-        ?string $canonicalOrigin = null,
     ): string {
         self::assertAvailable($media);
 
@@ -266,8 +238,6 @@ final class MediaAssetUrl
                 null,
                 $diskUrl,
                 $temporaryUrl,
-                $tenantId,
-                $canonicalOrigin,
             );
         }
 

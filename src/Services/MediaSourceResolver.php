@@ -10,7 +10,6 @@ use GuzzleHttp\Psr7\Utils;
 use GuzzleHttp\TransferStats;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
-use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Nvl\Media\Contracts\MediaHostResolver;
@@ -23,7 +22,7 @@ use Nvl\Support\Logging\PackageLogger;
 use Throwable;
 
 /**
- * Normalizes remote, encoded, disk, string, and request sources into bounded uploads.
+ * Normalizes remote, encoded, disk and string sources into bounded uploads.
  */
 final class MediaSourceResolver
 {
@@ -205,22 +204,6 @@ final class MediaSourceResolver
         } finally {
             fclose($input);
         }
-    }
-
-    /**
-     * Extract an application-owned request upload without claiming ownership.
-     *
-     * @throws MediaUploadException
-     */
-    public function fromRequest(Request $request, string $key): UploadedFile
-    {
-        $file = $request->file($key);
-
-        if (! $file instanceof UploadedFile) {
-            throw new MediaUploadException("No file found in request for key [{$key}].");
-        }
-
-        return $file;
     }
 
     /**

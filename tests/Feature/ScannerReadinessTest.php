@@ -1,7 +1,6 @@
 <?php
 
 declare(strict_types=1);
-
 use Illuminate\Http\UploadedFile;
 use Nvl\Media\Contracts\MediaContentScanner;
 use Nvl\Media\Providers\MediaServiceProvider;
@@ -13,10 +12,9 @@ it('keeps explicit development bypass but diagnoses a required noop as a strict 
     config()->set('nvl-media.scanner.allow_noop', true);
     app(MediaScannerPolicy::class)->assertReady();
     $check = collect(app(MediaDoctor::class)->inspect())->firstWhere('key', 'scanner.required');
-    expect($check->passed)->toBeFalse()->and($check->severity)->toBe('error');
+    expect($check['passed'])->toBeFalse()->and($check['severity'])->toBe('error');
     $this->artisan('nvl:media:doctor', ['--strict' => true, '--format' => 'json'])->assertFailed();
 });
-
 it('preserves a host scanner binding and diagnoses it without scanning files', function (): void {
     $scanner = new class implements MediaContentScanner
     {
@@ -30,5 +28,5 @@ it('preserves a host scanner binding and diagnoses it without scanning files', f
     config()->set('nvl-media.scanner.required', true);
     expect(app(MediaContentScanner::class))->toBe($scanner);
     $check = collect(app(MediaDoctor::class)->inspect())->firstWhere('key', 'scanner.required');
-    expect($check->passed)->toBeTrue();
+    expect($check['passed'])->toBeTrue();
 });

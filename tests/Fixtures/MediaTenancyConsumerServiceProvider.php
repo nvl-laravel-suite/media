@@ -36,15 +36,11 @@ final class MediaTenancyConsumerServiceProvider extends ServiceProvider
         $resources->register(new TenantResourceDefinition('test.media-owners', 'test.media-owners', TestMediaModel::class));
         $adoptions->register('resource-fixture-owners', TenancyOwnerAdoptionAdapter::class);
         $this->commands([MediaTenancyConsumerSetupCommand::class]);
-
         Queue::looping(static function (Looping $event): void {
             if (! Schema::hasTable('media_tenant_worker_probes')) {
                 return;
             }
-            DB::table('media_tenant_worker_probes')->updateOrInsert(
-                ['probe_key' => 'worker-scope'],
-                ['tenant_id' => app(TenantContext::class)->snapshot()->tenantId?->value],
-            );
+            DB::table('media_tenant_worker_probes')->updateOrInsert(['probe_key' => 'worker-scope'], ['tenant_id' => app(TenantContext::class)->snapshot()->tenantId?->value]);
         });
     }
 }

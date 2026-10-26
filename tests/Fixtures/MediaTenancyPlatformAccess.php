@@ -14,8 +14,7 @@ final readonly class MediaTenancyPlatformAccess implements PlatformAccess
     /** Authorize an exact fixture operation. */
     public function authorize(PlatformOperation $operation): void
     {
-        if (! in_array($operation->purpose, ['fixture.adoption', 'fixture.catalog'], true)
-            || $operation->actorType !== 'test' || $operation->actorId !== 'fixture') {
+        if (! in_array($operation->purpose, ['fixture.adoption', 'fixture.catalog'], true) || $operation->actorType !== 'test' || $operation->actorId !== 'fixture') {
             throw new TenantBoundaryViolation;
         }
     }

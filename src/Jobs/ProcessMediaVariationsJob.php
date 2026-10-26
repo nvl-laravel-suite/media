@@ -19,13 +19,10 @@ use Nvl\Support\Facades\PackageLog;
 use Nvl\Support\Ownership\Contracts\OwnershipQueuedJob;
 use Nvl\Support\Ownership\Enums\OwnershipContextMode;
 use Nvl\Support\Ownership\ValueObjects\OwnershipJobEnvelope;
-use Nvl\Support\Tenancy\Contracts\TenantQueuedJob;
-use Nvl\Support\Tenancy\Enums\TenantContextMode;
-use Nvl\Support\Tenancy\ValueObjects\TenantJobEnvelope;
 use Throwable;
 
 /** ProcessMediaVariationsJob: dispatches all configured variation jobs for a freshly uploaded media record. */
-final class ProcessMediaVariationsJob implements OwnershipQueuedJob, ShouldBeUnique, ShouldQueue, TenantQueuedJob
+final class ProcessMediaVariationsJob implements OwnershipQueuedJob, ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -38,8 +35,6 @@ final class ProcessMediaVariationsJob implements OwnershipQueuedJob, ShouldBeUni
 
     public int $uniqueFor;
 
-    private readonly TenantJobEnvelope $envelope;
-
     private readonly OwnershipJobEnvelope $ownershipEnvelope;
 
     /** Carry scalar producer authority before native scheduling. */
@@ -51,10 +46,9 @@ final class ProcessMediaVariationsJob implements OwnershipQueuedJob, ShouldBeUni
     public function __construct(
         private readonly string $mediaId,
         private readonly bool $includeOutputConversion = true,
-        ?TenantJobEnvelope $envelope = null,
+        ?OwnershipJobEnvelope $envelope = null,
     ) {
-        $this->envelope = MediaQueueEnvelope::fallback($envelope);
-        $this->ownershipEnvelope = MediaQueueEnvelope::ownership();
+        $this->ownershipEnvelope = $envelope ?? MediaQueueEnvelope::ownership();
         $this->tries = MediaQueueConfiguration::jobInteger('dispatch', 'tries', 3);
         $this->timeout = MediaQueueConfiguration::jobInteger('dispatch', 'timeout', 60);
         $this->uniqueFor = MediaQueueConfiguration::jobInteger('dispatch', 'unique_for', 1800);
@@ -91,7 +85,7 @@ final class ProcessMediaVariationsJob implements OwnershipQueuedJob, ShouldBeUni
                 $name,
                 $preset,
                 $media->revision,
-                $this->envelope,
+                $this->ownershipEnvelope,
             )->afterCommit();
         }
     }
@@ -110,14 +104,7 @@ final class ProcessMediaVariationsJob implements OwnershipQueuedJob, ShouldBeUni
             return MediaQueueEnvelope::key($this->ownershipEnvelope, $this->mediaId);
         }
 
-        return $this->envelope->context->mode === TenantContextMode::Disabled
-            ? $this->mediaId
-            : hash('sha256', serialize($this->envelope->context)).':'.$this->mediaId;
-    }
-
-    public function tenantJobEnvelope(): TenantJobEnvelope
-    {
-        return $this->envelope;
+        return $this->mediaId;
     }
 
     /**

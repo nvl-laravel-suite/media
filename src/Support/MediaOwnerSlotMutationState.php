@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Support;
 
-use Nvl\Media\Data\Display\MediaLibraryItem;
+use Nvl\Media\Models\Media;
 
 /**
  * Tracks the durable commit boundary and optional immutable result of one slot mutation.
@@ -13,7 +13,7 @@ final class MediaOwnerSlotMutationState
 {
     private bool $committed = false;
 
-    private ?MediaLibraryItem $result = null;
+    private ?Media $result = null;
 
     /**
      * Mark the Media root transaction as durably committed.
@@ -34,7 +34,7 @@ final class MediaOwnerSlotMutationState
     /**
      * Retain the immutable result assembled inside the Media transaction.
      */
-    public function recordResult(MediaLibraryItem $result): void
+    public function recordResult(Media $result): void
     {
         $this->result = $result;
     }
@@ -42,7 +42,7 @@ final class MediaOwnerSlotMutationState
     /**
      * Return the newly assembled result when this attempt performed the mutation.
      */
-    public function result(): ?MediaLibraryItem
+    public function result(): ?Media
     {
         return $this->result;
     }

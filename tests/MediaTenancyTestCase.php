@@ -31,46 +31,14 @@ abstract class MediaTenancyTestCase extends Orchestra
     /** @return list<class-string> */
     protected function getPackageProviders($app): array
     {
-        return [
-            LocaleServiceProvider::class,
-            DataServiceProvider::class,
-            FilterableServiceProvider::class,
-            SupportServiceProvider::class,
-            MediaTenancyFixtureServiceProvider::class,
-            TenancyServiceProvider::class,
-            TranslatableServiceProvider::class,
-            MediaServiceProvider::class,
-        ];
+        return [LocaleServiceProvider::class, DataServiceProvider::class, FilterableServiceProvider::class, SupportServiceProvider::class, MediaTenancyFixtureServiceProvider::class, TenancyServiceProvider::class, TranslatableServiceProvider::class, MediaServiceProvider::class];
     }
 
     /** Configure tenancy structurally before package providers boot. */
     protected function defineEnvironment($app): void
     {
-        $app['config']->set([
-            'nvl-translatable.locales' => ['en', 'bg'],
-            'nvl-translatable.default_locale' => 'en',
-            'nvl-translatable.fallback_locales' => ['en'],
-        ]);
-        $app['config']->set([
-            'app.key' => 'base64:YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=',
-            'cache.default' => 'array',
-            'filesystems.default' => 'tenant-disk',
-            'filesystems.disks.tenant-disk' => ['driver' => 'local', 'root' => storage_path('framework/testing/disks/tenant-media')],
-            'nvl-media.disk' => 'tenant-disk',
-            'nvl-media.routes.api_enabled' => false,
-            'nvl-media.routes.assets_enabled' => false,
-            'nvl-media.default_path' => 'owners/{model_id}',
-            'nvl-media.file_types.txt' => 'text/plain',
-            'nvl-media.group_types.document' => ['txt'],
-            'nvl-media.migrations.enabled' => true,
-            'nvl-media.tenancy.owner_types' => [TestMediaModel::class],
-            'nvl-tenancy.enabled' => true,
-            'nvl-tenancy.resources.media' => 'tenant',
-            'nvl-tenancy.sharing.media' => 'none',
-            'nvl-tenancy.directory.driver' => 'host',
-            'nvl-tenancy.directory.adapter' => null,
-            'nvl-tenancy.access.platform' => null,
-        ]);
+        $app['config']->set(['nvl-translatable.locales' => ['en', 'bg'], 'nvl-translatable.default_locale' => 'en', 'nvl-translatable.fallback_locales' => ['en']]);
+        $app['config']->set(['app.key' => 'base64:YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=', 'cache.default' => 'array', 'filesystems.default' => 'tenant-disk', 'filesystems.disks.tenant-disk' => ['driver' => 'local', 'root' => storage_path('framework/testing/disks/tenant-media')], 'nvl-media.disk' => 'tenant-disk', 'nvl-media.routes.api_enabled' => false, 'nvl-media.routes.assets_enabled' => false, 'nvl-media.default_path' => 'owners/{model_id}', 'nvl-media.file_types.txt' => 'text/plain', 'nvl-media.group_types.document' => ['txt'], 'nvl-media.migrations.enabled' => true, 'nvl-media.tenancy.owner_types' => [TestMediaModel::class], 'nvl-tenancy.enabled' => true, 'nvl-tenancy.resources.media' => 'tenant', 'nvl-tenancy.sharing.media' => 'none', 'nvl-tenancy.directory.driver' => 'host', 'nvl-tenancy.directory.adapter' => null, 'nvl-tenancy.access.platform' => null]);
         $app->instance(MaintenanceMode::class, new MediaTenancyMaintenanceMode);
         $app->instance(TenantDirectory::class, new MediaTenancyDirectory);
         $app->instance(PlatformAccess::class, new MediaTenancyPlatformAccess);

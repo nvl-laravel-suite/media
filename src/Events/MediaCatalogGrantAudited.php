@@ -25,7 +25,7 @@ final readonly class MediaCatalogGrantAudited implements DomainEvent, OwnershipQ
     public function __construct(
         public string $operation,
         public string $grantId,
-        public string $tenantId,
+        public string $ownerScopeKey,
         public string $mediaId,
         public int $sourceRevision,
         public int $grantRevision,

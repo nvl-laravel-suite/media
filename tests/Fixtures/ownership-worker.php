@@ -1,11 +1,9 @@
 <?php
 
 declare(strict_types=1);
-
 use Illuminate\Contracts\Console\Kernel;
 use Nvl\Data\Providers\DataServiceProvider;
 use Nvl\Filterable\Providers\FilterableServiceProvider;
-use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Enums\MediaOwnerSlotOperationType;
 use Nvl\Media\Providers\MediaServiceProvider;
 use Nvl\Media\Services\MediaOwnerSlotIdempotency;
@@ -15,6 +13,7 @@ use Nvl\Media\Tests\Fixtures\OwnershipMediaOwner;
 use Nvl\Media\Tests\Fixtures\OwnershipWorkerProvider;
 use Nvl\Ownership\Providers\OwnershipServiceProvider;
 use Nvl\Ownership\Services\OwnershipRunner;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Contracts\OwnershipContext;
 use Nvl\Support\Providers\LocaleServiceProvider;
 use Nvl\Support\Providers\SupportServiceProvider;
@@ -24,9 +23,7 @@ use Orchestra\Testbench\Foundation\Application;
 require dirname(__DIR__, 5).'/vendor/autoload.php';
 $source = json_decode($argv[1], true, flags: JSON_THROW_ON_ERROR);
 $options = json_decode($argv[2], true, flags: JSON_THROW_ON_ERROR);
-if (! is_array($source) || ($source['driver'] ?? null) !== 'pgsql'
-    || ! is_string($source['database'] ?? null) || preg_match('/^nvl_own_test_[a-z0-9_]+$/D', $source['database']) !== 1
-    || ! is_array($options) || ! is_string($options['root'] ?? null)) {
+if (! is_array($source) || ($source['driver'] ?? null) !== 'pgsql' || ! is_string($source['database'] ?? null) || preg_match('/^nvl_own_test_[a-z0-9_]+$/D', $source['database']) !== 1 || ! is_array($options) || ! is_string($options['root'] ?? null)) {
     throw new RuntimeException('Media workers require a dedicated native persistence source.');
 }
 OwnershipWorkerProvider::$source = $source;
@@ -45,7 +42,7 @@ if (($options['mode'] ?? 'queue') === 'receipt') {
     }
     $id = $app->make(OwnershipRunner::class)->run(OwnershipCompany::query()->findOrFail($options['company']), OwnershipActor::query()->firstOrFail(), function () use ($options): string {
         $receipts = app(MediaOwnerSlotIdempotency::class);
-        $claim = $receipts->begin($options['key'], MediaActorData::system(), OwnershipMediaOwner::query()->findOrFail($options['owner']), 'documents', MediaOwnerSlotOperationType::Clear, []);
+        $claim = $receipts->begin($options['key'], SystemActor::Background, OwnershipMediaOwner::query()->findOrFail($options['owner']), 'documents', MediaOwnerSlotOperationType::Clear, []);
         $receipts->complete($claim, null);
 
         return $claim->operationId;

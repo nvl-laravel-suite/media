@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -12,14 +13,15 @@ use Illuminate\Support\Str;
 use InvalidArgumentException;
 use JsonException;
 use LogicException;
-use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Enums\MediaOwnerSlotOperationStatus;
 use Nvl\Media\Enums\MediaOwnerSlotOperationType;
 use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Ownership\MediaOwnership;
 use Nvl\Media\Ownership\MediaOwnershipConstraints;
+use Nvl\Media\Support\MediaActors;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaOwnerSlotOperationClaim;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 
 /**
@@ -28,7 +30,7 @@ use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 final class MediaOwnerSlotIdempotency
 {
     public function __construct(
-        private readonly OwnershipBoundary $tenantBoundary,
+        private readonly OwnershipBoundary $ownershipBoundary,
         private readonly MediaOwnershipConstraints $ownershipConstraints,
     ) {}
 
@@ -39,7 +41,7 @@ final class MediaOwnerSlotIdempotency
      */
     public function begin(
         string $key,
-        MediaActorData $actor,
+        Authenticatable|SystemActor $actor,
         Model $owner,
         string $slot,
         MediaOwnerSlotOperationType $operation,
@@ -50,7 +52,7 @@ final class MediaOwnerSlotIdempotency
         $actorIdentity = $this->actorIdentity($actor);
         $slot = $this->slot($slot);
         $requestHash = $this->requestHash(
-            tenant: $this->tenantPartition(),
+            tenant: $this->ownershipPartition(),
             actor: $actorIdentity,
             owner: $ownerIdentity,
             slot: $slot,
@@ -58,7 +60,6 @@ final class MediaOwnerSlotIdempotency
             payload: $payload,
         );
         $connection = (new MediaOwnerSlotOperation)->getConnectionName();
-        $tenantId = $owner->getRawOriginal('tenant_id');
 
         try {
             return DB::connection($connection)->transaction(
@@ -69,7 +70,6 @@ final class MediaOwnerSlotIdempotency
                     $ownerIdentity,
                     $requestHash,
                     $slot,
-                    $tenantId,
                 ): MediaOwnerSlotOperationClaim {
                     $existing = $this->operationQuery()
                         ->where('idempotency_key', $key)
@@ -81,7 +81,6 @@ final class MediaOwnerSlotIdempotency
                     }
 
                     $created = $this->operationQuery()->forceCreate([
-                        ...(config('nvl-tenancy.enabled') === true ? ['tenant_id' => $tenantId] : []),
                         'idempotency_key' => $key,
                         'actor_type' => $actorIdentity['type'],
                         'actor_id' => $actorIdentity['id'],
@@ -125,7 +124,7 @@ final class MediaOwnerSlotIdempotency
      */
     public function completed(
         string $key,
-        MediaActorData $actor,
+        Authenticatable|SystemActor $actor,
         Model $owner,
         string $slot,
         MediaOwnerSlotOperationType $operation,
@@ -133,7 +132,7 @@ final class MediaOwnerSlotIdempotency
     ): ?MediaOwnerSlotOperationClaim {
         $key = $this->idempotencyKey($key);
         $requestHash = $this->requestHash(
-            tenant: $this->tenantPartition(),
+            tenant: $this->ownershipPartition(),
             actor: $this->actorIdentity($actor),
             owner: $this->ownerIdentity($owner),
             slot: $this->slot($slot),
@@ -160,7 +159,7 @@ final class MediaOwnerSlotIdempotency
      */
     public function checkpointed(
         string $key,
-        MediaActorData $actor,
+        Authenticatable|SystemActor $actor,
         Model $owner,
         string $slot,
         MediaOwnerSlotOperationType $operation,
@@ -168,7 +167,7 @@ final class MediaOwnerSlotIdempotency
     ): ?MediaOwnerSlotOperationClaim {
         $key = $this->idempotencyKey($key);
         $requestHash = $this->requestHash(
-            tenant: $this->tenantPartition(),
+            tenant: $this->ownershipPartition(),
             actor: $this->actorIdentity($actor),
             owner: $this->ownerIdentity($owner),
             slot: $this->slot($slot),
@@ -210,7 +209,7 @@ final class MediaOwnerSlotIdempotency
                 'result_media_id' => $resultMediaId,
                 'result_payload' => $this->resultPayload($resultPayload),
                 'failure_code' => null,
-                'completed_at' => now(),
+                'completed_at' => now()->utc(),
                 'failed_at' => null,
             ],
         );
@@ -264,7 +263,7 @@ final class MediaOwnerSlotIdempotency
                 'result_payload' => null,
                 'failure_code' => $failureCode,
                 'completed_at' => null,
-                'failed_at' => now(),
+                'failed_at' => now()->utc(),
             ],
         );
     }
@@ -280,7 +279,7 @@ final class MediaOwnerSlotIdempotency
             function () use ($claim): void {
                 $operation = $this->lockedProcessingClaim($claim);
 
-                $operation->forceFill(['updated_at' => now()])->save();
+                $operation->forceFill(['updated_at' => now()->utc()])->save();
             },
             3,
         );
@@ -310,7 +309,7 @@ final class MediaOwnerSlotIdempotency
             );
         }
 
-        $cutoff = now()->subDays($retentionDays);
+        $cutoff = now()->utc()->subDays($retentionDays);
         $deleted = 0;
 
         do {
@@ -420,7 +419,7 @@ final class MediaOwnerSlotIdempotency
             );
         }
 
-        $expiredBefore = now()->subMinutes($timeout);
+        $expiredBefore = now()->utc()->subMinutes($timeout);
 
         if ($operation->updated_at !== null
             && $operation->updated_at->isAfter($expiredBefore)) {
@@ -454,7 +453,7 @@ final class MediaOwnerSlotIdempotency
             'failure_code' => null,
             'completed_at' => null,
             'failed_at' => null,
-            'created_at' => now(),
+            'created_at' => now()->utc(),
         ])->save();
 
         return $this->claim($operation, replayed: false);
@@ -520,7 +519,7 @@ final class MediaOwnerSlotIdempotency
             $this->ownershipConstraints->assertUnique($query->getModel()->getConnection(), $query->getModel()->getTable(), ['owner_scope_key', 'idempotency_key']);
         }
 
-        return $this->tenantBoundary->query($query, 'media.slot-operations');
+        return $this->ownershipBoundary->query($query, 'media.slot-operations');
     }
 
     /**
@@ -606,16 +605,16 @@ final class MediaOwnerSlotIdempotency
     /**
      * @return array{type: string|null, id: string|null, system: bool, signed: bool}
      */
-    private function actorIdentity(MediaActorData $actor): array
+    private function actorIdentity(Authenticatable|SystemActor $actor): array
     {
-        $type = $this->nullableIdentityPart($actor->type, 191, 'actor type');
-        $id = $this->nullableIdentityPart($actor->id, 255, 'actor identifier');
+        $type = $this->nullableIdentityPart(MediaActors::type($actor), 191, 'actor type');
+        $id = $this->nullableIdentityPart(MediaActors::id($actor), 255, 'actor identifier');
 
         return [
             'type' => $type,
             'id' => $id,
-            'system' => $actor->system,
-            'signed' => $actor->signed,
+            'system' => ($actor instanceof SystemActor),
+            'signed' => false,
         ];
     }
 
@@ -688,9 +687,9 @@ final class MediaOwnerSlotIdempotency
     }
 
     /** Resolve the stable tenant component of one idempotency identity. */
-    private function tenantPartition(): string
+    private function ownershipPartition(): string
     {
-        return $this->tenantBoundary->key('media.slot-operations', 'receipt');
+        return $this->ownershipBoundary->key('media.slot-operations', 'receipt');
     }
 
     /**

@@ -6,7 +6,6 @@ namespace Nvl\Media\Contracts;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
-use Nvl\Media\MediaOwner;
 use Nvl\Media\MediaRegistration;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
@@ -18,9 +17,6 @@ use Nvl\Media\Models\MediaAssociation;
  */
 interface HasNvlMedia
 {
-    /** Return the natural media API bound to this owner. */
-    public function nvlMedia(): MediaOwner;
-
     /** Return NVL associations for eager loading.
      * @return MorphMany<MediaAssociation, covariant Model>
      *

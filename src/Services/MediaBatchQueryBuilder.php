@@ -4,19 +4,20 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Nvl\Media\Contracts\MediaBatchAuthorization;
-use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Exceptions\MediaBatchReadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Relations\ExactMediaText;
 use Nvl\Media\Support\MediaBatchOwnerAdmission;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Owners\OwnerBatch;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
-use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 
 /** SQL authorization and mandatory ownership applied before window bounds. */
 final readonly class MediaBatchQueryBuilder
@@ -28,7 +29,7 @@ final readonly class MediaBatchQueryBuilder
      * @param  array<string, array<array-key, array<array-key, int>>>  $ceilings
      * @return Builder<MediaAssociation>
      */
-    public function batch(OwnerBatch $batch, array $ceilings, MediaActorData $actor, MediaBatchAuthorization $policy): Builder
+    public function batch(OwnerBatch $batch, array $ceilings, Authenticatable|SystemActor $actor, MediaBatchAuthorization $policy): Builder
     {
         $query = $this->associations()->where(function (Builder $pairs) use ($batch, $ceilings): void {
             foreach ($batch->identities() as $identity) {
@@ -91,7 +92,7 @@ final readonly class MediaBatchQueryBuilder
      * @param  Builder<T>  $query
      * @return Builder<T>
      */
-    public function has(Builder $query, string $slot, MediaActorData $actor, MediaBatchAuthorization $policy): Builder
+    public function has(Builder $query, string $slot, Authenticatable|SystemActor $actor, MediaBatchAuthorization $policy): Builder
     {
         if (trim($slot) === '' || mb_strlen($slot) > 50) {
             throw new MediaBatchReadException('The Media host slot must be nonempty and at most fifty characters.');
@@ -101,7 +102,7 @@ final readonly class MediaBatchQueryBuilder
         if ($query->getConnection() !== $owner->getConnection()
             || $query->getQuery()->from !== $owner->getTable()
             || $query->getQuery()->unions !== null) {
-            throw new TenantBoundaryViolation('The Media host query must retain its canonical owner table and connection.');
+            throw new OwnershipViolation('The Media host query must retain its canonical owner table and connection.');
         }
         $query = $this->owners->scope($query);
         $associations = $this->associations();
@@ -134,7 +135,7 @@ final readonly class MediaBatchQueryBuilder
     /** Build authorized available assets before association ranking or asset hydration.
      * @return Builder<Media>
      */
-    public function assets(OwnerBatch $batch, MediaActorData $actor, MediaBatchAuthorization $policy): Builder
+    public function assets(OwnerBatch $batch, Authenticatable|SystemActor $actor, MediaBatchAuthorization $policy): Builder
     {
         $query = $this->available(MediaModelRegistry::query()->withoutEagerLoads());
         $nested = (MediaModelRegistry::newInstance())->newModelQuery();

@@ -5,57 +5,48 @@ declare(strict_types=1);
 namespace Nvl\Media\Tests\Fixtures;
 
 use Illuminate\Http\UploadedFile;
-use Nvl\Media\Actions\BulkDeleteMediaAction;
-use Nvl\Media\Actions\BulkMoveMediaAction;
-use Nvl\Media\Actions\BulkTagMediaAction;
-use Nvl\Media\Actions\DeleteMediaAction;
-use Nvl\Media\Actions\RenameMediaAction;
-use Nvl\Media\Actions\ReplaceMediaFileAction;
-use Nvl\Media\Actions\UpdateMediaMetadataAction;
-use Nvl\Media\Data\Mutations\UpdateMediaPayload;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Services\MediaLibrary;
+use Nvl\Media\Services\MediaUploader;
+use Nvl\Support\Enums\SystemActor;
+use Nvl\Translatable\Enums\TranslationSyncMode;
 
 /**
  * Test-only composition proving the focused mutation Actions work together.
  */
 final readonly class MediaMutationHarness
 {
-    public function __construct(
-        private UpdateMediaMetadataAction $update,
-        private DeleteMediaAction $delete,
-        private RenameMediaAction $rename,
-        private ReplaceMediaFileAction $replace,
-        private BulkDeleteMediaAction $bulkDelete,
-        private BulkTagMediaAction $bulkTag,
-        private BulkMoveMediaAction $bulkMove,
-    ) {}
+    public function __construct(private MediaLibrary $update, private MediaLibrary $delete, private MediaLibrary $rename, private MediaUploader $replace, private MediaLibrary $bulkDelete, private MediaLibrary $bulkTag, private MediaLibrary $bulkMove) {}
 
     /**
      * @param  UpdateMediaPayload|array<string, mixed>  $payload
      */
-    public function update(string $id, UpdateMediaPayload|array $payload): Media
+    public function update(string $id, array $payload): Media
     {
-        return $this->update->execute(
-            $id,
-            $payload instanceof UpdateMediaPayload
-                ? $payload
-                : UpdateMediaPayload::validateAndCreate($payload),
-        );
+        if (array_key_exists('is_public', $payload)) {
+            $payload['isPublic'] = $payload['is_public'];
+            unset($payload['is_public']);
+        }
+        if (isset($payload['translationMode']) && is_string($payload['translationMode'])) {
+            $payload['translationMode'] = TranslationSyncMode::from($payload['translationMode']);
+        }
+
+        return $this->update->updateMetadata(auth()->user() ?? SystemActor::Background, $id, $payload);
     }
 
     public function delete(string $id): bool
     {
-        return $this->delete->execute($id);
+        return $this->delete->delete(auth()->user() ?? SystemActor::Background, $id);
     }
 
     public function rename(string $id, string $filename): Media
     {
-        return $this->rename->execute($id, $filename);
+        return $this->rename->rename(auth()->user() ?? SystemActor::Background, $id, $filename);
     }
 
     public function replace(string $id, UploadedFile $file): Media
     {
-        return $this->replace->execute($id, $file);
+        return $this->replace->replace(auth()->user() ?? SystemActor::Background, $id, $file);
     }
 
     /**
@@ -63,7 +54,7 @@ final readonly class MediaMutationHarness
      */
     public function bulkDelete(array $ids): int
     {
-        return $this->bulkDelete->execute($ids);
+        return $this->bulkDelete->bulkDelete(auth()->user() ?? SystemActor::Background, $ids);
     }
 
     /**
@@ -72,7 +63,7 @@ final readonly class MediaMutationHarness
      */
     public function bulkTag(array $ids, array $tags): int
     {
-        return $this->bulkTag->execute($ids, $tags);
+        return $this->bulkTag->bulkTag(auth()->user() ?? SystemActor::Background, $ids, $tags);
     }
 
     /**
@@ -80,6 +71,6 @@ final readonly class MediaMutationHarness
      */
     public function bulkMove(array $ids, string $folder): int
     {
-        return $this->bulkMove->execute($ids, $folder);
+        return $this->bulkMove->move(auth()->user() ?? SystemActor::Background, $ids, $folder);
     }
 }

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
-use Nvl\Media\Data\Ingestion\MediaFileTypeData;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Exceptions\FileUnacceptableForCollection;
 use Nvl\Media\Support\FileNameSanitizer;
@@ -66,7 +65,7 @@ final class MediaFileTypePolicy
      *
      * @throws FileUnacceptableForCollection
      */
-    public function resolve(string $filename, string $detectedMimeType): MediaFileTypeData
+    public function resolve(string $filename, string $detectedMimeType): array
     {
         $displayFilename = $this->sanitizeBasename($filename);
         $mimeType = $this->normalizeMimeType($detectedMimeType);
@@ -103,12 +102,7 @@ final class MediaFileTypePolicy
             throw new FileUnacceptableForCollection('Uploaded media requires a valid filename and extension.');
         }
 
-        return new MediaFileTypeData(
-            displayFilename: $baseName.'.'.$extension,
-            extension: $extension,
-            mimeType: $mimeType,
-            type: MediaType::fromExtension($extension),
-        );
+        return ['displayFilename' => $baseName.'.'.$extension, 'extension' => $extension, 'mimeType' => $mimeType, 'type' => MediaType::fromExtension($extension)];
     }
 
     /**

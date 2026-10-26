@@ -7,12 +7,10 @@ namespace Nvl\Media\Enums;
 use BackedEnum;
 use InvalidArgumentException;
 use Spatie\Image\Enums\ImageDriver;
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Selects the Spatie Image backend used for local image processing.
  */
-#[TypeScript]
 enum MediaImageDriver: string
 {
     case Gd = 'gd';

@@ -4,38 +4,39 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Nvl\Media\Contracts\MediaBatchAuthorization;
-use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Exceptions\MediaBatchReadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Owners\OwnerBatch;
 
 /** Fails closed until the host explicitly binds an SQL authorization adapter. */
 final class UnsupportedMediaBatchAuthorization implements MediaBatchAuthorization
 {
     /** Reject unsupported owner admission. */
-    public function authorizeOwners(OwnerBatch $batch, MediaActorData $actor): void
+    public function authorizeOwners(OwnerBatch $batch, Authenticatable|SystemActor $actor): void
     {
         throw new MediaBatchReadException('Media batch reads require an explicit MediaBatchAuthorization adapter.');
     }
 
     /** Reject unsupported association visibility. @param Builder<MediaAssociation> $query */
-    public function scopeAssociations(Builder $query, OwnerBatch $batch, MediaActorData $actor): void
+    public function scopeAssociations(Builder $query, OwnerBatch $batch, Authenticatable|SystemActor $actor): void
     {
         $this->authorizeOwners($batch, $actor);
     }
 
     /** Reject unsupported asset View visibility. @param Builder<Media> $query */
-    public function scopeMedia(Builder $query, OwnerBatch $batch, MediaActorData $actor): void
+    public function scopeMedia(Builder $query, OwnerBatch $batch, Authenticatable|SystemActor $actor): void
     {
         $this->authorizeOwners($batch, $actor);
     }
 
     /** Reject unsupported host visibility. @param Builder<MediaAssociation> $query */
-    public function scopeHostAssociations(Builder $query, Model $ownerPrototype, MediaActorData $actor, string $slot): void
+    public function scopeHostAssociations(Builder $query, Model $ownerPrototype, Authenticatable|SystemActor $actor, string $slot): void
     {
         throw new MediaBatchReadException('Media host queries require a complete MediaBatchAuthorization SQL View adapter.');
     }

@@ -7,7 +7,6 @@ namespace Nvl\Media\Ownership;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Nvl\Media\Services\MediaModelRegistry;
-use Nvl\Media\Tenancy\LegacyMediaOwnerResolver;
 use Nvl\Support\OwnerRegistry;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Support\Ownership\Contracts\OwnershipContext;
@@ -18,12 +17,20 @@ use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 /** Reloads exact host records and ignores carried relation or owner attributes. @internal */
 final readonly class MediaOwnershipParentResolver
 {
-    public function __construct(private OwnershipResourceRegistry $resources, private OwnershipBoundary $boundary, private OwnershipContext $context, private LegacyMediaOwnerResolver $legacy, private OwnerRegistry $identities) {}
+    public function __construct(private OwnershipResourceRegistry $resources, private OwnershipBoundary $boundary, private OwnershipContext $context, private OwnerRegistry $identities) {}
 
     public function resolve(Model $owner, bool $lock = false): Model
     {
-        if ($this->context->snapshot()->mode === OwnershipContextMode::Disabled) {
-            return $this->legacy->resolve($owner, $lock);
+        $class = $owner::class;
+        $prototype = new $class;
+        $key = $owner->getKey();
+        if (! $owner->exists || (! is_int($key) && ! is_string($key)) || $key === ''
+            || $owner->getTable() !== $prototype->getTable()
+            || $owner->getKeyName() !== $prototype->getKeyName()
+            || ($owner->getConnectionName() !== null && $owner->getConnectionName() !== $prototype->getConnection()->getName())
+            || $owner->getConnection() !== $prototype->getConnection()
+            || $owner->getRawOriginal($owner->getKeyName()) !== $key) {
+            throw new OwnershipViolation('A Media host must retain its persisted canonical identity.');
         }
         foreach ($this->resources->all() as $definition) {
             if ($definition->model !== $owner::class) {
@@ -41,11 +48,7 @@ final readonly class MediaOwnershipParentResolver
             return $query->first() ?? throw new OwnershipViolation('The Media host record is unavailable.');
         }
         if (MediaOwnership::active()) {
-            $key = $owner->getKey();
-            if (! $owner->exists || (! is_int($key) && ! is_string($key))) {
-                throw new OwnershipViolation('A persisted native Media owner is required.');
-            }
-            $query = $this->scopeAnchor($owner->newQuery())->whereKey($key);
+            $query = $this->scopeAnchor($prototype->newQuery())->whereKey($key);
             if ($lock) {
                 $query->lockForUpdate();
             }
@@ -53,7 +56,12 @@ final readonly class MediaOwnershipParentResolver
             return $query->first() ?? throw new OwnershipViolation('The Media owner differs from the admitted native owner.');
         }
 
-        return $owner;
+        $query = $prototype->newQuery()->useWritePdo()->whereKey($key);
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+
+        return $query->first() ?? throw new OwnershipViolation('The Media host record is unavailable.');
     }
 
     /** Resolve only declared resource morphs or registered native anchors.

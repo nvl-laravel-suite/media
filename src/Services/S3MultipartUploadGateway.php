@@ -10,11 +10,6 @@ use DateTimeImmutable;
 use Illuminate\Filesystem\AwsS3V3Adapter;
 use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Contracts\RecoverableMultipartUploadGateway;
-use Nvl\Media\Data\Multipart\CompletedMultipartObjectData;
-use Nvl\Media\Data\Multipart\CompleteMultipartUploadData;
-use Nvl\Media\Data\Multipart\MultipartUploadSessionData;
-use Nvl\Media\Data\Multipart\SignedMultipartPartData;
-use Nvl\Media\Data\Multipart\SignMultipartPartData;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\MediaMultipartUpload;
 use Nvl\Support\Logging\PackageLogger;
@@ -30,13 +25,13 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
         private PackageLogger $packageLogger,
     ) {}
 
-    public function initiate(MultipartUploadSessionData $session): void
+    public function initiate(array $session): void
     {
         [$client, $bucket, $key] = $this->provider($session);
         $result = $client->createMultipartUpload([
             'Bucket' => $bucket,
             'Key' => $key,
-            'ContentType' => $session->mimeType,
+            'ContentType' => $session['mimeType'],
             'ChecksumAlgorithm' => 'SHA256',
         ]);
         $providerUploadId = $result->get('UploadId');
@@ -47,7 +42,7 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
 
         try {
             MediaMultipartUpload::query()
-                ->whereKey($session->uploadId)
+                ->whereKey($session['uploadId'])
                 ->firstOrFail()
                 ->forceFill([
                     'provider_state' => [
@@ -61,8 +56,8 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
                 $this->abortProvider($client, $bucket, $key, $providerUploadId);
             } catch (Throwable $cleanupException) {
                 $this->packageLogger->log('media', 'error', 'nvl.media.multipart_compensation.failed', [
-                    'session_id' => $session->uploadId,
-                    'disk' => $session->disk,
+                    'session_id' => $session['uploadId'],
+                    'disk' => $session['disk'],
                     'exception' => $cleanupException::class,
                     'error' => $cleanupException->getMessage(),
                 ], 'normal');
@@ -73,55 +68,50 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
     }
 
     public function signPart(
-        MultipartUploadSessionData $session,
-        SignMultipartPartData $part,
-    ): SignedMultipartPartData {
+        array $session,
+        array $part,
+    ): array {
         [$client, $bucket, $key, $providerUploadId] = $this->activeProvider($session);
-        $checksum = $this->base64Checksum($part->checksum);
+        $checksum = $this->base64Checksum($part['checksum']);
         $command = $client->getCommand('UploadPart', [
             'Bucket' => $bucket,
             'Key' => $key,
             'UploadId' => $providerUploadId,
-            'PartNumber' => $part->partNumber,
-            'ContentLength' => $part->byteLength,
+            'PartNumber' => $part['partNumber'],
+            'ContentLength' => $part['byteLength'],
             'ChecksumSHA256' => $checksum,
         ]);
         $expiresAt = new DateTimeImmutable('+15 minutes');
         $request = $client->createPresignedRequest($command, $expiresAt);
         $headers = $this->flattenHeaders($request->getHeaders());
 
-        $headers['content-length'] = (string) $part->byteLength;
+        $headers['content-length'] = (string) $part['byteLength'];
         $headers['x-amz-checksum-sha256'] = $checksum;
 
-        return new SignedMultipartPartData(
-            partNumber: $part->partNumber,
-            url: (string) $request->getUri(),
-            headers: $headers,
-            expiresAt: $expiresAt,
-        );
+        return ['partNumber' => $part['partNumber'], 'url' => (string) $request->getUri(), 'headers' => $headers, 'expiresAt' => $expiresAt];
     }
 
     public function complete(
-        MultipartUploadSessionData $session,
-        CompleteMultipartUploadData $completion,
-    ): CompletedMultipartObjectData {
+        array $session,
+        array $completion,
+    ): array {
         [$client, $bucket, $key, $providerUploadId] = $this->activeProvider($session);
-        $persisted = MediaMultipartUpload::query()->findOrFail($session->uploadId);
+        $persisted = MediaMultipartUpload::query()->findOrFail($session['uploadId']);
         $signedParts = is_array($persisted->signed_parts) ? $persisted->signed_parts : [];
         $parts = [];
 
-        foreach ($completion->parts as $part) {
-            $signed = $signedParts[$part->partNumber] ?? null;
+        foreach ($completion['parts'] as $part) {
+            $signed = $signedParts[$part['partNumber']] ?? null;
 
             if ($signed === null) {
                 throw new MediaUploadException(
-                    "S3 multipart part [{$part->partNumber}] has no persisted checksum.",
+                    "S3 multipart part [{$part['partNumber']}] has no persisted checksum.",
                 );
             }
 
             $parts[] = [
-                'ETag' => $part->etag,
-                'PartNumber' => $part->partNumber,
+                'ETag' => $part['etag'],
+                'PartNumber' => $part['partNumber'],
                 'ChecksumSHA256' => $this->base64Checksum((string) $signed['checksum']),
             ];
         }
@@ -143,8 +133,8 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
     }
 
     public function inspect(
-        MultipartUploadSessionData $session,
-    ): ?CompletedMultipartObjectData {
+        array $session,
+    ): ?array {
         [$client, $bucket, $key] = $this->provider($session);
 
         try {
@@ -154,10 +144,10 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
         }
     }
 
-    public function abort(MultipartUploadSessionData $session): void
+    public function abort(array $session): void
     {
         [$client, $bucket, $key] = $this->provider($session);
-        $persisted = MediaMultipartUpload::query()->findOrFail($session->uploadId);
+        $persisted = MediaMultipartUpload::query()->findOrFail($session['uploadId']);
         $providerUploadId = $this->providerUploadId(
             $session,
             $persisted->provider_state,
@@ -178,14 +168,14 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
     /**
      * @return array{S3Client, string, string}
      */
-    private function provider(MultipartUploadSessionData $session): array
+    private function provider(array $session): array
     {
         (new MediaS3DependencyGuard)->assertAvailable();
-        $filesystem = Storage::disk($session->disk);
+        $filesystem = Storage::disk($session['disk']);
 
         if (! $filesystem instanceof AwsS3V3Adapter) {
             throw new MediaUploadException(
-                "Multipart disk [{$session->disk}] is not an S3-compatible Laravel disk.",
+                "Multipart disk [{$session['disk']}] is not an S3-compatible Laravel disk.",
             );
         }
 
@@ -194,14 +184,14 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
 
         if (! is_string($bucket) || $bucket === '') {
             throw new MediaUploadException(
-                "Multipart disk [{$session->disk}] does not define an S3 bucket.",
+                "Multipart disk [{$session['disk']}] does not define an S3 bucket.",
             );
         }
 
         $root = $configuration['root'] ?? '';
         $key = implode('/', array_filter([
             is_string($root) ? trim($root, '/') : '',
-            ltrim($session->objectKey, '/'),
+            ltrim($session['objectKey'], '/'),
         ]));
 
         return [$filesystem->getClient(), $bucket, $key];
@@ -210,10 +200,10 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
     /**
      * @return array{S3Client, string, string, string}
      */
-    private function activeProvider(MultipartUploadSessionData $session): array
+    private function activeProvider(array $session): array
     {
         [$client, $bucket, $key] = $this->provider($session);
-        $persisted = MediaMultipartUpload::query()->findOrFail($session->uploadId);
+        $persisted = MediaMultipartUpload::query()->findOrFail($session['uploadId']);
         $providerUploadId = $this->providerUploadId(
             $session,
             $persisted->provider_state,
@@ -223,7 +213,7 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
 
         if ($providerUploadId === null) {
             throw new MediaUploadException(
-                "Multipart session [{$session->uploadId}] has no recoverable provider state.",
+                "Multipart session [{$session['uploadId']}] has no recoverable provider state.",
             );
         }
 
@@ -231,12 +221,12 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
     }
 
     private function inspectObject(
-        MultipartUploadSessionData $session,
+        array $session,
         S3Client $client,
         string $bucket,
         string $key,
         ?string $identity = null,
-    ): CompletedMultipartObjectData {
+    ): array {
         $head = $client->headObject([
             'Bucket' => $bucket,
             'Key' => $key,
@@ -258,17 +248,11 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
             throw new MediaUploadException('S3 returned incomplete metadata for a completed multipart object.');
         }
 
-        return new CompletedMultipartObjectData(
-            path: $session->objectKey,
-            checksum: mb_strtolower($checksum),
-            size: (int) $size,
-            mimeType: $mimeType,
-            objectIdentity: $identity ?? $this->identity($head->get('ETag'), $head->get('VersionId')),
-        );
+        return ['path' => $session['objectKey'], 'checksum' => mb_strtolower($checksum), 'size' => (int) $size, 'mimeType' => $mimeType, 'objectIdentity' => $identity ?? $this->identity($head->get('ETag'), $head->get('VersionId'))];
     }
 
     private function fullObjectChecksum(
-        MultipartUploadSessionData $session,
+        array $session,
         mixed $providerChecksum,
         mixed $checksumType,
     ): string {
@@ -282,7 +266,7 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
             }
         }
 
-        return $this->disks->checksum($session->disk, $session->objectKey);
+        return $this->disks->checksum($session['disk'], $session['objectKey']);
     }
 
     /**
@@ -291,7 +275,7 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
      * @param  array<string, mixed>|null  $providerState
      */
     private function providerUploadId(
-        MultipartUploadSessionData $session,
+        array $session,
         ?array $providerState,
         string $bucket,
         string $key,
@@ -303,7 +287,7 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
             }
 
             throw new MediaUploadException(
-                "Multipart session [{$session->uploadId}] has no recoverable provider state.",
+                "Multipart session [{$session['uploadId']}] has no recoverable provider state.",
             );
         }
 
@@ -316,7 +300,7 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
             || ! is_string($persistedKey)
             || ! hash_equals($key, $persistedKey)) {
             throw new MediaUploadException(
-                "Multipart session [{$session->uploadId}] provider identity does not match its disk.",
+                "Multipart session [{$session['uploadId']}] provider identity does not match its disk.",
             );
         }
 
@@ -326,7 +310,7 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
             }
 
             throw new MediaUploadException(
-                "Multipart session [{$session->uploadId}] has no recoverable provider state.",
+                "Multipart session [{$session['uploadId']}] has no recoverable provider state.",
             );
         }
 

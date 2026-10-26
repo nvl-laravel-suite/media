@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Database\Factories;
 
-use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
@@ -12,7 +11,6 @@ use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Services\MediaModelRegistry;
-use Nvl\Media\Tenancy\MediaTenantParentResolver;
 
 /**
  * Builds MediaAssociation fixture rows and their declared package parents.
@@ -47,16 +45,9 @@ final class MediaAssociationFactory extends Factory
             if (! $owner instanceof HasNvlMedia) {
                 throw new InvalidArgumentException('Media association fixtures require a native Media-capable owner.');
             }
-            if (config('nvl-tenancy.enabled') === true
-                && (Container::getInstance()->make(MediaTenantParentResolver::class)->types()[$owner->getMorphClass()] ?? null) !== $owner::class) {
-                throw new InvalidArgumentException('Media association fixtures require an allowlisted tenant owner.');
-            }
             if ($model->getAttribute('media_id') !== null) {
                 $parent = MediaModelRegistry::query()->findOrFail(FactoryGuard::identifier($model->getAttribute('media_id')));
                 FactoryGuard::parent($parent, $model);
-                if (config('nvl-tenancy.enabled') === true && $owner->getRawOriginal('tenant_id') !== $parent->getRawOriginal('tenant_id')) {
-                    throw new InvalidArgumentException('Fixture owner and parent tenancy must agree.');
-                }
                 FactoryGuard::inherit($model, $parent, true);
             }
         });

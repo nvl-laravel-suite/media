@@ -7,7 +7,7 @@ namespace Nvl\Media\Ownership;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Nvl\Media\Definitions\Tables\MediaTables;
-use Nvl\Media\Models\MediaTenantGrant;
+use Nvl\Media\Models\MediaOwnerGrant;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Ownership\Contracts\OwnershipAdoptionAdapter;
 use Nvl\Ownership\Contracts\OwnershipAdoptionMetadataValidator;
@@ -73,7 +73,7 @@ final readonly class MediaAdoptionAdapter implements OwnershipAdoptionAdapter, O
                 $table->primary(['owner_scope_key', 'media_id'], 'media_owner_catalog_lock_primary');
             });
         }
-        $grant = new MediaTenantGrant;
+        $grant = new MediaOwnerGrant;
         $schema = $grant->getConnection()->getSchemaBuilder();
         if (! $schema->hasTable($grant->getTable())) {
             $schema->create($grant->getTable(), static function (Blueprint $table): void {

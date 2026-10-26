@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -12,20 +13,18 @@ use Illuminate\Support\Collection as SupportCollection;
 use InvalidArgumentException;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\MediaBatchAuthorization;
-use Nvl\Media\Data\Display\OwnerMediaItem;
-use Nvl\Media\Data\Display\OwnerMediaPage;
-use Nvl\Media\Data\Display\OwnerMediaSlotItemData;
-use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Exceptions\MediaBatchReadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Ownership\MediaDeliveryGuard;
+use Nvl\Media\Support\MediaActors;
 use Nvl\Media\Support\MediaAssetUrl;
 use Nvl\Media\Support\MediaBatchOwnerAdmission;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Support\Contracts\LocaleCatalog;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Owners\OwnerBatch;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Translatable\Services\TranslationResolver;
@@ -51,8 +50,9 @@ final readonly class OwnerMediaReader
     /** Return bounded association items and complete distinct original-byte totals.
      * @param  list<string>  $variations
      */
-    public function read(MediaActorData $actor, Model&HasNvlMedia $owner, ?string $collection, int $page, int $perPage, array $variations, ?string $locale): OwnerMediaPage
+    public function read(Authenticatable|SystemActor $actor, Model&HasNvlMedia $owner, ?string $collection = null, int $page = 1, int $perPage = 25, array $variations = [], ?string $locale = null): array
     {
+        MediaActors::assert($actor);
         if ($page < 1 || $perPage < 1 || ($collection !== null && (trim($collection) === '' || mb_strlen($collection) > 50))) {
             throw new InvalidArgumentException('Owner Media reads require a positive page/page size and a valid collection.');
         }
@@ -131,20 +131,16 @@ final readonly class OwnerMediaReader
                 $value = $this->translations->resolve($translated, $definition, $field, $locale, $chain)->value;
                 $text[$field] = is_string($value) ? $value : null;
             }
-            $items[] = new OwnerMediaItem(
-                new OwnerMediaSlotItemData($row->id, $asset->id, $text['title'], $text['alt'], $text['caption'], $asset->mime_type, $asset->size, $asset->is_public, $publicUrls[$asset->id] ?? null),
-                $row->collection,
-                (object) ($variationUrls[$asset->id] ?? array_fill_keys($labels, null)),
-            );
+            $items[] = ['media' => ['associationId' => $row->id, 'mediaId' => $asset->id, 'title' => $text['title'], 'altText' => $text['alt'], 'caption' => $text['caption'], 'mimeType' => $asset->mime_type, 'size' => $asset->size, 'isPublic' => $asset->is_public, 'url' => $publicUrls[$asset->id] ?? null], 'collection' => $row->collection, 'variationUrls' => (object) ($variationUrls[$asset->id] ?? array_fill_keys($labels, null))];
         }
 
-        return new OwnerMediaPage($items, $page, $perPage, $total, $counts, $this->integer($stats->asset_count), $this->integer($stats->original_bytes));
+        return ['items' => $items, 'page' => $page, 'perPage' => $perPage, 'total' => $total, 'collectionCounts' => $counts, 'distinctAssetCount' => $this->integer($stats->asset_count), 'originalBytes' => $this->integer($stats->original_bytes)];
     }
 
     /** Build one exact authorized owner association query for both page and totals.
      * @return Builder<MediaAssociation>
      */
-    private function associations(OwnerBatch $batch, MediaActorData $actor, ?string $collection): Builder
+    private function associations(OwnerBatch $batch, Authenticatable|SystemActor $actor, ?string $collection): Builder
     {
         $identity = $batch->identities()[0];
         $query = $this->queries->associations();

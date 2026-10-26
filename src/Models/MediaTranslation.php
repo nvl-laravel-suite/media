@@ -53,7 +53,11 @@ class MediaTranslation extends Model implements Ownable
     /** Inherit only from the canonical asset relation. */
     public static function ownershipDefinition(): OwnershipDefinition
     {
-        return OwnershipDefinition::inherited('media');
+        $root = MediaModelRegistry::modelClass();
+
+        return $root::ownershipDefinition()->strategy === 'unscoped'
+            ? OwnershipDefinition::unscoped()
+            : OwnershipDefinition::inherited('media');
     }
 
     public const string TABLE = MediaTables::I18n;

@@ -23,13 +23,9 @@ final class MediaTables
 
     public const string OwnerSlotOperations = 'nvl_media_owner_slot_operations';
 
-    public const string TenantGrants = 'nvl_media_tenant_grants';
+    public const string OwnerGrants = 'nvl_media_tenant_grants';
 
     public const string OwnerGrantLocks = 'nvl_media_owner_grant_locks';
-
-    public const string TenantGrantLocks = 'nvl_media_tenant_grant_locks';
-
-    public const string TenantAdoptionCopies = 'nvl_media_tenant_adoption_copies';
 
     public const string MEDIA = self::Media;
 
@@ -42,12 +38,6 @@ final class MediaTables
     public const string MEDIA_MULTIPART_UPLOADS = self::MultipartUploads;
 
     public const string MEDIA_OWNER_SLOT_OPERATIONS = self::OwnerSlotOperations;
-
-    public const string MEDIA_TENANT_GRANTS = self::TenantGrants;
-
-    public const string MEDIA_TENANT_GRANT_LOCKS = self::TenantGrantLocks;
-
-    public const string MEDIA_TENANT_ADOPTION_COPIES = self::TenantAdoptionCopies;
 
     /** Return one configured logical or historical package table. */
     public static function get(string $key): string

@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\MediaRegistration;
 use Nvl\Media\Models\Media;
-use Nvl\Media\Traits\InteractsWithNvlMedia;
+use Nvl\Media\Tests\Fixtures\Consumer\Traits\InteractsWithNvlMedia;
 
 /** Native host owner without an NVL tenancy or authentication package. */
 final class OwnershipCompany extends Model implements HasNvlMedia

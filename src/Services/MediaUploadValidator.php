@@ -6,7 +6,6 @@ namespace Nvl\Media\Services;
 
 use finfo;
 use Illuminate\Http\UploadedFile;
-use Nvl\Media\Data\Ingestion\ValidatedMediaFileData;
 use Nvl\Media\Exceptions\FileUnacceptableForCollection;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Slots\MediaSlot;
@@ -34,7 +33,7 @@ final class MediaUploadValidator
         UploadedFile $file,
         MediaSlot $slot,
         ?string $displayFilename = null,
-    ): ValidatedMediaFileData {
+    ): array {
         $realPath = $file->getRealPath();
 
         if ($realPath === false || ! is_file($realPath)) {
@@ -56,7 +55,7 @@ final class MediaUploadValidator
 
         if (! is_int($size) || $size < 1) {
             throw new FileUnacceptableForCollection(
-                "Cannot upload a zero-byte file [{$fileType->displayFilename}].",
+                "Cannot upload a zero-byte file [{$fileType['displayFilename']}].",
             );
         }
 
@@ -64,19 +63,11 @@ final class MediaUploadValidator
 
         if (! is_string($digest)) {
             throw new MediaUploadException(
-                "Unable to calculate a checksum for [{$fileType->displayFilename}].",
+                "Unable to calculate a checksum for [{$fileType['displayFilename']}].",
             );
         }
 
-        $validatedFile = new ValidatedMediaFileData(
-            displayFilename: $fileType->displayFilename,
-            extension: $fileType->extension,
-            mimeType: $fileType->mimeType,
-            size: $size,
-            digest: $digest,
-            type: $fileType->type,
-            realPath: $realPath,
-        );
+        $validatedFile = ['displayFilename' => $fileType['displayFilename'], 'extension' => $fileType['extension'], 'mimeType' => $fileType['mimeType'], 'size' => $size, 'digest' => $digest, 'type' => $fileType['type'], 'realPath' => $realPath];
         $this->assertAcceptedBySlot($validatedFile, $file, $slot);
 
         return $validatedFile;
@@ -88,14 +79,14 @@ final class MediaUploadValidator
      * @throws FileUnacceptableForCollection
      */
     public function assertAcceptedBySlot(
-        ValidatedMediaFileData $validatedFile,
+        array $validatedFile,
         UploadedFile $file,
         MediaSlot $slot,
     ): void {
         if ($slot->acceptedMimeTypes !== []
-            && ! in_array($validatedFile->mimeType, $slot->acceptedMimeTypes, true)) {
+            && ! in_array($validatedFile['mimeType'], $slot->acceptedMimeTypes, true)) {
             throw new FileUnacceptableForCollection(
-                "File MIME type [{$validatedFile->mimeType}] is not accepted by slot [{$slot->name}]. ".
+                "File MIME type [{$validatedFile['mimeType']}] is not accepted by slot [{$slot->name}]. ".
                 'Accepted: '.implode(', ', $slot->acceptedMimeTypes),
             );
         }
@@ -109,9 +100,9 @@ final class MediaUploadValidator
             ? $globalLimit
             : min($globalLimit, $slot->maxFileSize);
 
-        if ($validatedFile->size > $limit) {
+        if ($validatedFile['size'] > $limit) {
             throw new FileUnacceptableForCollection(
-                "File size [{$validatedFile->size}] exceeds maximum [{$limit}] for slot [{$slot->name}].",
+                "File size [{$validatedFile['size']}] exceeds maximum [{$limit}] for slot [{$slot->name}].",
             );
         }
 

@@ -1,4 +1,7 @@
-# Configuration reference
+# Media configuration
+
+Package routes and the deprecated Tenancy bridge have been removed. Consumers configure their own HTTP adapters. Native ownership uses declared resources and explicit contexts.
+
 
 Publish the package configuration with:
 
@@ -21,7 +24,6 @@ ordinary applications retain the unscoped default.
 
 ## Tenancy
 
-`nvl-media.tenancy.owner_types` is an empty list by default. Tenancy remains opt-in;
 when enabled, every model class that may own Media must be listed and registered
 as a canonical tenancy resource by the host. Unknown owner types fail closed.
 Media translations and variations inherit ownership from their Media parent and
@@ -31,12 +33,6 @@ do not define independent tenant pivots.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `nvl-media.routes.api_enabled` | `false` | Register the management API |
-| `nvl-media.routes.api_prefix` | `nvl/api/v1` | Prefix surrounding the package `/media` routes |
-| `nvl-media.routes.api_middleware` | `['api']` | Middleware wrapping the route file |
-| `nvl-media.routes.management_middleware` | `['auth', 'throttle:60,1']` | Middleware applied to every management endpoint |
-| `nvl-media.routes.assets_enabled` | `true` | Register public and signed private delivery routes |
-| `nvl-media.routes.assets_prefix` | `nvl/media` | Asset-route URI prefix |
 
 The management API and asset delivery are independent. Production doctor fails when writable management routes lack authentication/authorization middleware.
 
@@ -84,7 +80,6 @@ Set this to `false` only for controlled adoption of an existing schema. Publishe
 | `nvl-media.catalog.metadata_keys` | reviewed presentation/provenance key list | Scalar metadata allowed to cross from a granted platform asset into a tenant copy |
 | `nvl-media.catalog.max_tags` | `25` | Maximum projected catalog tags |
 | `nvl-media.catalog.max_tag_length` | `100` | Maximum characters in each projected tag |
-| `nvl-media.tenancy.active_tenant_worklist` | `[]` | Bounded active tenant UUIDs used by the default `MediaTenantWorklist` implementation |
 
 Catalog metadata and tags are projected through these bounds rather than copied
 verbatim. Bind `MediaTenantWorklist` to the host directory when tenant-wide

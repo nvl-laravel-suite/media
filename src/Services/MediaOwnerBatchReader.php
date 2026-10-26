@@ -4,26 +4,25 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection as SupportCollection;
 use InvalidArgumentException;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Contracts\MediaBatchAuthorization;
-use Nvl\Media\Data\Display\OwnerMediaSlotData;
-use Nvl\Media\Data\Display\OwnerMediaSlotItemData;
-use Nvl\Media\Data\Display\OwnerMediaSlots;
-use Nvl\Media\Data\MediaActorData;
 use Nvl\Media\Exceptions\MediaBatchReadException;
+use Nvl\Media\MediaRegistration;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Ownership\MediaDeliveryGuard;
 use Nvl\Media\Ownership\MediaOwnership;
+use Nvl\Media\Support\MediaActors;
 use Nvl\Media\Support\MediaBatchOwnerAdmission;
 use Nvl\Support\Contracts\LocaleCatalog;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Owners\OwnerBatch;
-use Nvl\Support\Owners\OwnerResultMap;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Translatable\Services\TranslationResolver;
@@ -50,8 +49,9 @@ final readonly class MediaOwnerBatchReader
      * @param  list<Model>  $owners
      * @param  list<string>  $slots
      */
-    public function read(array $owners, array $slots, MediaActorData $actor, ?string $locale = null): OwnerMediaSlots
+    public function read(array $owners, array $slots, Authenticatable|SystemActor $actor, ?string $locale = null): array
     {
+        MediaActors::assert($actor);
         $input = OwnerBatch::fromModels($owners);
         if ($input->isEmpty()) {
             return $this->result($input, []);
@@ -87,7 +87,7 @@ final readonly class MediaOwnerBatchReader
             foreach ($slots as $slot) {
                 $named->{$slot} = [];
             }
-            $values[$identity->type][$identity->id] = new OwnerMediaSlotData($named);
+            $values[$identity->type][$identity->id] = ['slots' => $named];
         }
         foreach ($rows as $row) {
             $row = $this->association($row);
@@ -102,15 +102,12 @@ final readonly class MediaOwnerBatchReader
                 $fields[$field] = is_string($value) ? $value : null;
             }
             $url = $publicUrls[$asset->id] ?? '';
-            $items = $values[$row->associable_type][$row->associable_id]->slots->{$row->collection};
+            $items = $values[$row->associable_type][$row->associable_id]['slots']->{$row->collection};
             if (! is_array($items)) {
                 throw new MediaBatchReadException('A requested Media slot must contain an item list.');
             }
-            $items[] = new OwnerMediaSlotItemData(
-                $row->id, $asset->id, $fields['title'], $fields['alt'], $fields['caption'], $asset->mime_type,
-                $asset->size, $asset->is_public, $url === '' ? null : $url,
-            );
-            $values[$row->associable_type][$row->associable_id]->slots->{$row->collection} = $items;
+            $items[] = ['associationId' => $row->id, 'mediaId' => $asset->id, 'title' => $fields['title'], 'altText' => $fields['alt'], 'caption' => $fields['caption'], 'mimeType' => $asset->mime_type, 'size' => $asset->size, 'isPublic' => $asset->is_public, 'url' => $url === '' ? null : $url];
+            $values[$row->associable_type][$row->associable_id]['slots']->{$row->collection} = $items;
         }
 
         return $this->result($batch, $values);
@@ -168,7 +165,7 @@ final readonly class MediaOwnerBatchReader
             if (! $owner instanceof HasNvlMedia) {
                 throw new InvalidArgumentException('Media batch owners must implement HasNvlMedia.');
             }
-            $registration = $owner->nvlMedia()->registration();
+            $registration = MediaRegistration::forOwner($owner);
             $identity = $batch->identities()[$index];
             foreach ($slots as $name) {
                 $slot = $registration->getSlot($name);
@@ -215,11 +212,19 @@ final readonly class MediaOwnerBatchReader
         return $row;
     }
 
-    /** Serialize complete explicit owner DTOs.
-     * @param  array<string, array<array-key, OwnerMediaSlotData>>  $values
+    /** Serialize complete explicit owner arrays.
+     * @param  array<string, array<array-key, array<string, mixed>>>  $values
      */
-    private function result(OwnerBatch $batch, array $values): OwnerMediaSlots
+    private function result(OwnerBatch $batch, array $values): array
     {
-        return OwnerMediaSlots::fromMap(new OwnerResultMap($batch, $values));
+        $order = [];
+        foreach ($batch->identities() as $identity) {
+            if (! isset($values[$identity->type][$identity->id])) {
+                throw new \LogicException('Every admitted owner requires an explicit Media result.');
+            }
+            $order[] = ['type' => $identity->type, 'id' => $identity->id];
+        }
+
+        return ['owners' => $values, 'order' => $order];
     }
 }

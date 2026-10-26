@@ -6,14 +6,12 @@ namespace Nvl\Media\Enums;
 
 use BackedEnum;
 use InvalidArgumentException;
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Defines whether an image output favors lossy compression or lossless fidelity.
  *
  * @api
  */
-#[TypeScript]
 enum ImageCompression: string
 {
     case Lossy = 'lossy';

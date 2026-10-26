@@ -4,14 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Enums;
 
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
-
 /**
  * Stable authorization abilities for media operations.
  *
  * @api
  */
-#[TypeScript]
 enum MediaAbility: string
 {
     case List = 'list';
