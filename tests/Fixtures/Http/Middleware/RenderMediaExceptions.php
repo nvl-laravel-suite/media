@@ -8,8 +8,8 @@ use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as LaravelResponse;
+use Nvl\Media\Tests\Fixtures\ConsumerSupport\PackageExceptionPayload;
 use Nvl\Support\Contracts\RespondableException;
-use Nvl\Support\Http\PackageExceptionPayload;
 use Symfony\Component\HttpFoundation\Response;
 
 /** Preserves the native Media envelope on already enabled package routes. */

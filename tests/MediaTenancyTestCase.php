@@ -6,7 +6,6 @@ namespace Nvl\Media\Tests;
 
 use Illuminate\Contracts\Foundation\MaintenanceMode;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
-use Nvl\Data\Providers\DataServiceProvider;
 use Nvl\Filterable\Providers\FilterableServiceProvider;
 use Nvl\Media\Providers\MediaServiceProvider;
 use Nvl\Media\Tests\Fixtures\MediaTenancyDirectory;
@@ -22,6 +21,7 @@ use Nvl\Tenancy\Providers\TenancyServiceProvider;
 use Nvl\Translatable\Providers\TranslatableServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 use ReflectionClass;
+use Spatie\LaravelData\LaravelDataServiceProvider as DataServiceProvider;
 
 /** Boots Media's non-transactional tenancy adoption fixture. */
 abstract class MediaTenancyTestCase extends Orchestra

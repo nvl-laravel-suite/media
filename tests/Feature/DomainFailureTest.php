@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Exceptions\MediaStorageException;
 use Nvl\Media\Services\MediaLocalFileMaterializer;
 use Nvl\Media\Services\MediaTemporaryFileRegistry;
-use Nvl\Support\Http\PackageExceptionPayload;
+use Nvl\Media\Tests\Fixtures\ConsumerSupport\PackageExceptionPayload;
 
 it('classifies an unavailable remote media stream without exposing its source or creating a temporary file', function (): void {
     config()->set('filesystems.disks.c4-remote', ['driver' => 'c4-remote']);

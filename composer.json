@@ -23,8 +23,8 @@
         "laravel/framework": "^13.0",
         "league/flysystem": "^3.25",
         "nesbot/carbon": "^2.72 || ^3.0",
-        "nvl/core": "^6.0.1",
-        "nvl/translatable": "^6.0",
+        "nvl/core": "^7.0",
+        "nvl/translatable": "^7.0",
         "php": "^8.4",
         "spatie/image": "^3.0",
         "symfony/http-foundation": "^7.0 || ^8.0",
@@ -38,8 +38,8 @@
         "laravel/pint": "^1.27",
         "league/flysystem-aws-s3-v3": "^3.0",
         "mockery/mockery": "^1.6",
-        "nvl/filterable": "^6.0",
-        "nvl/ownership": "^6.0.1",
+        "nvl/filterable": "^7.0",
+        "nvl/ownership": "^7.0",
         "orchestra/testbench": "^11.0",
         "pestphp/pest": "^4.0",
         "pestphp/pest-plugin-laravel": "^4.0",
@@ -81,7 +81,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "6.x-dev"
+            "dev-main": "7.x-dev"
         },
         "laravel": {
             "providers": [
@@ -113,7 +113,8 @@
             "/**/.gitattributes",
             "/.gitignore",
             "/**/.gitignore",
-            "/**/.gitkeep"
+            "/**/.gitkeep",
+            ".DS_Store"
         ]
     },
     "minimum-stability": "stable",
@@ -126,7 +127,7 @@
     "conflict": {
         "aws/aws-sdk-php": "<3.322.9 || >=4.0",
         "league/flysystem-aws-s3-v3": "<3.0 || >=4.0",
-        "nvl/ownership": "<6.0.1 || >=7.0"
+        "nvl/ownership": "<7.0 || >=8.0"
     },
     "homepage": "https://github.com/nvl-laravel-suite/media",
     "authors": [

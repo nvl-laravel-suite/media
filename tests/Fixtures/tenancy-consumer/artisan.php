@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 use Illuminate\Foundation\Application;
-use Nvl\Data\Providers\DataServiceProvider;
 use Nvl\Filterable\Providers\FilterableServiceProvider;
 use Nvl\Media\Providers\MediaServiceProvider;
 use Nvl\Media\Tests\Fixtures\MediaTenancyConsumerServiceProvider;
@@ -10,6 +9,7 @@ use Nvl\Support\Providers\LocaleServiceProvider;
 use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Tenancy\Providers\TenancyServiceProvider;
 use Nvl\Translatable\Providers\TranslatableServiceProvider;
+use Spatie\LaravelData\LaravelDataServiceProvider as DataServiceProvider;
 use Symfony\Component\Console\Input\ArgvInput;
 
 $vendor = getenv('NVL_TEST_VENDOR_DIR');

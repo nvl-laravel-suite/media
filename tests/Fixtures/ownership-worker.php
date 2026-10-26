@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 use Illuminate\Contracts\Console\Kernel;
-use Nvl\Data\Providers\DataServiceProvider;
 use Nvl\Filterable\Providers\FilterableServiceProvider;
 use Nvl\Media\Enums\MediaOwnerSlotOperationType;
 use Nvl\Media\Providers\MediaServiceProvider;
@@ -19,6 +18,7 @@ use Nvl\Support\Providers\LocaleServiceProvider;
 use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Translatable\Providers\TranslatableServiceProvider;
 use Orchestra\Testbench\Foundation\Application;
+use Spatie\LaravelData\LaravelDataServiceProvider as DataServiceProvider;
 
 require dirname(__DIR__, 5).'/vendor/autoload.php';
 $source = json_decode($argv[1], true, flags: JSON_THROW_ON_ERROR);

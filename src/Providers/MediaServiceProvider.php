@@ -24,8 +24,6 @@ use Nvl\Media\Contracts\MediaContentScanner;
 use Nvl\Media\Contracts\MediaHostResolver;
 use Nvl\Media\Contracts\MediaSearchDriver;
 use Nvl\Media\Contracts\MultipartUploadGateway;
-use Nvl\Media\Events\MediaUploaded;
-use Nvl\Media\Events\MediaUploadedEvent;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Ownership\MediaAdoptionAdapter as OwnershipMediaAdoptionAdapter;
 use Nvl\Media\Ownership\MediaDeliveryGuard;
@@ -74,7 +72,6 @@ use Nvl\Media\Services\UnsupportedMultipartUploadGateway;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Ownership\Services\OwnershipAdoptionRegistry;
 use Nvl\Support\Doctor\PackageDoctorContributor;
-use Nvl\Support\Events\EventAliases;
 use Nvl\Support\Globals\GlobalNames;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Support\Ownership\Contracts\OwnershipIntegratedProvider;
@@ -101,7 +98,6 @@ final class MediaServiceProvider extends ServiceProvider implements OwnershipInt
         MediaTransactionRollbackRegistry $rollbackCallbacks,
         OwnershipBoundary $tenantBoundary,
     ): void {
-        $this->app->make(EventAliases::class)->register(MediaUploaded::class, MediaUploadedEvent::class);
         $events->listen(
             TransactionRolledBack::class,
             $rollbackCallbacks->handle(...),

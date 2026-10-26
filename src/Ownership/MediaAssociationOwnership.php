@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Ownership;
 
-use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 
@@ -21,9 +20,9 @@ final readonly class MediaAssociationOwnership
         $attributes = $association->getAttributes();
         $type = $attributes['associable_type'] ?? null;
         $id = $attributes['associable_id'] ?? null;
-        if (! is_string($type) || (! is_int($id) && ! is_string($id))
-            || ! $this->parents->resolveIdentity($type, $id) instanceof HasNvlMedia) {
-            throw new OwnershipViolation('Media attachment targets require canonical Media-capable host identities.');
+        if (! is_string($type) || (! is_int($id) && ! is_string($id))) {
+            throw new OwnershipViolation('Media attachment targets require canonical persisted host identities.');
         }
+        $this->parents->resolveIdentity($type, $id);
     }
 }
