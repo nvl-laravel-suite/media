@@ -275,7 +275,7 @@ final class FakeMediaLibrary implements MediaLibraryContract
         MediaVisibility $visibility,
         ?int $expectedRevision = null,
     ): Media {
-        $result = $this->invoke('relocate', ['media' => $media, 'disk' => $disk, 'visibility' => $visibility, 'expected_revision' => $expectedRevision]);
+        $result = $this->invoke('relocate', ['media' => $media, 'disk' => $disk, 'visibility' => $visibility, 'expectedRevision' => $expectedRevision]);
         if (! $result instanceof Media) {
             throw new TypeError('FakeMediaLibrary::relocate requires a scripted Media.');
         }
@@ -300,7 +300,7 @@ final class FakeMediaLibrary implements MediaLibraryContract
         ConversionDefinition $definition,
         ?int $expectedRevision = null,
     ): ?MediaImageVariation {
-        $result = $this->invoke('generateVariation', ['media' => $media, 'definition' => $definition, 'expected_revision' => $expectedRevision]);
+        $result = $this->invoke('generateVariation', ['media' => $media, 'definition' => $definition, 'expectedRevision' => $expectedRevision]);
         if ($result !== null && ! $result instanceof MediaImageVariation) {
             throw new TypeError('FakeMediaLibrary::generateVariation requires a scripted MediaImageVariation or null.');
         }

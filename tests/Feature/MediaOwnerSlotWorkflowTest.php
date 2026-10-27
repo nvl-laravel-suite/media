@@ -25,6 +25,7 @@ use Nvl\Media\Events\MediaAttached;
 use Nvl\Media\Events\MediaDetached;
 use Nvl\Media\Events\MediaMutated;
 use Nvl\Media\Exceptions\FileUnacceptableForCollection;
+use Nvl\Media\Exceptions\MediaInUseException;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
@@ -183,14 +184,30 @@ it('preserves case-distinct owner collection usages on case-insensitive storage'
     app(MediaAttachments::class)->remove(ownerSlotActor(), $owner, $media->id, 'Gallery');
     expect($selected->fresh())->toBeNull()->and($preserved->fresh())->not->toBeNull()->and($media->fresh()->trashed())->toBeFalse();
 });
-it('cleans a public orphan after removing every selected collection from one owner', function (): void {
+it('protects reused public media until its owner collections are explicitly detached', function (): void {
     Storage::fake('public');
+    config(['nvl-media.prevent_deleting_reused_public_media' => true]);
     $owner = ownerSlotOwner();
     $media = ownerSlotStoredMedia('public-orphan', ['is_public' => true]);
-    attachOwnerSlotMedia($media, $owner, 'gallery');
-    attachOwnerSlotMedia($media, $owner, 'documents');
+    $gallery = attachOwnerSlotMedia($media, $owner, 'gallery');
+    $document = attachOwnerSlotMedia($media, $owner, 'documents');
     useOwnerSlotAuthorization(static fn (): bool => true);
-    app(MediaAttachments::class)->remove(ownerSlotActor(), $owner, $media->id);
+    $attachments = app(MediaAttachments::class);
+    $actor = ownerSlotActor();
+    expect(fn () => $attachments->remove($actor, $owner, $media->id))
+        ->toThrow(MediaInUseException::class, 'reused by 2 associations')
+        ->and($gallery->fresh())->not->toBeNull()
+        ->and($document->fresh())->not->toBeNull()
+        ->and($media->fresh()->trashed())->toBeFalse();
+    Storage::disk('public')->assertExists($media->buildPath());
+
+    $attachments->remove($actor, $owner, $media->id, 'gallery');
+    expect($gallery->fresh())->toBeNull()
+        ->and($document->fresh())->not->toBeNull()
+        ->and($media->fresh()->trashed())->toBeFalse();
+    Storage::disk('public')->assertExists($media->buildPath());
+
+    $attachments->remove($actor, $owner, $media->id, 'documents');
     expect($media->fresh()->trashed())->toBeTrue();
     Storage::disk('public')->assertMissing($media->buildPath());
 });

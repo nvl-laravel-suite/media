@@ -116,8 +116,10 @@ it('rejects invalid or oversized finite media details before storage', function 
 ]);
 it('fails finite media details closed for missing deleted and foreign private identifiers', function (string $mode): void {
     $actor = TestMediaUser::query()->create(['name' => 'Reader', 'email' => 'reader@example.com', 'password' => 'password']);
+    $foreignActor = TestMediaUser::query()->create(['name' => 'Foreign owner', 'email' => 'foreign@example.com', 'password' => 'password']);
+    expect($foreignActor->getKey())->not->toBe($actor->getKey());
     $asset = Media::factory()->create(['is_public' => true]);
-    $target = Media::factory()->create(['is_public' => $mode !== 'foreign', 'uploaded_by' => '2', 'uploaded_by_type' => TestMediaUser::class]);
+    $target = Media::factory()->create(['is_public' => $mode !== 'foreign', 'uploaded_by' => (string) $foreignActor->getKey(), 'uploaded_by_type' => $foreignActor->getMorphClass()]);
     if ($mode === 'deleted') {
         $target->delete();
     }
