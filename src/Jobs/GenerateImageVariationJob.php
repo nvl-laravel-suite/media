@@ -37,7 +37,7 @@ final class GenerateImageVariationJob implements OwnershipQueuedJob, ShouldBeUni
 
     public int $uniqueFor;
 
-    private readonly ConversionDefinition $definition;
+    public readonly ConversionDefinition $definition;
 
     private readonly OwnershipJobEnvelope $ownershipEnvelope;
 
@@ -51,10 +51,10 @@ final class GenerateImageVariationJob implements OwnershipQueuedJob, ShouldBeUni
      * @param  array<string, mixed>|ConversionDefinition  $presetConfig
      */
     public function __construct(
-        private readonly string $mediaId,
-        private readonly string $presetName,
+        public readonly string $mediaId,
+        public readonly string $presetName,
         array|ConversionDefinition $presetConfig,
-        private readonly int $sourceRevision = 1,
+        public readonly int $sourceRevision = 1,
         ?OwnershipJobEnvelope $envelope = null,
     ) {
         $this->ownershipEnvelope = $envelope ?? MediaQueueEnvelope::ownership();

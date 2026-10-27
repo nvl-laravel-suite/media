@@ -49,9 +49,18 @@ Namespace: `Nvl\Media\Services\MediaReader`.
 - `paginate(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $user, array $filters = …, bool $includeVariations = …): Illuminate\Contracts\Pagination\LengthAwarePaginator`
 - `filterOptions(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $user): array`
 - `get(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, string $id, bool $includeVariations = …): Nvl\Media\Models\Media`
+- `getMany(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, array $ids, bool $includeVariations = true): Illuminate\Database\Eloquent\Collection`
 - `usages(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, string $id): Illuminate\Support\Collection`
 - `findMany(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, array $ids): Illuminate\Database\Eloquent\Collection`
 - `slots(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Illuminate\Database\Eloquent\Model $owner, array $slots, int $limit = …): array`
+
+`getMany()` is the read-authorized bulk counterpart of `get()`. Pass a list of
+UUIDs, bounded by the smaller of 100 and `nvl-media.query.maximum_page_size`.
+An empty list returns an empty collection; repeated IDs are returned once in
+first-input order. Missing, deleted, invisible or unauthorized items fail the
+whole read. Translations, associations and optionally image variations are eager
+loaded with a fixed number of media-table reads; every item still receives its
+View decision. `findMany()` retains its separate mutation-oriented contract.
 
 ## `MediaMultipart`
 

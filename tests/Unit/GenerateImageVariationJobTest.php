@@ -6,15 +6,33 @@ use Illuminate\Log\Logger;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Nvl\Media\Conversions\ConversionDefinition;
+use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Jobs\GenerateImageVariationJob;
 use Nvl\Media\Jobs\ProcessMediaVariationsJob;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Services\MediaVariationDispatcher;
 
 beforeEach(function () {
     config(['nvl-media.root_folder' => '', 'nvl-media.conversions_folder' => 'conversions', 'nvl-media.queue.enabled' => true, 'nvl-media.queue.connection' => 'database', 'nvl-media.queue.name' => 'media', 'nvl-media.auto_generate_variations' => true, 'nvl-media.image_variation_presets' => ['thumb' => ['width' => 150, 'height' => 150, 'quality' => 80, 'format' => 'webp', 'enabled' => true], 'large' => ['width' => 1280, 'height' => 1280, 'quality' => 85, 'format' => 'webp', 'enabled' => false]], 'nvl-media.output_conversion' => ['enabled' => false]]);
 });
 describe('GenerateImageVariationJob', function () {
+    it('retains typed producer admission when configured generation runs synchronously', function (): void {
+        config(['nvl-media.queue.connection' => 'sync']);
+        $media = Media::factory()->create(['revision' => 7, 'type' => MediaType::IMAGE, 'status' => MediaLifecycleStatus::Available]);
+        $captured = [];
+        app()->bindMethod([GenerateImageVariationJob::class, 'handle'], function (GenerateImageVariationJob $job) use (&$captured): void {
+            $captured[] = $job;
+        });
+
+        app(MediaVariationDispatcher::class)->dispatchConfiguredForUpload($media);
+
+        expect($captured)->toHaveCount(1)
+            ->and($captured[0]->mediaId)->toBe($media->id)
+            ->and($captured[0]->presetName)->toBe('thumb')
+            ->and($captured[0]->sourceRevision)->toBe(7)
+            ->and($captured[0]->definition->targetWidth)->toBe(150);
+    });
     it('is dispatchable to the configured queue', function () {
         Queue::fake();
         GenerateImageVariationJob::dispatch('media-123', 'thumb', ['width' => 150, 'height' => 150]);
@@ -40,9 +58,12 @@ describe('GenerateImageVariationJob', function () {
     it('preserves the complete conversion definition through queue serialization', function () {
         $definition = (new ConversionDefinition('card'))->fit('max', 1200, 1200)->format('avif')->quality(60)->sharpen(8)->onQueue('priority-media');
         $job = unserialize(serialize(new GenerateImageVariationJob('media-123', 'card', $definition, 4)));
-        $property = new ReflectionProperty($job, 'definition');
-        $restored = $property->getValue($job);
-        expect($restored)->toBeInstanceOf(ConversionDefinition::class)->and($restored->fitMethod)->toBe('max')->and($restored->fitWidth)->toBe(1200)->and($restored->fitHeight)->toBe(1200)->and($restored->outputFormat)->toBe('avif')->and($restored->targetQuality)->toBe(60)->and($restored->sharpenAmount)->toBe(8)->and($job->queue)->toBe('priority-media');
+        $restored = $job->definition;
+        expect($restored)->toBeInstanceOf(ConversionDefinition::class)->and($restored->fitMethod)->toBe('max')->and($restored->fitWidth)->toBe(1200)->and($restored->fitHeight)->toBe(1200)->and($restored->outputFormat)->toBe('avif')->and($restored->targetQuality)->toBe(60)->and($restored->sharpenAmount)->toBe(8)->and($job->queue)->toBe('priority-media')
+            ->and($job->mediaId)->toBe('media-123')
+            ->and($job->presetName)->toBe('card')
+            ->and($job->sourceRevision)->toBe(4);
+        expect(fn () => $job->sourceRevision = 5)->toThrow(Error::class);
     });
     it('uses bounded per-job queue settings', function () {
         config(['nvl-media.queue.jobs.generate.tries' => 5, 'nvl-media.queue.jobs.generate.timeout' => 240, 'nvl-media.queue.jobs.generate.unique_for' => 900, 'nvl-media.queue.jobs.generate.backoff' => [15, 45]]);

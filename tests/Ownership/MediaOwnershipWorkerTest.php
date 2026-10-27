@@ -70,7 +70,8 @@ it('runs real captured Media workers and concurrent receipts on native PostgreSQ
     $root = Storage::disk('public')->path('');
     $worker = new Process([PHP_BINARY, __DIR__.'/../Fixtures/ownership-worker.php', $source, json_encode(['root' => $root], JSON_THROW_ON_ERROR)], timeout: 40);
     $worker->mustRun();
-    expect($worker->getOutput())->toBe('unresolved')->and(DB::table('jobs')->count())->toBe(0)->and(DB::table('failed_jobs')->pluck('exception')->all())->toBe([]);
+    $pending = DB::table('jobs')->get(['queue', 'attempts', 'reserved_at', 'available_at', 'created_at'])->all();
+    expect($worker->getOutput())->toBe('unresolved')->and(DB::table('jobs')->count())->toBe(0, json_encode(['pending' => $pending, 'worker_errors' => $worker->getErrorOutput(), 'failed' => DB::table('failed_jobs')->pluck('exception')->all()], JSON_THROW_ON_ERROR))->and(DB::table('failed_jobs')->pluck('exception')->all())->toBe([]);
     foreach ([7, 8] as $company) {
         $runner->run(OwnershipCompany::query()->findOrFail($company), $actor, function () use ($records, $company): void {
             $media = MediaModelRegistry::query()->findOrFail($records[$company]['media']);

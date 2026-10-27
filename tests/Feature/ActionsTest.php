@@ -423,6 +423,44 @@ describe('DetachMediaAction', function () {
  * DeleteMediaAction
  * ================================================================= */
 describe('DeleteMediaAction', function () {
+    it('refuses sole-owner multi-placement deletion before changing public usages', function (): void {
+        Storage::fake('public');
+        config(['nvl-media.prevent_deleting_reused_public_media' => true]);
+        $media = createMediaRecord(['is_public' => true]);
+        $owner = TestMediaModel::query()->create(['name' => 'Consumer']);
+        $attachments = app(MediaAttachments::class);
+        $attachments->attach(SystemActor::Background, $media, $owner, 'logo', dispatchVariations: false);
+        $attachments->attach(SystemActor::Background, $media, $owner, 'gallery', dispatchVariations: false);
+        $associationIds = MediaAssociation::query()->where('media_id', $media->id)->pluck('id')->all();
+        Storage::disk('public')->put($media->buildPath(), 'original binary');
+
+        expect(fn () => $attachments->removeFromModel(SystemActor::Background, $owner, $media))
+            ->toThrow(MediaInUseException::class)
+            ->and(Media::query()->whereKey($media->id)->exists())->toBeTrue()
+            ->and(MediaAssociation::query()->where('media_id', $media->id)->where('is_active', true)->pluck('id')->all())
+            ->toEqualCanonicalizing($associationIds);
+        Storage::disk('public')->assertExists($media->buildPath());
+    });
+
+    it('detaches selected public usages when another inactive placement retains the asset', function (): void {
+        Storage::fake('public');
+        config(['nvl-media.prevent_deleting_reused_public_media' => true]);
+        $media = createMediaRecord(['is_public' => true]);
+        $owner = TestMediaModel::query()->create(['name' => 'Consumer']);
+        $other = TestMediaModel::query()->create(['name' => 'Retained owner']);
+        $attachments = app(MediaAttachments::class);
+        $attachments->attach(SystemActor::Background, $media, $owner, 'logo', dispatchVariations: false);
+        $attachments->attach(SystemActor::Background, $media, $owner, 'gallery', dispatchVariations: false);
+        $retained = $attachments->attach(SystemActor::Background, $media, $other, 'logo', dispatchVariations: false);
+        $retained->update(['is_active' => false]);
+        Storage::disk('public')->put($media->buildPath(), 'original binary');
+
+        $attachments->removeFromModel(SystemActor::Background, $owner, $media);
+
+        expect(Media::query()->whereKey($media->id)->exists())->toBeTrue()
+            ->and(MediaAssociation::query()->where('media_id', $media->id)->pluck('id')->all())->toBe([$retained->id]);
+        Storage::disk('public')->assertExists($media->buildPath());
+    });
     it('protects a reused public asset unless global deletion is forced', function () {
         $media = createMediaRecord(['is_public' => true]);
         $firstOwner = createTestUser();

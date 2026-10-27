@@ -3,8 +3,11 @@
 declare(strict_types=1);
 use Illuminate\Contracts\Console\Kernel;
 use Nvl\Filterable\Providers\FilterableServiceProvider;
+use Nvl\Media\Contracts\MediaAuthorization;
+use Nvl\Media\Enums\MediaAbility;
 use Nvl\Media\Enums\MediaOwnerSlotOperationType;
 use Nvl\Media\Providers\MediaServiceProvider;
+use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaOwnerSlotIdempotency;
 use Nvl\Media\Tests\Fixtures\OwnershipActor;
 use Nvl\Media\Tests\Fixtures\OwnershipCompany;
@@ -54,5 +57,11 @@ if (($options['mode'] ?? 'queue') === 'receipt') {
         fwrite(STDERR, $kernel->output());
         exit($status);
     }
+    $app->make(OwnershipRunner::class)->run(OwnershipCompany::query()->findOrFail(7), OwnershipActor::query()->firstOrFail(), function () use ($app): void {
+        $media = MediaModelRegistry::query()->firstOrFail();
+        if ($app->make(MediaAuthorization::class)->allows(SystemActor::Background, MediaAbility::Mutate, $media)) {
+            throw new RuntimeException('Variation worker authority must end with its exact job.');
+        }
+    });
     fwrite(STDOUT, $app->make(OwnershipContext::class)->snapshot()->mode->value);
 }

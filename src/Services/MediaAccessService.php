@@ -32,6 +32,24 @@ final readonly class MediaAccessService
         }
     }
 
+    /**
+     * Revalidate one principal for this bounded operation, then check every loaded asset.
+     *
+     * @param  list<Media>  $media
+     */
+    public function authorizeMany(Authenticatable|SystemActor $actor, MediaAbility $ability, array $media): void
+    {
+        $actor = MediaActors::assert($actor);
+        if ($actor instanceof Authenticatable && $this->privilegedAccess->allows($actor, $ability)) {
+            return;
+        }
+        foreach ($media as $asset) {
+            if (! $this->authorization->allows($actor, $ability, $asset)) {
+                throw new AuthorizationException("The actor cannot {$ability->value} this media.");
+            }
+        }
+    }
+
     public function allows(
         Authenticatable|SystemActor $actor,
         MediaAbility $ability,

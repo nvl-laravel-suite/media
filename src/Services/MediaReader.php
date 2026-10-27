@@ -12,7 +12,9 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use InvalidArgumentException;
 use Nvl\Media\Contracts\MediaSearchDriver;
 use Nvl\Media\Enums\MediaAbility;
 use Nvl\Media\Enums\MediaType;
@@ -57,7 +59,7 @@ final class MediaReader
         $this->access->authorize($user, MediaAbility::List);
         $allowed = ['search', 'type', 'disk', 'isPublic', 'collection', 'tag', 'folder', 'mimeType', 'extension', 'locale', 'associableType', 'per_page', 'page', 'sortBy', 'sortDirection'];
         if (array_diff(array_keys($filters), $allowed) !== []) {
-            throw new \InvalidArgumentException('Unknown Media filter fields.');
+            throw new InvalidArgumentException('Unknown Media filter fields.');
         }
         Validator::make($filters, [
             'search' => ['nullable', 'string', 'max:255'],
@@ -218,6 +220,51 @@ final class MediaReader
     }
 
     /**
+     * Hydrate at most one management page of unique assets with the same View checks as get().
+     * Missing, deleted or invisible identifiers fail the entire read. Input order is retained,
+     * duplicates are collapsed, and an empty list performs no storage reads.
+     *
+     * @param  array<array-key, mixed>  $ids  Validated as a finite list of canonical Media UUIDs
+     * @return EloquentCollection<int, Media>
+     */
+    public function getMany(Authenticatable|SystemActor $actor, array $ids, bool $includeVariations = true): EloquentCollection
+    {
+        if (! array_is_list($ids)) {
+            throw new InvalidArgumentException('Media detail identifiers must be a list of UUIDs.');
+        }
+        foreach ($ids as $id) {
+            if (! is_string($id) || ! Str::isUuid($id)) {
+                throw new InvalidArgumentException('Media detail identifiers must be UUID strings.');
+            }
+        }
+        $ids = array_values(array_unique($ids));
+        $maximum = min(100, MediaConfiguration::integer('nvl-media.query.maximum_page_size', 100, 1));
+        if (count($ids) > $maximum) {
+            throw new InvalidArgumentException("Media detail reads allow at most {$maximum} unique identifiers.");
+        }
+        if ($ids === []) {
+            return new EloquentCollection;
+        }
+        $actor = MediaActors::assert($actor);
+        $relations = ['translations', 'associations'];
+        if ($includeVariations) {
+            $relations[] = 'imageVariations';
+        }
+        $models = $this->baseQuery($actor)->with($relations)->whereKey($ids)->get()->keyBy('id');
+        if ($models->count() !== count($ids)) {
+            throw new OwnershipViolation('One or more Media identifiers are unavailable in the active tenant.');
+        }
+        $ordered = new EloquentCollection;
+        foreach ($ids as $id) {
+            $media = $models->get($id) ?? throw new OwnershipViolation('A Media identifier differs from its canonical identity.');
+            $ordered->push($media);
+        }
+        $this->access->authorizeMany($actor, MediaAbility::View, $ordered->all());
+
+        return $ordered;
+    }
+
+    /**
      * List all associations for a media record.
      *
      * @return Collection<int, MediaAssociation>
@@ -342,16 +389,16 @@ final class MediaReader
         $actor = MediaActors::assert($actor);
         $owner = $this->owners->resolve($owner);
         if ($limit < 1 || $limit > 1000 || count($slots) > 100 || ! array_is_list($slots)) {
-            throw new \InvalidArgumentException('Media owner reads require bounded slots and limits.');
+            throw new InvalidArgumentException('Media owner reads require bounded slots and limits.');
         }
         $ownerId = $owner->getKey();
         if (! is_int($ownerId) && ! is_string($ownerId)) {
-            throw new \InvalidArgumentException('Media owners require a scalar key.');
+            throw new InvalidArgumentException('Media owners require a scalar key.');
         }
         $result = [];
         foreach ($slots as $slot) {
             if (! is_string($slot) || trim($slot) === '' || mb_strlen($slot) > 50) {
-                throw new \InvalidArgumentException('Media slots require bounded nonempty names.');
+                throw new InvalidArgumentException('Media slots require bounded nonempty names.');
             }
             $rows = MediaAssociation::query()->where('associable_type', $owner->getMorphClass())
                 ->where('associable_id', (string) $ownerId)->where('collection', $slot)

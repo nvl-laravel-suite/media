@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Contracts\MediaBatchAuthorization;
+use Nvl\Media\Enums\MediaAbility;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Exceptions\MediaBatchReadException;
 use Nvl\Media\Models\Media;
@@ -22,6 +23,7 @@ use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Providers\MediaServiceProvider;
 use Nvl\Media\Services\MediaBatchQueryBuilder;
 use Nvl\Media\Services\MediaOwnerBatchReader;
+use Nvl\Media\Services\MediaReader;
 use Nvl\Media\Services\MediaUrlResolver;
 use Nvl\Media\Services\OwnerMediaReader;
 use Nvl\Media\Services\UnsupportedMediaBatchAuthorization;
@@ -34,6 +36,7 @@ use Nvl\Media\Tests\Stubs\IntegerBatchMediaOwner;
 use Nvl\Media\Tests\Stubs\NumericBatchMediaOwner;
 use Nvl\Media\Tests\Stubs\OtherBatchStringMediaOwner;
 use Nvl\Media\Tests\Stubs\OwnerSlotWorkflowModel;
+use Nvl\Media\Tests\Stubs\TestMediaUser;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Owners\OwnerBatch;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
@@ -53,6 +56,125 @@ beforeEach(function (): void {
 afterEach(function (): void {
     Relation::morphMap($this->batchMorphMap, false);
     Relation::requireMorphMap($this->batchRequiresMorphMap);
+});
+it('hydrates finite media details with fixed queries and every requested relation', function (int $count): void {
+    $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
+    $assets = Media::factory()->count($count)->create(['is_public' => false]);
+    foreach ($assets as $asset) {
+        batchMediaAssociation($owner, $asset, 'library');
+        MediaTranslation::query()->create(['media_id' => $asset->id, 'locale' => 'bg', 'title' => 'Заглавие']);
+        MediaImageVariation::factory()->forMedia($asset)->create(['label' => 'thumbnail']);
+    }
+    $ids = array_reverse($assets->modelKeys());
+    $reader = app(MediaReader::class);
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+    $result = $reader->getMany(SystemActor::Background, [...$ids, $ids[0]]);
+    expect($result->modelKeys())->toBe($ids)->and(batchMediaStorageQueries())->toHaveCount(4);
+    foreach ($result as $asset) {
+        expect($asset->relationLoaded('translations'))->toBeTrue()
+            ->and($asset->translations->first()->title)->toBe('Заглавие')
+            ->and($asset->relationLoaded('associations'))->toBeTrue()
+            ->and($asset->associations->first()->associable_id)->toBe($owner->id)
+            ->and($asset->relationLoaded('imageVariations'))->toBeTrue()
+            ->and($asset->imageVariations->first()->label)->toBe('thumbnail');
+    }
+})->with([1, 25, 100]);
+it('returns empty finite media details without storage and can omit variations', function (): void {
+    $asset = Media::factory()->create(['is_public' => true]);
+    $reader = app(MediaReader::class);
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+    expect($reader->getMany(SystemActor::Background, []))->toBeEmpty()
+        ->and(DB::getQueryLog())->toBe([]);
+    $result = $reader->getMany(SystemActor::Background, [$asset->id], includeVariations: false);
+    expect($result->sole()->relationLoaded('imageVariations'))->toBeFalse()
+        ->and($result->sole()->relationLoaded('translations'))->toBeTrue()
+        ->and($result->sole()->relationLoaded('associations'))->toBeTrue();
+});
+it('bounds persisted actor reads while authorizing every finite media detail', function (int $count): void {
+    $actor = TestMediaUser::query()->create(['name' => 'Reader', 'email' => 'reader@example.com', 'password' => 'password']);
+    $assets = Media::factory()->count($count)->create(['is_public' => false, 'uploaded_by' => (string) $actor->id, 'uploaded_by_type' => $actor->getMorphClass()]);
+    $reader = app(MediaReader::class);
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+    expect($reader->getMany($actor, $assets->modelKeys()))->toHaveCount($count);
+    $actorReads = array_filter(DB::getQueryLog(), static fn (array $query): bool => preg_match('/\bfrom\s+["`]?users["`]?\b/', $query['query']) === 1);
+    expect(count($actorReads))->toBeLessThanOrEqual(4);
+})->with([1, 25]);
+it('rejects invalid or oversized finite media details before storage', function (array $ids): void {
+    $reader = app(MediaReader::class);
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+    expect(fn () => $reader->getMany(SystemActor::Background, $ids))->toThrow(InvalidArgumentException::class);
+    expect(DB::getQueryLog())->toBe([]);
+})->with([
+    'map' => [['asset' => 'not-a-uuid']],
+    'invalid identity' => [['not-a-uuid']],
+    'non string' => [[1]],
+    'too many unique identifiers' => [array_map(static fn (): string => (string) Str::uuid(), range(0, 100))],
+]);
+it('fails finite media details closed for missing deleted and foreign private identifiers', function (string $mode): void {
+    $actor = TestMediaUser::query()->create(['name' => 'Reader', 'email' => 'reader@example.com', 'password' => 'password']);
+    $asset = Media::factory()->create(['is_public' => true]);
+    $target = Media::factory()->create(['is_public' => $mode !== 'foreign', 'uploaded_by' => '2', 'uploaded_by_type' => TestMediaUser::class]);
+    if ($mode === 'deleted') {
+        $target->delete();
+    }
+    app()->instance(MediaAuthorization::class, new class implements MediaAuthorization
+    {
+        public function allows(Authenticatable|SystemActor $actor, MediaAbility $ability, ?Media $media = null, ?Model $owner = null): bool
+        {
+            return $ability !== MediaAbility::ListAll;
+        }
+    });
+    app()->forgetScopedInstances();
+    $id = $mode === 'missing' ? (string) Str::uuid() : $target->id;
+    expect(fn () => app(MediaReader::class)->getMany($actor, [$asset->id, $id]))->toThrow(OwnershipViolation::class);
+})->with(['missing', 'deleted', 'foreign']);
+it('authorizes every finite media detail even when list-all is allowed', function (): void {
+    $assets = Media::factory()->count(2)->create(['is_public' => true]);
+    $policy = new class($assets->last()->id) implements MediaAuthorization
+    {
+        /** @var list<string> */
+        public array $viewed = [];
+
+        public function __construct(private string $denied) {}
+
+        public function allows(Authenticatable|SystemActor $actor, MediaAbility $ability, ?Media $media = null, ?Model $owner = null): bool
+        {
+            if ($ability === MediaAbility::View && $media !== null) {
+                $this->viewed[] = $media->id;
+
+                return $media->id !== $this->denied;
+            }
+
+            return true;
+        }
+    };
+    app()->instance(MediaAuthorization::class, $policy);
+    app()->forgetScopedInstances();
+    expect(fn () => app(MediaReader::class)->getMany(SystemActor::Background, $assets->modelKeys()))->toThrow(AuthorizationException::class);
+    expect($policy->viewed)->toBe($assets->modelKeys());
+});
+it('rechecks finite media details and actor authority on repeated reads', function (): void {
+    $actor = TestMediaUser::query()->create(['name' => 'Reader', 'email' => 'reader@example.com', 'password' => 'password']);
+    $asset = Media::factory()->create(['is_public' => false, 'uploaded_by' => (string) $actor->id, 'uploaded_by_type' => $actor->getMorphClass()]);
+    $reader = app(MediaReader::class);
+    expect($reader->getMany($actor, [$asset->id])->sole()->id)->toBe($asset->id);
+    $asset->update(['uploaded_by' => 'foreign']);
+    expect(fn () => $reader->getMany($actor, [$asset->id]))->toThrow(OwnershipViolation::class);
+    $actor->delete();
+    expect(fn () => $reader->getMany($actor, [$asset->id]))->toThrow(AuthorizationException::class);
+});
+it('honors the configured finite media detail ceiling before storage', function (): void {
+    config(['nvl-media.query.maximum_page_size' => 2]);
+    $ids = array_map(static fn (): string => (string) Str::uuid(), range(0, 2));
+    $reader = app(MediaReader::class);
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+    expect(fn () => $reader->getMany(SystemActor::Background, $ids))->toThrow(InvalidArgumentException::class, 'at most 2');
+    expect(DB::getQueryLog())->toBe([]);
 });
 it('provides the bounded many owner media contract', function (int $count): void {
     $owners = [];
@@ -98,7 +220,7 @@ function batchMediaItems(array $result, Model $owner, string $slot = 'document')
  */
 function batchMediaStorageQueries(): array
 {
-    $tables = array_map(static fn (Model $model): string => $model->getTable(), [new Media, new MediaAssociation, new MediaTranslation]);
+    $tables = array_map(static fn (Model $model): string => $model->getTable(), [new Media, new MediaAssociation, new MediaTranslation, new MediaImageVariation]);
 
     return array_values(array_filter(DB::getQueryLog(), static function (array $query) use ($tables): bool {
         $sql = str_replace(['"', '`', '[', ']'], '', strtolower($query['query']));

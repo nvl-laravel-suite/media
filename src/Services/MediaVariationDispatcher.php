@@ -13,7 +13,6 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaQueueConfiguration;
 use Nvl\Media\Support\MediaQueueEnvelope;
-use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Logging\PackageLogger;
 use Nvl\Support\Ownership\ValueObjects\OwnershipJobEnvelope;
 use Throwable;
@@ -26,7 +25,6 @@ use Throwable;
 final class MediaVariationDispatcher
 {
     public function __construct(
-        private readonly MediaVariations $generateVariation,
         private readonly MediaConfiguredVariationService $configuredVariationService,
         private readonly MediaFileEffectScheduler $fileEffects,
         private readonly MediaVariationDefinitionNormalizer $definitionNormalizer,
@@ -226,7 +224,13 @@ final class MediaVariationDispatcher
                     continue;
                 }
 
-                $this->generateVariation->generate(SystemActor::Background, $media, $definition);
+                app()->call([new GenerateImageVariationJob(
+                    $media->id,
+                    $definition->name,
+                    $definition,
+                    $media->revision,
+                    $envelope,
+                ), 'handle']);
             } catch (Throwable $e) {
                 $this->packageLogger->log('media', 'warning', 'nvl.media.variation_dispatch.failed', ['media_id' => $media->id, 'exception' => $e::class], 'normal');
             }

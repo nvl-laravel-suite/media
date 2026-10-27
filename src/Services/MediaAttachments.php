@@ -21,6 +21,7 @@ use Nvl\Media\Enums\MediaOwnerSlotOperationType;
 use Nvl\Media\Events\MediaAttached;
 use Nvl\Media\Events\MediaDetached;
 use Nvl\Media\Exceptions\FileUnacceptableForCollection;
+use Nvl\Media\Exceptions\MediaInUseException;
 use Nvl\Media\Exceptions\MediaNotReusableException;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
@@ -488,7 +489,7 @@ final class MediaAttachments
     }
 
     /**
-     * Remove targeted usages and bypass the public reuse guard only after the held asset lock proves every usage is selected.
+     * Remove targeted usages while retaining the public reuse guard under the held asset lock.
      *
      * @param  Closure(Media): void|null  $beforeOrphanDelete
      */
@@ -520,6 +521,16 @@ final class MediaAttachments
             $this->detach($actor, $media, $model, $collection);
 
             return;
+        }
+
+        if ($media->is_public && (bool) config('nvl-media.prevent_deleting_reused_public_media', true)) {
+            $activeCount = MediaAssociation::query()
+                ->where('media_id', $media->id)
+                ->where('is_active', true)
+                ->count();
+            if ($activeCount > 1) {
+                throw MediaInUseException::publicAsset($media->id, $activeCount);
+            }
         }
 
         $beforeOrphanDelete?->__invoke($media);
