@@ -112,7 +112,7 @@ final class MediaServiceProvider extends ServiceProvider implements OwnershipInt
         $this->registerConfig();
         $this->publishesMigrations([
             __DIR__.'/../../database/migrations' => database_path('migrations'),
-        ], 'media-migrations');
+        ], 'nvl-media-migrations');
         if ((bool) config('nvl-media.migrations.enabled', true)) {
             $this->loadMigrationsFrom(__DIR__.'/../../database/migrations');
         }
@@ -127,7 +127,7 @@ final class MediaServiceProvider extends ServiceProvider implements OwnershipInt
 
         $this->publishes([
             __DIR__.'/../../resources/boost/skills' => base_path('.agents/skills'),
-        ], 'media-skills');
+        ], 'nvl-media-skills');
 
         if ($this->app->runningInConsole()) {
             $this->commands([
@@ -255,7 +255,7 @@ final class MediaServiceProvider extends ServiceProvider implements OwnershipInt
             __DIR__.'/../../config/nvl-media.php' => config_path('nvl-media.php'),
         ];
 
-        $this->publishes($config, 'media-config');
+        $this->publishes($config, 'nvl-media-config');
     }
 
     protected function registerPolicies(): void
@@ -271,7 +271,7 @@ final class MediaServiceProvider extends ServiceProvider implements OwnershipInt
 
         $this->publishes([
             $langPath => lang_path('vendor/nvl-media'),
-        ], 'media-translations');
+        ], 'nvl-media-translations');
     }
 
     /**

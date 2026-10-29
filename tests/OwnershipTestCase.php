@@ -62,7 +62,7 @@ abstract class OwnershipTestCase extends TestCase
     /** Configure owned package roots before immutable resource registration. */
     protected function defineEnvironment($app): void
     {
-        $app['config']->set(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:', 'nvl-core.owners' => [OwnershipCompany::class, OwnershipActor::class], 'nvl-ownership.enabled' => true, 'nvl-ownership.migrations.enabled' => false, 'nvl-ownership.central_operations' => ['media-maintain'], 'nvl-tenancy.enabled' => false, 'nvl-media.models.media' => $this->mediaClass(), 'nvl-media.migrations.enabled' => false, 'nvl-media.deduplication_lock.store' => 'array', 'nvl-media.routes.api_enabled' => false, 'auth.providers.users.model' => OwnershipActor::class]);
+        $app['config']->set(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:', 'nvl-core.owners' => [OwnershipCompany::class, OwnershipActor::class], 'nvl-ownership.enabled' => true, 'nvl-ownership.migrations.enabled' => false, 'nvl-ownership.central_operations' => ['media-maintain'], 'nvl-tenancy.enabled' => false, 'nvl-media.models.media' => $this->mediaClass(), 'nvl-media.migrations.enabled' => false, 'nvl-media.locks.deduplication.store' => 'array', 'nvl-media.routes.api_enabled' => false, 'auth.providers.users.model' => OwnershipActor::class]);
         if (getenv('NVL_OWNERSHIP_TEST_DRIVER') === 'pgsql') {
             $database = getenv('NVL_OWNERSHIP_TEST_DATABASE');
             if (! is_string($database) || preg_match('/^nvl_own_test_[a-z0-9_]+$/D', $database) !== 1) {

@@ -229,12 +229,12 @@ it('installs the owner-slot operation ledger with its portable indexes', functio
 });
 it('uses configured owner-slot operation storage', function (): void {
     $connection = (string) config('database.default');
-    config(['nvl-media.connections.owner_slot_operations' => $connection, 'nvl-media.owner_slots.idempotency.table' => 'custom_media_owner_slot_operations']);
+    config(['nvl-media.connections.owner_slot_operations' => $connection, 'nvl-media.tables.owner_slot_operations' => 'custom_media_owner_slot_operations']);
     $operation = new MediaOwnerSlotOperation;
     expect($operation->getConnectionName())->toBe($connection)->and($operation->getTable())->toBe('custom_media_owner_slot_operations');
-    config(['nvl-media.owner_slots.idempotency.table' => 'unsafe-name']);
+    config(['nvl-media.tables.owner_slot_operations' => 'unsafe-name']);
     expect(fn (): string => (new MediaOwnerSlotOperation)->getTable())->toThrow(InvalidArgumentException::class, 'safe table identifier');
-    config(['nvl-media.owner_slots.idempotency.table' => MediaTables::Media]);
+    config(['nvl-media.tables.owner_slot_operations' => MediaTables::Media]);
     expect(fn (): string => (new MediaOwnerSlotOperation)->getTable())->toThrow(InvalidArgumentException::class, 'must not collide');
 });
 it('rejects deleted and unavailable media before staging cleanup', function (): void {

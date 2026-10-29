@@ -79,7 +79,7 @@ test('file rollback callbacks follow the root outcome without accumulating liste
     }
 });
 test('owned media locks ignore and preserve colliding foreign lock keys', function (string $purpose, string $identity): void {
-    config(["nvl-media.{$purpose}_lock.store" => 'array', "nvl-media.{$purpose}_lock.wait_seconds" => 0, 'nvl-media.multipart.lock.store' => 'array', 'nvl-media.multipart.lock.wait_seconds' => 0]);
+    config(["nvl-media.locks.{$purpose}.store" => 'array', "nvl-media.{$purpose}_lock.wait_seconds" => 0, 'nvl-media.locks.multipart.store' => 'array', 'nvl-media.multipart.lock.wait_seconds' => 0]);
     $foreignKey = "media:{$purpose}:".hash('sha256', $identity);
     $ownedKey = 'nvl:'.$foreignKey;
     $foreignLock = Cache::store('array')->lock($foreignKey, 30);
@@ -101,7 +101,7 @@ test('owned media locks ignore and preserve colliding foreign lock keys', functi
     }
 })->with(['mutation' => ['mutation', 'namespaced-media'], 'multipart' => ['multipart', 'namespaced-session'], 'deduplication' => ['deduplication', 'digest|public|public']]);
 test('mutation locks survive savepoint rollback and release on either root outcome', function (): void {
-    config(['nvl-media.mutation_lock.enabled' => true, 'nvl-media.mutation_lock.store' => 'array', 'nvl-media.mutation_lock.seconds' => 10, 'nvl-media.mutation_lock.wait_seconds' => 0]);
+    config(['nvl-media.mutation_lock.enabled' => true, 'nvl-media.locks.mutation.store' => 'array', 'nvl-media.mutation_lock.seconds' => 10, 'nvl-media.mutation_lock.wait_seconds' => 0]);
     $originalConnection = DB::getDefaultConnection();
     $isolatedConnection = 'media-lock-rollback-compatibility';
     config(["database.connections.{$isolatedConnection}" => config("database.connections.{$originalConnection}")]);

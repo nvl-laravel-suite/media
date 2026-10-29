@@ -456,7 +456,7 @@ describe('slot size limit', function () {
         Storage::disk('public')->assertMissing($replacementPath);
     });
     it('serializes size-limited uploads by owner and collection', function () {
-        config(['nvl-media.mutation_lock.enabled' => true, 'nvl-media.mutation_lock.store' => 'array', 'nvl-media.mutation_lock.seconds' => 10, 'nvl-media.mutation_lock.wait_seconds' => 0]);
+        config(['nvl-media.mutation_lock.enabled' => true, 'nvl-media.locks.mutation.store' => 'array', 'nvl-media.mutation_lock.seconds' => 10, 'nvl-media.mutation_lock.wait_seconds' => 0]);
         $model = adderTestModel();
         $otherModel = adderTestModel(['name' => 'Other lock owner']);
         $model->addMediaSlot('avatar')->oneToOne();
@@ -475,7 +475,7 @@ describe('slot size limit', function () {
         expect($model->getMedia('documents')->pluck('id')->all())->toBe([$differentCollection->id])->and($otherModel->getMedia('avatar')->pluck('id')->all())->toBe([$differentOwner->id])->and($model->getMedia('avatar')->pluck('id')->all())->toBe([$afterRelease->id]);
     });
     it('acquires only missing identities when media mutation locks are nested', function () {
-        config(['nvl-media.mutation_lock.enabled' => true, 'nvl-media.mutation_lock.store' => 'array', 'nvl-media.mutation_lock.seconds' => 10, 'nvl-media.mutation_lock.wait_seconds' => 0]);
+        config(['nvl-media.mutation_lock.enabled' => true, 'nvl-media.locks.mutation.store' => 'array', 'nvl-media.mutation_lock.seconds' => 10, 'nvl-media.mutation_lock.wait_seconds' => 0]);
         $lock = app(MediaMutationLock::class);
         $availabilityDuringInner = [];
         $availabilityAfterInner = [];
@@ -492,7 +492,7 @@ describe('slot size limit', function () {
         expect($result)->toBe('completed')->and($availabilityDuringInner)->toBe(['already-held' => false, 'new-identity' => false])->and($availabilityAfterInner)->toBe(['already-held' => false, 'new-identity' => true])->and(canAcquireAdderMutationLock('already-held'))->toBeTrue()->and(canAcquireAdderMutationLock('new-identity'))->toBeTrue();
     });
     it('releases partially acquired mutation locks when a later identity times out', function () {
-        config(['nvl-media.mutation_lock.enabled' => true, 'nvl-media.mutation_lock.store' => 'array', 'nvl-media.mutation_lock.seconds' => 10, 'nvl-media.mutation_lock.wait_seconds' => 0]);
+        config(['nvl-media.mutation_lock.enabled' => true, 'nvl-media.locks.mutation.store' => 'array', 'nvl-media.mutation_lock.seconds' => 10, 'nvl-media.mutation_lock.wait_seconds' => 0]);
         $blocked = Cache::store('array')->lock(adderMutationLockKey('z-blocked'), 10);
         expect($blocked->get())->toBeTrue();
         try {
@@ -503,7 +503,7 @@ describe('slot size limit', function () {
         }
     });
     it('holds mutation locks until the real database transaction completes', function () {
-        config(['nvl-media.mutation_lock.enabled' => true, 'nvl-media.mutation_lock.store' => 'array', 'nvl-media.mutation_lock.seconds' => 10, 'nvl-media.mutation_lock.wait_seconds' => 0]);
+        config(['nvl-media.mutation_lock.enabled' => true, 'nvl-media.locks.mutation.store' => 'array', 'nvl-media.mutation_lock.seconds' => 10, 'nvl-media.mutation_lock.wait_seconds' => 0]);
         $lock = app(MediaMutationLock::class);
         $originalConnection = DB::getDefaultConnection();
         $isolatedConnection = 'media-mutation-lock-test';

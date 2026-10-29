@@ -31,7 +31,7 @@ it('proves PostgreSQL, Redis locking, and S3-compatible multipart recovery toget
     $actor = OwnershipActor::query()->firstOrFail();
     $run = static fn (Closure $callback): mixed => app(OwnershipRunner::class)->run(OwnershipCompany::query()->findOrFail(7), $actor, $callback);
     $redisStore = 'media-production-integration';
-    config(["cache.stores.{$redisStore}" => ['driver' => 'redis', 'connection' => 'default', 'lock_connection' => 'default'], 'database.redis.client' => 'phpredis', 'database.redis.options.prefix' => 'nvl-media-integration:', 'database.redis.default' => ['host' => env('REDIS_HOST', '127.0.0.1'), 'password' => env('REDIS_PASSWORD'), 'port' => (int) env('REDIS_PORT', 6379), 'database' => 0], 'nvl-media.mutation_lock.store' => $redisStore, 'nvl-media.mutation_lock.seconds' => 10, 'nvl-media.mutation_lock.wait_seconds' => 0]);
+    config(["cache.stores.{$redisStore}" => ['driver' => 'redis', 'connection' => 'default', 'lock_connection' => 'default'], 'database.redis.client' => 'phpredis', 'database.redis.options.prefix' => 'nvl-media-integration:', 'database.redis.default' => ['host' => env('REDIS_HOST', '127.0.0.1'), 'password' => env('REDIS_PASSWORD'), 'port' => (int) env('REDIS_PORT', 6379), 'database' => 0], 'nvl-media.locks.mutation.store' => $redisStore, 'nvl-media.mutation_lock.seconds' => 10, 'nvl-media.mutation_lock.wait_seconds' => 0]);
     Cache::forgetDriver($redisStore);
     $mediaId = (string) Str::uuid();
     $lockKey = $run(fn (): string => 'nvl:media:mutation:'.hash('sha256', app(OwnershipBoundary::class)->key('media.assets', $mediaId)));

@@ -270,7 +270,7 @@ Namespace: `Nvl\Media\Models\Media`.
 - `getDeletedAtColumn()`
 - `getQualifiedDeletedAtColumn()`
 - `translationDefinition(): Nvl\Translatable\RelatedTranslationDefinition`
-- `translationOptions(): Nvl\Translatable\TranslatableOptions`
+- `translationDefinition(): Nvl\Translatable\RelatedTranslationDefinition`
 - `translations(): Illuminate\Database\Eloquent\Relations\HasMany`
 - `translation(?string $locale = …): Illuminate\Database\Eloquent\Relations\HasOne`
 - `getTranslation(?string $locale = …, bool $withFallback = …): ?Illuminate\Database\Eloquent\Model`

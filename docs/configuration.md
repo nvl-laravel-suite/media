@@ -267,7 +267,7 @@ Direct multipart uploads are disabled by default.
 | `nvl-media.multipart.maximum_part_size` | `5 GiB` | Maximum part size |
 | `nvl-media.multipart.maximum_parts` | `10,000` | Maximum part count |
 | `nvl-media.multipart.maximum_size` | `5 GiB` | Maximum complete object size |
-| `nvl-media.multipart.lock.store` | application default | Cache store for session locks |
+| `nvl-media.locks.multipart.store` | application default | Cache store for session locks |
 | `nvl-media.multipart.lock.seconds` | `300` | Lock lease |
 | `nvl-media.multipart.lock.wait_seconds` | `30` | Maximum lock wait |
 
@@ -443,7 +443,7 @@ Private deduplication is scoped by uploader type and identifier. Anonymous priva
 | Key | Default |
 | --- | --- |
 | `nvl-media.deduplication_lock.enabled` | `true` |
-| `nvl-media.deduplication_lock.store` | application default cache store |
+| `nvl-media.locks.deduplication.store` | application default cache store |
 | `nvl-media.deduplication_lock.seconds` | `30` |
 | `nvl-media.deduplication_lock.wait_seconds` | `30` |
 
@@ -461,7 +461,7 @@ NVL_MEDIA_DEDUPLICATION_LOCK_WAIT_SECONDS=30
 | Key | Default |
 | --- | --- |
 | `nvl-media.mutation_lock.enabled` | `true` |
-| `nvl-media.mutation_lock.store` | application default cache store |
+| `nvl-media.locks.mutation.store` | application default cache store |
 | `nvl-media.mutation_lock.seconds` | `300` |
 | `nvl-media.mutation_lock.wait_seconds` | `30` |
 
@@ -559,7 +559,7 @@ Mutation paths invalidate affected existence entries. Disable the cache for diag
 | `NVL_MEDIA_ALLOW_NOOP_SCANNER` | `nvl-media.scanner.allow_noop` |
 | `NVL_MEDIA_UNTRUSTED_UPLOADS` | `nvl-media.scanner.untrusted_uploads` |
 | `NVL_MEDIA_MULTIPART_ENABLED` | `nvl-media.multipart.enabled` |
-| `NVL_MEDIA_MULTIPART_LOCK_STORE` | `nvl-media.multipart.lock.store` |
+| `NVL_MEDIA_MULTIPART_LOCK_STORE` | `nvl-media.locks.multipart.store` |
 | `NVL_MEDIA_MULTIPART_LOCK_SECONDS` | `nvl-media.multipart.lock.seconds` |
 | `NVL_MEDIA_MULTIPART_LOCK_WAIT_SECONDS` | `nvl-media.multipart.lock.wait_seconds` |
 | `NVL_MEDIA_MULTI_NODE` | `nvl-media.deployment.multi_node` |
@@ -575,11 +575,11 @@ Mutation paths invalidate affected existence entries. Disable the cache for diag
 | `NVL_MEDIA_ASSET_SIGNED_URL_LIFETIME` | `nvl-media.assets.signed_url_lifetime` |
 | `NVL_MEDIA_REMOTE_PUBLIC_DELIVERY` | `nvl-media.assets.remote_public_delivery` |
 | `NVL_MEDIA_DEDUPLICATION_LOCK_ENABLED` | `nvl-media.deduplication_lock.enabled` |
-| `NVL_MEDIA_DEDUPLICATION_LOCK_STORE` | `nvl-media.deduplication_lock.store` |
+| `NVL_MEDIA_DEDUPLICATION_LOCK_STORE` | `nvl-media.locks.deduplication.store` |
 | `NVL_MEDIA_DEDUPLICATION_LOCK_SECONDS` | `nvl-media.deduplication_lock.seconds` |
 | `NVL_MEDIA_DEDUPLICATION_LOCK_WAIT_SECONDS` | `nvl-media.deduplication_lock.wait_seconds` |
 | `NVL_MEDIA_MUTATION_LOCK_ENABLED` | `nvl-media.mutation_lock.enabled` |
-| `NVL_MEDIA_MUTATION_LOCK_STORE` | `nvl-media.mutation_lock.store` |
+| `NVL_MEDIA_MUTATION_LOCK_STORE` | `nvl-media.locks.mutation.store` |
 | `NVL_MEDIA_MUTATION_LOCK_SECONDS` | `nvl-media.mutation_lock.seconds` |
 | `NVL_MEDIA_MUTATION_LOCK_WAIT_SECONDS` | `nvl-media.mutation_lock.wait_seconds` |
 
