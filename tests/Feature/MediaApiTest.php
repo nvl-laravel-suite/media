@@ -169,7 +169,7 @@ describe('GET /nvl/api/v1/media (index)', function () {
 
             public function allows(Authenticatable|SystemActor $actor, MediaAbility $ability, ?Media $media = null, ?Model $owner = null): bool
             {
-                if ($ability === MediaAbility::ListAll) {
+                if (in_array($ability, [MediaAbility::ListAll, MediaAbility::View], true)) {
                     return (string) MediaActors::id($actor) === (string) $this->managerId;
                 }
 
@@ -327,13 +327,13 @@ describe('PUT /nvl/api/v1/media/{id} (update)', function () {
         $fresh = Media::find($media->id);
         expect($fresh->tags)->toBe(['new', 'updated']);
     });
-    it('updates is_public field via snake_case input', function () {
+    it('rejects visibility changes through snake_case metadata input', function () {
         $user = createApiUser();
         $media = createApiMedia(['is_public' => false, 'uploaded_by' => $user->id]);
         $response = $this->actingAs($user)->putJson("/nvl/api/v1/media/{$media->id}", ['is_public' => true]);
-        $response->assertStatus(200);
+        $response->assertUnprocessable();
         $fresh = Media::find($media->id);
-        expect($fresh->is_public)->toBeTrue();
+        expect($fresh->is_public)->toBeFalse();
     });
     it('denies non-owner from updating', function () {
         $owner = createApiUser();

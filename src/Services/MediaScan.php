@@ -24,6 +24,8 @@ final class MediaScan
         private readonly MediaAccessService $access,
         private readonly MediaDiskGateway $disks,
         private readonly MediaFileTypePolicy $fileTypes,
+        private readonly MediaLocalFileMaterializer $materializer,
+        private readonly SvgScanner $svgScanner,
         private readonly MediaMutationLock $mutationLock,
         private readonly MediaVariationDispatcher $variationDispatcher,
         private readonly PackageLogger $packageLogger,
@@ -108,6 +110,32 @@ final class MediaScan
                     $locked->filename,
                     $result['mimeType'],
                 );
+                if ($fileType['extension'] === 'svg' && (bool) config('nvl-media.svg_scanning', true)) {
+                    $lease = $this->materializer->lease($locked->disk, $locked->buildPath());
+
+                    try {
+                        if (filesize($lease->path()) !== $result['size']
+                            || hash_file('sha256', $lease->path()) !== $result['checksum']) {
+                            $this->finalizeQuarantine($actor, $locked, 'scan_attestation_mismatch', ['mismatch' => 'materialized_bytes']);
+
+                            return $locked;
+                        }
+
+                        try {
+                            $this->svgScanner->scan($lease->path());
+                        } catch (MediaUploadException $exception) {
+                            $this->finalizeQuarantine($actor, $locked, 'scan_svg_rejected', [
+                                ...$result['diagnostics'],
+                                'reason' => $exception->getMessage(),
+                            ]);
+
+                            return $locked;
+                        }
+                    } finally {
+                        $lease->release();
+                    }
+                }
+
                 $locked->forceFill([
                     'extension' => $fileType['extension'],
                     'mime_type' => $fileType['mimeType'],

@@ -32,7 +32,7 @@ function mediaRollbackMutationLockIsAvailable(string $mediaId): bool
 
     return true;
 }
-test('file rollback callbacks follow the root outcome without accumulating listeners', function (): void {
+test('file rollback callbacks follow their savepoint and root outcomes without accumulating listeners', function (): void {
     Storage::fake('public');
     $originalConnection = DB::getDefaultConnection();
     $isolatedConnection = 'media-file-rollback-compatibility';
@@ -54,8 +54,8 @@ test('file rollback callbacks follow the root outcome without accumulating liste
         $scheduler->deleteAfterRollback('public', [$rolledBackPath], 'laravel_12_nested_rollback');
         expect($rollbackCallbacks->count())->toBe(1);
         DB::rollBack();
-        Storage::disk('public')->assertExists($rolledBackPath);
-        expect($rollbackCallbacks->count())->toBe(1);
+        Storage::disk('public')->assertMissing($rolledBackPath);
+        expect($rollbackCallbacks->count())->toBe(0);
         DB::rollBack();
         Storage::disk('public')->assertMissing($rolledBackPath);
         expect($rollbackCallbacks->count())->toBe(0);
@@ -128,5 +128,45 @@ test('mutation locks survive savepoint rollback and release on either root outco
         }
         DB::setDefaultConnection($originalConnection);
         DB::purge($isolatedConnection);
+    }
+});
+
+test('file effects use the configured media connection and cancel only its rolled back branch', function (): void {
+    Storage::fake('public');
+    $connectionName = 'media-configured-file-effects';
+    config([
+        "database.connections.{$connectionName}" => config('database.connections.'.DB::getDefaultConnection()),
+        'nvl-media.connection' => $connectionName,
+    ]);
+    $connection = DB::connection($connectionName);
+    $scheduler = app(MediaFileEffectScheduler::class);
+    $rollbackCallbacks = app(MediaTransactionRollbackRegistry::class);
+    $source = 'configured/original.txt';
+    $staged = 'configured/staged.txt';
+    Storage::disk('public')->put($source, 'original');
+    Storage::disk('public')->put($staged, 'staged');
+    $delivered = false;
+    try {
+        $connection->beginTransaction();
+        $connection->beginTransaction();
+        $scheduler->deleteAfterCommit('public', [$source], 'configured_source');
+        $scheduler->deleteAfterRollback('public', [$staged], 'configured_staged');
+        $scheduler->afterCommit(function () use (&$delivered): void {
+            $delivered = true;
+        });
+        DB::beginTransaction();
+        DB::rollBack();
+        Storage::disk('public')->assertExists($staged);
+        $connection->rollBack();
+        Storage::disk('public')->assertMissing($staged);
+        $connection->commit();
+        expect(Storage::disk('public')->get($source))->toBe('original')
+            ->and($delivered)->toBeFalse()
+            ->and($rollbackCallbacks->count())->toBe(0);
+    } finally {
+        while ($connection->transactionLevel() > 0) {
+            $connection->rollBack();
+        }
+        DB::purge($connectionName);
     }
 });

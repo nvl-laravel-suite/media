@@ -6,14 +6,17 @@ namespace Nvl\Media\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Ownership\MediaOwnership;
+use Nvl\Media\Services\MediaDeliveryPolicy;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDiskGuard;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaFileOperator;
 use Nvl\Media\Services\MediaModelRegistry;
+use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaPathResolver;
 use RuntimeException;
 use Throwable;
@@ -49,6 +52,8 @@ class MigrateDiskCommand extends Command
         private readonly MediaDiskGuard $diskGuard,
         private readonly MediaFileExistence $existence,
         private readonly MediaFileOperator $files,
+        private readonly MediaMutationLock $mutationLock,
+        private readonly MediaDeliveryPolicy $deliveryPolicy,
         ?MediaPathResolver $paths = null,
     ) {
         $this->paths = $paths ?? new MediaPathResolver;
@@ -111,6 +116,15 @@ class MigrateDiskCommand extends Command
             return self::SUCCESS;
         }
 
+        $records = (clone $query)->with('imageVariations')->orderBy('id')->get();
+        try {
+            $this->assertDestinationVisibility($records, $to);
+        } catch (Throwable $error) {
+            $this->error("Migration failed: {$error->getMessage()}");
+
+            return self::FAILURE;
+        }
+
         if ($recordsOnly) {
             $this->info(sprintf(
                 '%sUpdating %d media records: disk [%s] → [%s] (database only)',
@@ -122,7 +136,19 @@ class MigrateDiskCommand extends Command
             $this->displayAssociationFilters($associableTypes, $collections);
 
             if (! $dryRun) {
-                $this->updateDiskColumn($query, $from, $to);
+                try {
+                    $this->mutationLock->executeMany(
+                        array_values($records->map(static fn (Media $media): string => $media->id)->all()),
+                        fn () => $records->firstOrFail()->getConnection()->transaction(function () use ($records, $from, $to): void {
+                            $locked = $this->lockVerifiedSnapshot($records, $to);
+                            $this->updateDiskColumn($locked->firstOrFail()->newQuery()->withTrashed()->whereKey($locked->modelKeys()), $from, $to);
+                        }),
+                    );
+                } catch (Throwable $error) {
+                    $this->error("Migration failed: {$error->getMessage()}");
+
+                    return self::FAILURE;
+                }
             }
 
             $this->newLine();
@@ -141,15 +167,34 @@ class MigrateDiskCommand extends Command
         $this->displayAssociationFilters($associableTypes, $collections);
         $this->warnSharedMediaScope($associableTypes, $collections);
 
-        $records = (clone $query)
-            ->with('imageVariations')
-            ->orderBy('id')
-            ->get();
-
         if (! $dryRun && $this->input->isInteractive() && ! $this->confirm('Proceed?', true)) {
             return self::SUCCESS;
         }
 
+        if ($dryRun) {
+            return $this->migrateSnapshot($records, $from, $to, true);
+        }
+
+        try {
+            return $this->mutationLock->executeMany(
+                array_values($records->map(static fn (Media $media): string => $media->id)->all()),
+                fn (): int => $this->migrateSnapshot($records, $from, $to, false),
+            );
+        } catch (Throwable $error) {
+            $this->error("Migration failed: {$error->getMessage()}");
+
+            return self::FAILURE;
+        }
+    }
+
+    /**
+     * Copy the selected snapshot and swap only those verified identities while locked.
+     *
+     * @param  Collection<int, Media>  $records
+     */
+    private function migrateSnapshot(Collection $records, string $from, string $to, bool $dryRun): int
+    {
+        $this->assertDestinationVisibility($records, $to);
         $moved = 0;
         $failed = 0;
         /** @var array<int, array{old: string, new: string, destination_existed: bool}> $completedMoves */
@@ -165,11 +210,7 @@ class MigrateDiskCommand extends Command
                 }
 
                 try {
-                    $destinationExisted = $this->moveDiskObject($from, $sourcePath, $to, $targetPath);
-                    $message = $destinationExisted
-                        ? "  Verified existing destination and removed source: {$targetPath}"
-                        : "  Moved: {$sourcePath} → {$targetPath}";
-                    $this->line($message);
+                    $destinationExisted = $this->copyDiskObject($from, $sourcePath, $to, $targetPath);
                     $completedMoves[] = [
                         'old' => $sourcePath,
                         'new' => $targetPath,
@@ -196,10 +237,24 @@ class MigrateDiskCommand extends Command
 
         if (! $dryRun) {
             try {
-                $this->updateDiskColumn($query, $from, $to);
+                $records->firstOrFail()->getConnection()->transaction(function () use ($records, $from, $to, $completedMoves): void {
+                    $locked = $this->lockVerifiedSnapshot($records, $to);
+                    $query = $locked->firstOrFail()->newQuery()->withTrashed()->whereKey($locked->modelKeys());
+                    $this->updateDiskColumn($query, $from, $to);
+
+                    foreach ($completedMoves as $move) {
+                        if (! $this->files->delete($from, $move['old'])) {
+                            throw new RuntimeException('Unable to complete a verified object move.');
+                        }
+
+                        $this->line($move['destination_existed']
+                            ? "  Verified existing destination and removed source: {$move['new']}"
+                            : "  Moved: {$move['old']} → {$move['new']}");
+                    }
+                });
             } catch (Throwable $error) {
                 $this->rollbackDiskMoves($from, $to, $completedMoves);
-                $this->error("Database update failed. Filesystem moves rolled back: {$error->getMessage()}");
+                $this->error("Database update failed. Filesystem rollback attempted: {$error->getMessage()}");
 
                 return self::FAILURE;
             }
@@ -209,6 +264,46 @@ class MigrateDiskCommand extends Command
         $this->info('Migration complete.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Fence copied paths against replacements, moves and variation changes.
+     *
+     * @param  Collection<int, Media>  $records
+     * @return Collection<int, Media>
+     */
+    private function lockVerifiedSnapshot(Collection $records, string $to): Collection
+    {
+        $locked = $records->firstOrFail()->newQuery()->withTrashed()
+            ->whereKey($records->modelKeys())->with('imageVariations')->orderBy('id')->lockForUpdate()->get();
+        $byId = $locked->keyBy('id');
+
+        foreach ($records as $snapshot) {
+            $current = $byId->get($snapshot->id);
+
+            if (! $current instanceof Media
+                || $current->disk !== $snapshot->disk
+                || $current->visibility !== $snapshot->visibility
+                || $current->revision !== $snapshot->revision
+                || $current->buildPath() !== $snapshot->buildPath()
+                || $this->pathsForMedia($current, $to) !== $this->pathsForMedia($snapshot, $to)
+                || $current->imageVariations->mapWithKeys(fn (MediaImageVariation $variation): array => [$variation->id => $variation->source_revision])->all()
+                    !== $snapshot->imageVariations->mapWithKeys(fn (MediaImageVariation $variation): array => [$variation->id => $variation->source_revision])->all()) {
+                throw new RuntimeException("Media [{$snapshot->id}] changed while migration was in progress.");
+            }
+        }
+
+        $this->assertDestinationVisibility($locked, $to);
+
+        return $locked;
+    }
+
+    /** @param Collection<int, Media> $records */
+    private function assertDestinationVisibility(Collection $records, string $disk): void
+    {
+        foreach ($records as $media) {
+            $this->deliveryPolicy->assertVisibility($disk, $media->visibility);
+        }
     }
 
     /**
@@ -288,7 +383,7 @@ class MigrateDiskCommand extends Command
 
         $updated = 0;
 
-        $query->orderBy('id')->chunk(500, function ($records) use ($normalizedFrom, $normalizedTo, &$updated): void {
+        $query->chunkById(500, function ($records) use ($normalizedFrom, $normalizedTo, &$updated): void {
             foreach ($records as $media) {
                 $folder = (string) $media->folder;
                 $nextFolder = $this->replaceFolderPrefix($folder, $normalizedFrom, $normalizedTo);
@@ -329,7 +424,7 @@ class MigrateDiskCommand extends Command
                         (clone $query)->whereKey($media->id)->update(['storage_path' => $paths[$media->buildPath()]]);
                     }
                     foreach ($media->imageVariations as $variation) {
-                        MediaImageVariation::query()->whereKey($variation->id)->update([
+                        $media->imageVariations()->whereKey($variation->id)->update([
                             'storage_path' => $paths[$variation->getPath()],
                         ]);
                     }
@@ -572,7 +667,7 @@ class MigrateDiskCommand extends Command
     }
 
     /**
-     * Move one object after proving the destination matches the source.
+     * Copy one object and verify it without removing the source before fencing.
      *
      * @param  string  $fromDisk  Source disk name
      * @param  string  $fromPath  Source object path
@@ -580,7 +675,7 @@ class MigrateDiskCommand extends Command
      * @param  string  $toPath  Destination object path
      * @return bool Whether the destination object existed before the migration
      */
-    private function moveDiskObject(
+    private function copyDiskObject(
         string $fromDisk,
         string $fromPath,
         string $toDisk,
@@ -598,8 +693,17 @@ class MigrateDiskCommand extends Command
             }
         }
 
-        if (! $this->files->move($fromDisk, $fromPath, $toDisk, $toPath)) {
-            throw new RuntimeException('Unable to complete a verified object move.');
+        if (! $destinationExisted) {
+            try {
+                if (! $this->files->copy($fromDisk, $fromPath, $toDisk, $toPath)
+                    || ! $this->objectsMatch($fromDisk, $fromPath, $toDisk, $toPath)) {
+                    throw new RuntimeException('Unable to complete a verified object move.');
+                }
+            } catch (Throwable $error) {
+                $this->discardCreatedObject($toDisk, $toPath);
+
+                throw $error;
+            }
         }
 
         return $destinationExisted;
@@ -663,19 +767,11 @@ class MigrateDiskCommand extends Command
         string $toPath,
         bool $destinationExisted,
     ): void {
-        if (! $this->existence->exists($toDisk, $toPath)) {
+        if (! $this->existence->existsFresh($toDisk, $toPath)) {
             throw new RuntimeException('Destination object is missing during rollback.');
         }
 
-        if (! $destinationExisted) {
-            if (! $this->files->move($toDisk, $toPath, $fromDisk, $fromPath)) {
-                throw new RuntimeException('Unable to restore the verified source object.');
-            }
-
-            return;
-        }
-
-        if ($this->existence->exists($fromDisk, $fromPath)) {
+        if ($this->existence->existsFresh($fromDisk, $fromPath)) {
             if (! $this->objectsMatch($toDisk, $toPath, $fromDisk, $fromPath)) {
                 throw new RuntimeException('Existing rollback source failed size/checksum verification.');
             }
@@ -691,6 +787,10 @@ class MigrateDiskCommand extends Command
 
                 throw new RuntimeException('Restored source failed size/checksum verification.');
             }
+        }
+
+        if (! $destinationExisted) {
+            $this->discardCreatedObject($toDisk, $toPath);
         }
     }
 

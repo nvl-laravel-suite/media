@@ -5,17 +5,20 @@ declare(strict_types=1);
 namespace Nvl\Media\Tests\Fixtures\Consumer\Traits;
 
 use DateTimeInterface;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Nvl\Media\Conversions\ConversionDefinition;
+use Nvl\Media\Enums\MediaDeliveryMode;
 use Nvl\Media\MediaRegistration;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Tests\Fixtures\Consumer\MediaAdder;
+use Nvl\Support\Enums\SystemActor;
 
 /**
  * @deprecated Use InteractsWithNvlMedia; this forwarding surface remains through major 5.
@@ -246,9 +249,9 @@ trait InteractsWithMedia
     public function buildUrl(
         string $collection = 'default',
         array $parameters = [],
-        ?DateTimeInterface $expiration = null,
+        ?MediaDeliveryMode $mode = null,
     ): string {
-        return $this->nvlMedia()->buildUrl($collection, $parameters, $expiration);
+        return $this->nvlMedia()->buildUrl($collection, $parameters, $mode);
     }
 
     /**
@@ -263,11 +266,12 @@ trait InteractsWithMedia
 
     /** Forward the retained getFirstTemporaryUrl operation to the NVL owner API. */
     public function getFirstTemporaryUrl(
+        Authenticatable|SystemActor $actor,
         DateTimeInterface $expiration,
         string $collection = 'default',
         string $conversion = '',
     ): string {
-        return $this->nvlMedia()->firstTemporaryUrl($expiration, $collection, $conversion);
+        return $this->nvlMedia()->firstTemporaryUrl($actor, $expiration, $collection, $conversion);
     }
 
     /** Forward the retained getFallbackMediaUrl operation to the NVL owner API. */

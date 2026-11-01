@@ -92,7 +92,7 @@ final class MediaUploader
             $model = $this->owners->resolve($model);
         }
         $this->access->authorize($actor, MediaAbility::Upload, owner: $model);
-        $this->diskGuard->assertAllowed($disk);
+        $this->diskGuard->assertAllowed($disk, $isPublic ? MediaVisibility::Public : MediaVisibility::Private);
         $this->disks->ensureDefined($disk);
         $validatedFile = $this->ingestion->inspect($file, [$slot], $fileName);
         $normalizedVariationDefinitions = $this->definitionNormalizer->normalize($variationDefinitions);
@@ -447,6 +447,7 @@ final class MediaUploader
             $currentMedia = MediaModelRegistry::query()
                 ->with('imageVariations')
                 ->findOrFail($mediaId);
+            $this->diskGuard->assertAllowed($currentMedia->disk, $currentMedia->visibility);
             $staged = $this->stager->stage($currentMedia, $file);
             $sourceDisk = $currentMedia->disk;
             $sourcePath = $currentMedia->buildPath();
@@ -488,7 +489,10 @@ final class MediaUploader
                     $lockedMedia->imageVariations()->update([
                         'status' => MediaLifecycleStatus::ProcessingVariations->value,
                     ]);
-                    $lockedMedia->update([
+                    $lockedMedia->forceFill([
+                        ...(is_string($lockedMedia->storage_path) && $lockedMedia->storage_path !== ''
+                            ? ['storage_path' => $staged['path']]
+                            : []),
                         'filename' => $staged['validatedFile']['displayFilename'],
                         'hash' => $staged['hash'],
                         'extension' => $staged['validatedFile']['extension'],
@@ -501,7 +505,7 @@ final class MediaUploader
                         'available_at' => now(),
                         'failure_code' => null,
                         'failure_context' => null,
-                    ]);
+                    ])->save();
                     $this->eventCommits->afterCommit((MediaModelRegistry::newInstance())->getConnection(), static function () use (&$writeCommitted): void {
                         $writeCommitted = true;
                     });

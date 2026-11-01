@@ -16,6 +16,7 @@ use Nvl\Media\Contracts\MediaContentScanner;
 use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Enums\MediaType;
+use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Events\MediaAttached;
 use Nvl\Media\Events\MediaUploaded;
 use Nvl\Media\Exceptions\FileUnacceptableForCollection;
@@ -272,19 +273,35 @@ describe('AttachMediaAction', function () {
     });
 });
 describe('ReusePublicMediaAction', function (): void {
+    beforeEach(function (): void {
+        config([
+            'filesystems.disks.relocated' => ['driver' => 'local', 'root' => storage_path('framework/testing/disks/relocated')],
+            'nvl-media.allowed_disks' => ['public', 'relocated'],
+        ]);
+        Storage::fake('public');
+        Storage::fake('relocated');
+    });
     it('rejects reuse after a previously loaded public asset becomes private', function (): void {
-        $media = Media::factory()->create(['is_public' => true]);
+        $media = Media::factory()->create(['disk' => 'public', 'is_public' => true]);
+        Storage::disk('public')->put($media->buildPath(), 'public source bytes');
         $owner = TestMediaModel::query()->create(['name' => 'Consumer']);
-        app(MediaLibrary::class)->updateMetadata(auth()->user() ?? SystemActor::Background, $media, ['isPublic' => false]);
+        $relocated = app(MediaLibrary::class)->relocate(SystemActor::Background, $media, 'relocated', MediaVisibility::Private, $media->revision);
+        expect($media->is_public)->toBeTrue()
+            ->and($relocated->is_public)->toBeFalse()
+            ->and(Storage::disk('relocated')->get($relocated->buildPath()))->toBe('public source bytes');
         Event::fake([MediaAttached::class]);
         expect(fn () => app(MediaAttachments::class)->reuse(auth()->user() ?? SystemActor::Background, $media, $owner, dispatchVariations: false))->toThrow(MediaNotReusableException::class);
         expect(MediaAssociation::query()->where('media_id', $media->id)->exists())->toBeFalse();
         Event::assertNotDispatched(MediaAttached::class);
     });
     it('allows reuse after a previously loaded private asset becomes public', function (): void {
-        $media = Media::factory()->create(['is_public' => false]);
+        $media = Media::factory()->create(['disk' => 'public', 'is_public' => false]);
+        Storage::disk('public')->put($media->buildPath(), 'private source bytes');
         $owner = TestMediaModel::query()->create(['name' => 'Consumer']);
-        app(MediaLibrary::class)->updateMetadata(auth()->user() ?? SystemActor::Background, $media, ['isPublic' => true]);
+        $relocated = app(MediaLibrary::class)->relocate(SystemActor::Background, $media, 'relocated', MediaVisibility::Public, $media->revision);
+        expect($media->is_public)->toBeFalse()
+            ->and($relocated->is_public)->toBeTrue()
+            ->and(Storage::disk('relocated')->get($relocated->buildPath()))->toBe('private source bytes');
         $action = app(MediaAttachments::class);
         $association = $action->reuse(auth()->user() ?? SystemActor::Background, $media, $owner, dispatchVariations: false);
         expect($association->media_id)->toBe($media->id)->and($association->exists)->toBeTrue();

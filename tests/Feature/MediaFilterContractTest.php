@@ -3,9 +3,11 @@
 declare(strict_types=1);
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Nvl\Filterable\Enums\FilterOperator;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaReader;
+use Nvl\Media\Tests\Fixtures\MediaFilters;
 use Nvl\Support\Enums\SystemActor;
 
 it('applies filename type and tag search without broadening the caller query', function (): void {
@@ -31,3 +33,17 @@ it('rejects malformed native filters before querying Media', function (array $fi
     'invalid page' => [['page' => 0]],
     'unapproved sort' => [['sortBy' => 'uploaded_by']],
 ]);
+
+it('keeps the optional consumer filter fixture compatible with native criterion arrays', function (): void {
+    $filters = new class
+    {
+        use MediaFilters;
+    };
+    $search = $filters->filterSchema()->filters[0]->handler;
+    $match = Media::factory()->create(['filename' => 'launch.txt', 'disk' => 'public']);
+    Media::factory()->create(['filename' => 'launch-outside.txt', 'disk' => 'private']);
+    $query = Media::query()->where('disk', 'public');
+
+    expect($search($query, ['alias' => 'search', 'operator' => FilterOperator::Equals, 'value' => 'launch'])->pluck('id')->all())
+        ->toBe([$match->id]);
+});

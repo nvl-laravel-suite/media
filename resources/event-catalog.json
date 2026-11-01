@@ -2,11 +2,11 @@
     "schema_version": 1,
     "package": "nvl/media",
     "documentation": "docs/events.md",
-    "implementation_status": "implemented; executable acceptance proof pending",
+    "implementation_status": "Source-derived major 7 event schemas and current package producers; catalog grant audit is schema-only.",
     "events": [
         {
             "class": "Nvl\\Media\\Events\\MediaAttached",
-            "source": "packages/nvl/media/src/Events/MediaAttached.php",
+            "source": "src/Events/MediaAttached.php",
             "constructor_fields": [
                 {
                     "name": "mediaId",
@@ -50,15 +50,21 @@
             "schema_version": 1,
             "trigger": "Generic media association persisted.",
             "aliases": [],
-            "producers": [],
-            "security_notes": [
-                "Media/grant and morph owner identities, revisions and association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Tenant grants expose persisted ownership identifiers."
+            "producers": [
+                {
+                    "path": "src/Services/MediaAttachments.php",
+                    "trigger": "Generic media association persisted."
+                }
             ],
-            "no_op_semantics": "Existing changed-state/association/grant guards govern publication. File effect commit marking, prior-object cleanup and variation scheduling retain their ordering before publication; listener errors after commit cannot undo committed file ownership."
+            "security_notes": [
+                "Media identities, revisions, admitted owner scope keys and bounded association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Identifiers do not grant access."
+            ],
+            "no_op_semantics": "Publication follows current producer guards. Deduplicated upload reuse does not publish MediaUploaded. Not every tag, variation, scan or catalog operation emits an event.",
+            "implementation_status": "emitted"
         },
         {
             "class": "Nvl\\Media\\Events\\MediaCatalogGrantAudited",
-            "source": "packages/nvl/media/src/Events/MediaCatalogGrantAudited.php",
+            "source": "src/Events/MediaCatalogGrantAudited.php",
             "constructor_fields": [
                 {
                     "name": "operation",
@@ -136,17 +142,18 @@
             ],
             "kind": "value_object",
             "schema_version": 1,
-            "trigger": "Tenant catalog grant changed.",
+            "trigger": "Schema only; current MediaOwnerCatalog methods do not emit this event.",
             "aliases": [],
             "producers": [],
             "security_notes": [
-                "Media/grant and morph owner identities, revisions and association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Tenant grants expose persisted ownership identifiers."
+                "Media identities, revisions, admitted owner scope keys and bounded association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Identifiers do not grant access."
             ],
-            "no_op_semantics": "Existing changed-state/association/grant guards govern publication. File effect commit marking, prior-object cleanup and variation scheduling retain their ordering before publication; listener errors after commit cannot undo committed file ownership."
+            "no_op_semantics": "No current package producer.",
+            "implementation_status": "schema_only"
         },
         {
             "class": "Nvl\\Media\\Events\\MediaDetached",
-            "source": "packages/nvl/media/src/Events/MediaDetached.php",
+            "source": "src/Events/MediaDetached.php",
             "constructor_fields": [
                 {
                     "name": "mediaId",
@@ -192,18 +199,19 @@
             "aliases": [],
             "producers": [
                 {
-                    "path": "packages/nvl/media/src/Services/MediaAttachments.php",
+                    "path": "src/Services/MediaAttachments.php",
                     "trigger": "Generic association snapshots removed."
                 }
             ],
             "security_notes": [
-                "Media/grant and morph owner identities, revisions and association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Tenant grants expose persisted ownership identifiers."
+                "Media identities, revisions, admitted owner scope keys and bounded association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Identifiers do not grant access."
             ],
-            "no_op_semantics": "Existing changed-state/association/grant guards govern publication. File effect commit marking, prior-object cleanup and variation scheduling retain their ordering before publication; listener errors after commit cannot undo committed file ownership."
+            "no_op_semantics": "Publication follows current producer guards. Deduplicated upload reuse does not publish MediaUploaded. Not every tag, variation, scan or catalog operation emits an event.",
+            "implementation_status": "emitted"
         },
         {
             "class": "Nvl\\Media\\Events\\MediaMutated",
-            "source": "packages/nvl/media/src/Events/MediaMutated.php",
+            "source": "src/Events/MediaMutated.php",
             "constructor_fields": [
                 {
                     "name": "mediaId",
@@ -262,22 +270,23 @@
             "aliases": [],
             "producers": [
                 {
-                    "path": "packages/nvl/media/src/Services/MediaUploader.php",
+                    "path": "src/Services/MediaUploader.php",
                     "trigger": "Media public state changed."
                 },
                 {
-                    "path": "packages/nvl/media/src/Services/MediaLibrary.php",
+                    "path": "src/Services/MediaLibrary.php",
                     "trigger": "Media public state changed."
                 }
             ],
             "security_notes": [
-                "Media/grant and morph owner identities, revisions and association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Tenant grants expose persisted ownership identifiers."
+                "Media identities, revisions, admitted owner scope keys and bounded association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Identifiers do not grant access."
             ],
-            "no_op_semantics": "Existing changed-state/association/grant guards govern publication. File effect commit marking, prior-object cleanup and variation scheduling retain their ordering before publication; listener errors after commit cannot undo committed file ownership."
+            "no_op_semantics": "Publication follows current producer guards. Deduplicated upload reuse does not publish MediaUploaded. Not every tag, variation, scan or catalog operation emits an event.",
+            "implementation_status": "emitted"
         },
         {
             "class": "Nvl\\Media\\Events\\MediaUploaded",
-            "source": "packages/nvl/media/src/Events/MediaUploaded.php",
+            "source": "src/Events/MediaUploaded.php",
             "constructor_fields": [
                 {
                     "name": "mediaId",
@@ -309,14 +318,15 @@
             "aliases": [],
             "producers": [
                 {
-                    "path": "packages/nvl/media/src/Services/MediaUploader.php",
+                    "path": "src/Services/MediaUploader.php",
                     "trigger": "Media row and physical object created."
                 }
             ],
             "security_notes": [
-                "Media/grant and morph owner identities, revisions and association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Tenant grants expose persisted ownership identifiers."
+                "Media identities, revisions, admitted owner scope keys and bounded association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Identifiers do not grant access."
             ],
-            "no_op_semantics": "Existing changed-state/association/grant guards govern publication. File effect commit marking, prior-object cleanup and variation scheduling retain their ordering before publication; listener errors after commit cannot undo committed file ownership."
+            "no_op_semantics": "Publication follows current producer guards. Deduplicated upload reuse does not publish MediaUploaded. Not every tag, variation, scan or catalog operation emits an event.",
+            "implementation_status": "emitted"
         }
     ],
     "value_types": [],
@@ -324,25 +334,21 @@
     "publication": {
         "publication": "The native host dispatcher receives the captured event after the supplied source connection outer commit, or immediately when that connection has no active transaction.",
         "rollback": "Callbacks attach to the matching native connection and current nesting record; native outer/savepoint rollback discards the corresponding callbacks.",
-        "registration_failure": "Missing source transaction records fail before commit; Mail Notifications reports and drops unusable observations.",
+        "registration_failure": "Missing source transaction records fail before commit.",
         "host_policy": "Host after-commit listeners and queue after_commit policies can add their own deferral after publication. Host transaction infrastructure and dispatcher bindings are preserved.",
         "delivery_limit": "Local callbacks are not an outbox. Process exit between commit and callback can lose delivery; no crash durability or exactly-once delivery is promised.",
         "cardinality": "One canonical object is dispatched per qualifying producer call. This is local publication, not cross-process deduplication or a guarantee that repeated observations are unique.",
         "manual_producers": "Use Nvl\\Support\\Events\\DomainEventDispatcher::dispatch($event, $writerConnection). Native Event::dispatch() is immediate and has no package interception."
     },
     "security_notes": [
-        "Media/grant and morph owner identities, revisions and association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Tenant grants expose persisted ownership identifiers."
+        "Media identities, revisions, admitted owner scope keys and bounded association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Identifiers do not grant access."
     ],
-    "no_op_semantics": "Existing changed-state/association/grant guards govern publication. File effect commit marking, prior-object cleanup and variation scheduling retain their ordering before publication; listener errors after commit cannot undo committed file ownership.",
+    "no_op_semantics": "Publication follows current producer guards. Deduplicated upload reuse does not publish MediaUploaded. Not every tag, variation, scan or catalog operation emits an event.",
     "notes": [
         "MediaAttached::fromAssociation snapshots the persisted association; deletion/detachment use captured association arrays because the rows may no longer be queryable at publication."
     ],
     "alias_policy": [
-        "Legacy names are deprecated for major 5 and removed no earlier than major 6. class_alias preserves imports, instanceof, listener type hints and the new versioned constructor, not the former model-bearing API.",
-        "The native Laravel exact-listener bridge reads getRawListeners at delivery time and prepares legacy listeners through makeListener; strict-identical canonical registrations are skipped. Late registration, subscribers, cached discovery and queued listener preparation use the native dispatcher seams; proof is pending.",
-        "One canonical object is emitted once. Native wildcard/interface listeners see the canonical event once; suffix-specific *Event wildcards must migrate. The bridge does not redispatch a legacy string.",
-        "Drain old queued model-bearing payloads and restart workers before upgrade. New serialized alias instances restore the canonical versioned class without model restoration.",
-        "Event fakes/filters and assertions use canonical class names. EventAliases::canonicalName() helps migrate old names; old fake filters are not automatically rewritten.",
-        "Host custom dispatchers are retained. Explicit EventAliases::listen($event, $listener) maps through the canonical adapter; absent native bridging/host adapter, Doctor reports the deprecated-name limitation."
+        "Major 7 provides no deprecated Media *Event aliases. Use canonical event classes for listeners, fakes and queued payloads.",
+        "Drain old model-bearing queued payloads and restart workers before upgrading."
     ]
 }

@@ -15,8 +15,8 @@ use Nvl\Support\Enums\SystemActor;
  */
 function mediaOwnerSlotConcurrencySkipReason(): ?string
 {
-    if (! in_array(DB::connection()->getDriverName(), ['mysql', 'pgsql'], true)) {
-        return 'The owner-slot concurrency gate runs in the PostgreSQL/MySQL matrix.';
+    if (! in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb', 'pgsql'], true)) {
+        return 'The owner-slot concurrency gate runs in the PostgreSQL/MySQL/MariaDB matrix.';
     }
     if (! function_exists('pcntl_exec') || ! function_exists('pcntl_fork') || ! function_exists('pcntl_waitpid')) {
         return 'The owner-slot concurrency gate requires pcntl.';
@@ -198,7 +198,7 @@ it('serializes two competing replacements into one durable owner-slot winner', f
     } finally {
         mediaOwnerSlotConcurrencyCleanup($fixture);
     }
-})->skip(fn (): bool => mediaOwnerSlotConcurrencySkipReason() !== null, 'The owner-slot concurrency gate requires PostgreSQL/MySQL and pcntl.');
+})->skip(fn (): bool => mediaOwnerSlotConcurrencySkipReason() !== null, 'The owner-slot concurrency gate requires PostgreSQL/MySQL/MariaDB and pcntl.');
 it('serializes two competing replacements when the owner slot starts empty', function (): void {
     $connectionName = mediaOwnerSlotConcurrencyConnection();
     $fixture = mediaOwnerSlotConcurrencyFixture(withCurrent: false);
@@ -218,4 +218,4 @@ it('serializes two competing replacements when the owner slot starts empty', fun
     } finally {
         mediaOwnerSlotConcurrencyCleanup($fixture);
     }
-})->skip(fn (): bool => mediaOwnerSlotConcurrencySkipReason() !== null, 'The owner-slot concurrency gate requires PostgreSQL/MySQL and pcntl.');
+})->skip(fn (): bool => mediaOwnerSlotConcurrencySkipReason() !== null, 'The owner-slot concurrency gate requires PostgreSQL/MySQL/MariaDB and pcntl.');

@@ -23,6 +23,7 @@ use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Ownership\MediaOwnershipParentResolver;
 use Nvl\Media\Support\MediaActors;
+use Nvl\Media\Support\MediaBatchOwnerAdmission;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
@@ -177,7 +178,10 @@ final class MediaReader
         );
         $page = ($filters['page'] ?? 1);
 
-        return $query->paginate(perPage: $perPage, page: $page);
+        $paginator = $query->paginate(perPage: $perPage, page: $page);
+        $this->access->authorizeMany($user, MediaAbility::View, array_values($paginator->items()));
+
+        return $paginator;
     }
 
     /**
@@ -193,6 +197,9 @@ final class MediaReader
      */
     public function filterOptions(Authenticatable|SystemActor $user): array
     {
+        $user = MediaActors::assert($user);
+        $this->access->authorize($user, MediaAbility::List);
+
         return [
             'typeOptions' => $this->distinctMediaColumnValues('type', $user),
             'collectionOptions' => $this->distinctCollectionValues($user),
@@ -400,12 +407,19 @@ final class MediaReader
             if (! is_string($slot) || trim($slot) === '' || mb_strlen($slot) > 50) {
                 throw new InvalidArgumentException('Media slots require bounded nonempty names.');
             }
-            $rows = MediaAssociation::query()->where('associable_type', $owner->getMorphClass())
-                ->where('associable_id', (string) $ownerId)->where('collection', $slot)
-                ->orderBy('order')->orderBy('id')->limit($limit)->get();
+            $query = MediaAssociation::query()->where('is_active', true)
+                ->whereIn('media_id', MediaModelRegistry::query()->available()->select('id'))
+                ->with(['media.translations', 'media.associations']);
+            MediaBatchOwnerAdmission::exact($query, 'associable_type', $owner->getMorphClass());
+            MediaBatchOwnerAdmission::exact($query, 'associable_id', (string) $ownerId);
+            MediaBatchOwnerAdmission::exact($query, 'collection', $slot);
+            $rows = $query->orderBy('order')->orderBy('id')->limit($limit)->get();
             $result[$slot] = [];
             foreach ($rows as $row) {
-                $media = $this->get($actor, $row->media_id, false);
+                $media = $row->media;
+                if (! $media instanceof Media || ! $media->isAvailable()) {
+                    throw new OwnershipViolation('A Media owner asset became unavailable during the read.');
+                }
                 $this->access->authorize($actor, MediaAbility::View, $media, $owner);
                 $result[$slot][] = $media;
             }

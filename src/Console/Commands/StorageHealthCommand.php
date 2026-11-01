@@ -9,10 +9,12 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
+use Nvl\Media\Enums\MediaDeliveryMode;
 use Nvl\Media\Exceptions\DiskNotDefinedException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Ownership\MediaOwnership;
+use Nvl\Media\Services\MediaDeliveryPolicy;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDiskGuard;
 use Nvl\Media\Services\MediaFileExistence;
@@ -21,6 +23,7 @@ use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\MediaUrlResolver;
 use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Throwable;
 
@@ -60,6 +63,7 @@ final class StorageHealthCommand extends Command
         private readonly MediaFileOperator $files,
         private readonly MediaPathResolver $pathResolver,
         private readonly MediaUrlResolver $urlResolver,
+        private readonly MediaDeliveryPolicy $deliveryPolicy,
     ) {
         parent::__construct();
     }
@@ -118,6 +122,10 @@ final class StorageHealthCommand extends Command
 
         $this->info("Media storage health check for disk [{$disk}]");
         $this->line('Mode: '.$this->modeLabel($production, $liveWrite, $cleanupOrphans));
+
+        if ($verifyRoutes) {
+            $this->line('Delivery URL generation contracts only; remote delivery is not requested.');
+        }
 
         $this->printInventory($includeTrashed);
 
@@ -403,7 +411,7 @@ final class StorageHealthCommand extends Command
     }
 
     /**
-     * Verify route-backed URL generation and private signed URL validity.
+     * Probe the effective delivery policy without fetching bytes through HTTP.
      *
      * @return array{checks: int, failures: list<string>}
      */
@@ -411,98 +419,58 @@ final class StorageHealthCommand extends Command
     {
         $parameters = $variation instanceof MediaImageVariation ? ['v' => $variation->label] : [];
         $label = $variation instanceof MediaImageVariation ? " variation [{$variation->label}]" : '';
-        $routeName = $media->is_public
-            ? MediaConfiguration::string(
-                'nvl-media.assets.public_route_name',
-                'nvl.media.assets.show',
-            )
-            : MediaConfiguration::string(
-                'nvl-media.assets.private_route_name',
-                'nvl.media.private.show',
-            );
 
-        if (! Route::has($routeName)) {
-            return [
-                'checks' => 1,
-                'failures' => ["Route [{$routeName}] is not registered for media [{$media->id}]{$label}."],
-            ];
+        try {
+            $mode = $this->deliveryPolicy->mode($media->disk, $media->visibility);
+            if ($mode === MediaDeliveryMode::Direct || $mode === MediaDeliveryMode::TemporaryStorage) {
+                $url = $mode === MediaDeliveryMode::Direct
+                    ? $this->urlResolver->forMedia($media, $parameters['v'] ?? '')
+                    : $this->urlResolver->temporaryUrl(SystemActor::Background, $media, now()->addSeconds($this->deliveryPolicy->maximumTtl($media->disk)), $parameters['v'] ?? '');
+
+                return [
+                    'checks' => 1,
+                    'failures' => $url === '' ? ["Media [{$media->id}]{$label} generated an empty storage URL."] : [],
+                ];
+            }
+
+            $signed = $mode === MediaDeliveryMode::SignedApplication;
+            $routeName = $media->is_public
+                ? MediaConfiguration::string('nvl-media.assets.public_route_name', 'nvl.media.assets.show')
+                : ($signed
+                    ? MediaConfiguration::string('nvl-media.assets.private_route_name', 'nvl.media.private.show')
+                    : MediaConfiguration::string('nvl-media.assets.authenticated_route_name', 'nvl.media.authenticated.show'));
+            if (! Route::has($routeName)) {
+                return ['checks' => 1, 'failures' => ["Route [{$routeName}] is not registered for media [{$media->id}]{$label}."]];
+            }
+
+            $url = $signed
+                ? $this->urlResolver->signedUrl(SystemActor::Background, $media, now()->addSeconds($this->deliveryPolicy->maximumTtl($media->disk)), $parameters)
+                : $this->urlResolver->buildUrl($media, $parameters);
+            $routeParameters = ['media' => $media->id];
+            if ($signed) {
+                $routeParameters['owner'] = $media->uploaded_by ?? MediaConfiguration::string('nvl-media.assets.private_owner_fallback', 'system');
+            }
+            $expectedPath = $this->pathFromUrl(route($routeName, $routeParameters, false));
+            $failures = [];
+            if ($this->pathFromUrl($url) !== $expectedPath) {
+                $failures[] = "Media [{$media->id}]{$label} generated a URL outside its configured application route.";
+            }
+
+            $query = $this->queryFromUrl($url);
+            if (isset($parameters['v']) && ($query['v'] ?? null) !== $parameters['v']) {
+                $failures[] = "Media [{$media->id}]{$label} URL is missing the expected variation query parameter.";
+            }
+            if ($signed && (! isset($query['signature'], $query['expires']) || ! Request::create($url, 'GET')->hasValidSignature())) {
+                $failures[] = "Private media [{$media->id}]{$label} generated an invalid signed URL.";
+            }
+            if (! $signed && (isset($query['signature']) || isset($query['expires']))) {
+                $failures[] = "Media [{$media->id}]{$label} application URL unexpectedly contains capability parameters.";
+            }
+
+            return ['checks' => 1, 'failures' => $failures];
+        } catch (Throwable $exception) {
+            return ['checks' => 1, 'failures' => ["Delivery URL probe failed for media [{$media->id}]{$label}: {$exception->getMessage()}"]];
         }
-
-        if ($media->is_public) {
-            return $this->verifyPublicRouteContract($media, $routeName, $parameters, $label);
-        }
-
-        return $this->verifyPrivateRouteContract($media, $routeName, $parameters, $label);
-    }
-
-    /**
-     * Verify a public media URL uses the configured public asset route.
-     *
-     * @param  array<string, string>  $parameters
-     * @return array{checks: int, failures: list<string>}
-     */
-    private function verifyPublicRouteContract(Media $media, string $routeName, array $parameters, string $label): array
-    {
-        $url = $this->urlResolver->publicUrl($media, $parameters);
-        $expectedPath = $this->pathFromUrl(route($routeName, ['media' => $media->id], false));
-        $actualPath = $this->pathFromUrl($url);
-        $failures = [];
-
-        if ($actualPath !== $expectedPath) {
-            $failures[] = "Public media [{$media->id}]{$label} generated non-route URL [{$url}].";
-        }
-
-        $query = $this->queryFromUrl($url);
-        if (($parameters['v'] ?? null) !== null && ($query['v'] ?? null) !== $parameters['v']) {
-            $failures[] = "Public media [{$media->id}]{$label} URL is missing expected variation query parameter.";
-        }
-
-        return [
-            'checks' => 1,
-            'failures' => $failures,
-        ];
-    }
-
-    /**
-     * Verify a private media URL uses the configured signed private asset route.
-     *
-     * @param  array<string, string>  $parameters
-     * @return array{checks: int, failures: list<string>}
-     */
-    private function verifyPrivateRouteContract(Media $media, string $routeName, array $parameters, string $label): array
-    {
-        $owner = $media->uploaded_by
-            ?? MediaConfiguration::string(
-                'nvl-media.assets.private_owner_fallback',
-                'system',
-            );
-        $url = $this->urlResolver->privateUrl($media, $parameters, now()->addMinutes(5), $owner);
-        $expectedPath = $this->pathFromUrl(route($routeName, ['owner' => $owner, 'media' => $media->id], false));
-        $actualPath = $this->pathFromUrl($url);
-        $failures = [];
-
-        if ($actualPath !== $expectedPath) {
-            $failures[] = "Private media [{$media->id}]{$label} generated non-route URL [{$url}].";
-        }
-
-        $query = $this->queryFromUrl($url);
-        if (! isset($query['signature'], $query['expires'])) {
-            $failures[] = "Private media [{$media->id}]{$label} URL is missing signed route parameters.";
-        }
-
-        if (($parameters['v'] ?? null) !== null && ($query['v'] ?? null) !== $parameters['v']) {
-            $failures[] = "Private media [{$media->id}]{$label} URL is missing expected variation query parameter.";
-        }
-
-        $request = Request::create($url, 'GET');
-        if (! $request->hasValidSignature()) {
-            $failures[] = "Private media [{$media->id}]{$label} generated an invalid signed URL.";
-        }
-
-        return [
-            'checks' => 1,
-            'failures' => $failures,
-        ];
     }
 
     /**

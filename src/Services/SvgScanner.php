@@ -8,6 +8,7 @@ use DOMAttr;
 use DOMDocument;
 use DOMElement;
 use DOMNode;
+use DOMProcessingInstruction;
 use Nvl\Media\Exceptions\MediaUploadException;
 
 /**
@@ -39,7 +40,6 @@ final class SvgScanner
     /** @var array<int, string> Attributes that can contain executable URIs. */
     private const URI_ATTRIBUTES = [
         'href',
-        'xlink:href',
         'src',
         'action',
         'formaction',
@@ -71,15 +71,14 @@ final class SvgScanner
      *
      * @throws MediaUploadException
      */
-    private function scanRawContent(string &$content): void
+    private function scanRawContent(string $content): void
     {
-        // Strip XML declaration and DOCTYPE — many legitimate SVGs from design tools include these.
-        // ENTITY declarations remain blocked as they enable XXE attacks.
-        $content = preg_replace('/\s*<\?xml[^?]*\?>\s*/i', '', $content) ?? $content;
-        $content = preg_replace('/\s*<!DOCTYPE[^>]*>\s*/i', '', $content) ?? $content;
-
         if (preg_match('/<!ENTITY/i', $content)) {
             throw new MediaUploadException('SVG contains an ENTITY declaration, which is not allowed.');
+        }
+
+        if (preg_match('/<!DOCTYPE/i', $content)) {
+            throw new MediaUploadException('SVG contains a DOCTYPE declaration, which is not allowed.');
         }
 
         if (preg_match('/<\?php/i', $content) || str_contains($content, '<?=')) {
@@ -105,7 +104,7 @@ final class SvgScanner
         $prev_use_errors = libxml_use_internal_errors(true);
 
         $dom = new DOMDocument;
-        $loaded = $dom->loadXML($content, LIBXML_NONET | LIBXML_NOENT);
+        $loaded = $dom->loadXML($content, LIBXML_NONET);
 
         libxml_clear_errors();
         libxml_use_internal_errors($prev_use_errors);
@@ -114,7 +113,11 @@ final class SvgScanner
             throw new MediaUploadException('SVG contains malformed XML and cannot be safely parsed.');
         }
 
-        $this->inspectNode($dom->documentElement);
+        if ($dom->doctype !== null) {
+            throw new MediaUploadException('SVG contains a DOCTYPE declaration, which is not allowed.');
+        }
+
+        $this->inspectNode($dom);
     }
 
     /**
@@ -126,6 +129,10 @@ final class SvgScanner
     {
         if ($node === null) {
             return;
+        }
+
+        if ($node instanceof DOMProcessingInstruction) {
+            throw new MediaUploadException('SVG contains a processing instruction, which is not allowed.');
         }
 
         if ($node instanceof DOMElement) {
@@ -153,13 +160,15 @@ final class SvgScanner
             throw new MediaUploadException("SVG contains a forbidden <{$local_name}> element.");
         }
 
+        if ($local_name === 'style') {
+            $this->checkCssValue($element->textContent);
+        }
+
         // <use> and <image> are safe with internal refs (#id) but dangerous with external URLs
         if (in_array($local_name, self::EXTERNAL_REF_ELEMENTS, true)) {
             $this->checkForExternalReference($element, $local_name);
         }
 
-        // <style> is allowed but must not contain @import (already caught in raw scan);
-        // inline <style> with event-like content is blocked via attribute checks
     }
 
     /**
@@ -170,8 +179,11 @@ final class SvgScanner
      */
     private function checkForExternalReference(DOMElement $element, string $tagName): void
     {
-        foreach (['href', 'xlink:href', 'src'] as $attr) {
-            $value = trim($element->getAttribute($attr));
+        foreach ($element->attributes as $attr) {
+            if (! in_array(strtolower($attr->localName ?? $attr->name), ['href', 'src'], true)) {
+                continue;
+            }
+            $value = trim($attr->value);
 
             if ($value === '') {
                 continue;
@@ -188,7 +200,7 @@ final class SvgScanner
             }
 
             throw new MediaUploadException(
-                "SVG <{$tagName}> references an external resource [{$value}], which is not allowed.",
+                "SVG <{$tagName}> references an external resource, which is not allowed.",
             );
         }
     }
@@ -202,8 +214,14 @@ final class SvgScanner
     {
         /** @var DOMAttr $attr */
         foreach ($element->attributes as $attr) {
-            $attr_name = strtolower($attr->name);
+            $attr_name = strtolower($attr->localName ?? $attr->name);
             $attr_value = strtolower(trim($attr->value));
+
+            if ($attr_name === 'base' && $attr->namespaceURI === 'http://www.w3.org/XML/1998/namespace') {
+                throw new MediaUploadException('SVG contains an XML Base override, which is not allowed.');
+            }
+
+            $this->checkCssValue($attr_value);
 
             if (str_starts_with($attr_name, 'on')) {
                 throw new MediaUploadException("SVG contains a forbidden event handler attribute [{$attr->name}].");
@@ -212,6 +230,15 @@ final class SvgScanner
             if (in_array($attr_name, self::URI_ATTRIBUTES, true)) {
                 $this->checkUriValue($attr_value, $attr->name);
             }
+        }
+    }
+
+    /** Reject external CSS resources and obfuscation without rewriting uploaded bytes. */
+    private function checkCssValue(string $value): void
+    {
+        $withoutLocalReferences = preg_replace('~url\(\s*(["\']?)#[a-z0-9_.:-]+\1\s*\)~i', '', $value) ?? $value;
+        if (preg_match('~@import\b|url\s*\(|\\\\|/\*~i', $withoutLocalReferences) === 1) {
+            throw new MediaUploadException('SVG contains external or obfuscated CSS, which is not allowed.');
         }
     }
 
@@ -225,6 +252,10 @@ final class SvgScanner
      */
     private function checkUriValue(string $value, string $attrName): void
     {
+        if (preg_match('/[\x00-\x1f\x7f]/', $value) === 1) {
+            throw new MediaUploadException("SVG contains control characters in [{$attrName}] URI attribute.");
+        }
+
         if (str_starts_with($value, 'javascript:')) {
             throw new MediaUploadException("SVG contains a javascript: URI in [{$attrName}] attribute.");
         }
@@ -243,6 +274,6 @@ final class SvgScanner
      */
     private function isSafeDataUri(string $value): bool
     {
-        return (bool) preg_match('/^data:image\/(png|jpeg|jpg|gif|webp|avif|svg\+xml)[;,]/', $value);
+        return (bool) preg_match('/^data:image\/(png|jpeg|jpg|gif|webp|avif)[;,]/', $value);
     }
 }

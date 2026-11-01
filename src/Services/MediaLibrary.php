@@ -110,12 +110,8 @@ final class MediaLibrary
                     $mediaFields['metadata'] = $data['metadata'];
                 }
 
-                if (array_key_exists('isPublic', $data)) {
-                    if (! $data['isPublic'] && $media->is_public && $media->associations()->count() > 1) {
-                        throw MediaInUseException::privateVisibility($media->id);
-                    }
-
-                    $mediaFields['is_public'] = $data['isPublic'];
+                if (array_key_exists('isPublic', $data) && $data['isPublic'] !== ($media->visibility === MediaVisibility::Public)) {
+                    throw new MediaUploadException('Use the verified relocate operation to change media visibility.');
                 }
 
                 if ($mediaFields !== []) {
@@ -176,7 +172,7 @@ final class MediaLibrary
         $actor = MediaActors::assert($actor);
         $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
         $mediaId = $media instanceof Media ? $media->id : $media;
-        $this->diskGuard->assertAllowed($disk);
+        $this->diskGuard->assertAllowed($disk, $visibility);
         $this->disks->ensureDefined($disk);
 
         return $this->mutationLock->execute(
@@ -209,6 +205,12 @@ final class MediaLibrary
             throw new MediaUploadException(
                 "Media [{$mediaId}] is already stored on disk [{$disk}].",
             );
+        }
+
+        if ($media->visibility === MediaVisibility::Public
+            && $visibility === MediaVisibility::Private
+            && $media->associations()->count() > 1) {
+            throw MediaInUseException::privateVisibility($media->id);
         }
 
         $sourceDisk = $media->disk;
@@ -493,6 +495,7 @@ final class MediaLibrary
             $copies = [];
 
             foreach ($mediaItems as $media) {
+                $this->diskGuard->assertAllowed($media->disk, $media->visibility);
                 $oldPath = $media->buildPath();
                 $newPath = $this->pathResolver->mediaPathForFolder($media, $sanitizedFolder);
 
@@ -585,8 +588,13 @@ final class MediaLibrary
                         ->lockForUpdate()
                         ->get()
                         ->each(
-                            static fn (Media $media): bool => $media
-                                ->forceFill(['folder' => $sanitizedFolder])
+                            fn (Media $media): bool => $media
+                                ->forceFill([
+                                    'folder' => $sanitizedFolder,
+                                    ...(is_string($media->storage_path) && $media->storage_path !== ''
+                                        ? ['storage_path' => $this->pathResolver->mediaPathForFolder($media, $sanitizedFolder)]
+                                        : []),
+                                ])
                                 ->save(),
                         );
                     $this->eventCommits->afterCommit((MediaModelRegistry::newInstance())->getConnection(), static function () use (&$writeCommitted): void {

@@ -296,6 +296,7 @@ it('serializes owner variation maps as objects for empty and numeric labels', fu
     expect(json_encode($result['items'][0]['variationUrls']))->toBe($expected);
 })->with(['empty' => [[], '{}'], 'numeric' => [['0', '1'], '{"0":null,"1":null}']]);
 it('resolves exact numeric variation labels independently of a stale numerically equal label', function (): void {
+    config(['nvl-media.delivery.disks.public.public.mode' => 'application']);
     Storage::fake('public');
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $asset = Media::factory()->create(['is_public' => true, 'type' => 'image', 'extension' => 'jpg', 'mime_type' => 'image/jpeg']);
@@ -540,15 +541,14 @@ it('fails unsupported host asset view without calling scopeMedia with an empty b
     expect(fn () => BatchMediaOwner::query()->hasNvlMedia('document', SystemActor::Background, $policy))->toThrow(MediaBatchReadException::class, 'host View adapter');
     expect(batchMediaStorageQueries())->toBe([]);
 });
-it('returns null when a public original URL is unavailable and never calls private delivery', function (): void {
+it('fails closed when a public application URL is unavailable without private delivery', function (): void {
     Storage::fake('public');
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $asset = Media::factory()->create(['is_public' => true]);
     batchMediaAssociation($owner, $asset);
-    config()->set('filesystems.disks.public.url', null);
+    config()->set('nvl-media.delivery.disks.public.public.mode', 'application');
     config()->set('nvl-media.assets.public_route_name', 'missing.public.asset');
-    $result = app(MediaOwnerBatchReader::class)->read([$owner], ['document'], SystemActor::Background);
-    expect(batchMediaItems($result, $owner)[0]['url'])->toBeNull();
+    expect(fn () => app(MediaOwnerBatchReader::class)->read([$owner], ['document'], SystemActor::Background))->toThrow(RuntimeException::class, 'public media application route is unavailable');
 });
 it('preserves object map identities order duplicates and numeric slots', function (): void {
     Relation::morphMap([], false);

@@ -1,6 +1,10 @@
 <?php
 
 declare(strict_types=1);
+use GuzzleHttp\Handler\CurlFactory;
+use GuzzleHttp\Handler\CurlFactoryInterface;
+use GuzzleHttp\Handler\CurlHandler;
+use GuzzleHttp\Handler\EasyHandle;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -181,8 +185,135 @@ describe('fromUrl SSRF validation', function () {
         Http::fake(['https://93.184.216.34/missing.jpg' => Http::response('Not Found', 404)]);
         expect(fn () => $this->resolver->fromUrl('https://93.184.216.34/missing.jpg'))->toThrow(MediaUploadException::class, 'Could not download');
     });
+    it('keeps signed remote URLs out of public HTTP failure messages', function (): void {
+        $url = 'https://93.184.216.34/private.jpg?token=private-download-token';
+        Http::fake([$url => Http::response('Not Found', 404)]);
+
+        try {
+            $this->resolver->fromUrl($url);
+            $this->fail('The HTTP failure must reject the download.');
+        } catch (MediaUploadException $exception) {
+            expect($exception->getMessage())->toContain('Could not download')
+                ->not->toContain($url, 'private-download-token');
+        }
+
+    });
+    it('keeps transport details out of public remote failure messages', function (): void {
+        $url = 'https://93.184.216.34/private.jpg?token=private-download-token';
+        Http::fake(static fn () => throw new RuntimeException('Internal transport details private-network-secret'));
+        try {
+            $this->resolver->fromUrl($url);
+            $this->fail('The transport failure must reject the download.');
+        } catch (MediaUploadException $exception) {
+            expect($exception->getMessage())->toBe('Could not download remote media.')
+                ->and($exception->getPrevious())->toBeInstanceOf(RuntimeException::class)
+                ->and(app(MediaTemporaryFileRegistry::class)->count())->toBe(0);
+        }
+    });
+    it('keeps signed remote URLs out of bounded download failures', function (bool $declaredLength): void {
+        $url = 'https://93.184.216.34/private.jpg?token=private-download-token';
+        config(['nvl-media.max_file_size' => 4]);
+        Http::fake([$url => Http::response('12345', 200, $declaredLength ? ['Content-Length' => '5'] : [])]);
+
+        try {
+            $this->resolver->fromUrl($url);
+            $this->fail('Oversized downloads must be rejected.');
+        } catch (MediaUploadException $exception) {
+            expect($exception->getMessage())->toContain('exceeds the maximum allowed size')
+                ->not->toContain($url, 'private-download-token')
+                ->and(app(MediaTemporaryFileRegistry::class)->count())->toBe(0);
+        }
+    })->with([true, false]);
     it('validates MIME type on downloaded file', function () {
         Http::fake(['https://93.184.216.34/file.txt' => Http::response('plain text', 200)]);
         expect(fn () => $this->resolver->fromUrl('https://93.184.216.34/file.txt', 'image/jpeg'))->toThrow(FileUnacceptableForCollection::class);
     });
 });
+
+it('rejects shared and IPv6 translation networks before remote transport', function (string $address): void {
+    config(['nvl-media.sources.remote.enabled' => true]);
+    Http::fake();
+    $host = str_contains($address, ':') ? '['.$address.']' : $address;
+
+    expect(fn () => $this->resolver->fromUrl('https://'.$host.'/asset.jpg'))
+        ->toThrow(MediaUploadException::class, 'private or reserved');
+    Http::assertNothingSent();
+    expect(app(MediaTemporaryFileRegistry::class)->count())->toBe(0);
+})->with([
+    'carrier-grade NAT' => '100.100.100.200',
+    'carrier-grade NAT lower bound' => '100.64.0.0',
+    'carrier-grade NAT upper bound' => '100.127.255.255',
+    'NAT64 loopback' => '64:ff9b::7f00:1',
+    'local NAT64' => '64:ff9b:1::7f00:1',
+    '6to4 loopback' => '2002:7f00:1::',
+    'Teredo' => '2001:0:4136:e378:8000:63bf:3fff:fdd2',
+    'mapped IPv4 loopback' => '::ffff:127.0.0.1',
+]);
+
+it('uses the pinned curl transport and bounds its response sink before buffering', function (array $chunks, string $failure, string $retained): void {
+    config(['nvl-media.max_file_size' => 4]);
+    $factory = new class($chunks) implements CurlFactoryInterface
+    {
+        private readonly CurlFactory $factory;
+
+        public bool $created = false;
+
+        public ?EasyHandle $easy = null;
+
+        public string $retained = '';
+
+        public function __construct(private readonly array $chunks)
+        {
+            $this->factory = new CurlFactory(0);
+        }
+
+        public function create(object $request, array $options): EasyHandle
+        {
+            $this->created = true;
+            expect($options['curl'][CURLOPT_RESOLVE])->toBe(['93.184.216.34:443:93.184.216.34'])
+                ->and($options['proxy'])->toBe('')
+                ->and($options['allow_redirects'])->toBeFalse()
+                ->and($options['verify'])->toBeTrue();
+            $this->easy = $this->factory->create($request, $options);
+            foreach ($this->chunks as $chunk) {
+                $this->easy->sink->write($chunk);
+                $this->retained .= $chunk;
+            }
+
+            throw new RuntimeException('curl boundary reached');
+        }
+
+        public function release(EasyHandle $easy): void
+        {
+            $this->factory->release($easy);
+        }
+    };
+    app()->instance(CurlHandler::class, new CurlHandler(['handle_factory' => $factory]));
+    app()->forgetInstance(MediaSourceResolver::class);
+    Http::globalMiddleware(static fn (callable $handler): Closure => static function (object $request, array $options) use ($handler): mixed {
+        if ($options['stream'] ?? false) {
+            throw new RuntimeException('unsafe streaming transport selected');
+        }
+
+        return $handler($request, $options);
+    });
+
+    try {
+        app(MediaSourceResolver::class)->fromUrl('https://93.184.216.34/file.txt');
+        $this->fail('The transport boundary must reject this response.');
+    } catch (MediaUploadException $exception) {
+        if ($failure === 'curl boundary reached') {
+            expect($exception->getMessage())->toBe('Could not download remote media.')
+                ->and($exception->getPrevious()?->getMessage())->toBe($failure);
+        } else {
+            expect($exception->getMessage())->toContain($failure);
+        }
+    }
+    expect($factory->created)->toBeTrue()
+        ->and(app(MediaTemporaryFileRegistry::class)->count())->toBe(0);
+    expect($factory->retained)->toBe($retained);
+    $factory->release($factory->easy);
+})->with([
+    'bounded curl response' => [['12', '34'], 'curl boundary reached', '1234'],
+    'oversized curl response' => [['1234', '5'], 'exceeds the maximum allowed size', '1234'],
+]);

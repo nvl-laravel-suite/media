@@ -15,6 +15,7 @@ use Nvl\Media\Tests\Fixtures\OwnershipMediaOwner;
 use Nvl\Media\Tests\Fixtures\OwnershipWorkerProvider;
 use Nvl\Ownership\Providers\OwnershipServiceProvider;
 use Nvl\Ownership\Services\OwnershipRunner;
+use Nvl\Ownership\Tests\Fixtures\NativeDatabaseSource;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Contracts\OwnershipContext;
 use Nvl\Support\Providers\LocaleServiceProvider;
@@ -26,7 +27,7 @@ use Spatie\LaravelData\LaravelDataServiceProvider as DataServiceProvider;
 require dirname(__DIR__, 5).'/vendor/autoload.php';
 $source = json_decode($argv[1], true, flags: JSON_THROW_ON_ERROR);
 $options = json_decode($argv[2], true, flags: JSON_THROW_ON_ERROR);
-if (! is_array($source) || ($source['driver'] ?? null) !== 'pgsql' || ! is_string($source['database'] ?? null) || preg_match('/^nvl_own_test_[a-z0-9_]+$/D', $source['database']) !== 1 || ! is_array($options) || ! is_string($options['root'] ?? null)) {
+if (! is_array($source) || ! in_array($source['driver'] ?? null, ['pgsql', 'mysql', 'mariadb'], true) || ! is_string($source['database'] ?? null) || preg_match('/^nvl_own_test_[a-z0-9_]+$/D', $source['database']) !== 1 || ! is_array($options) || ! is_string($options['root'] ?? null)) {
     throw new RuntimeException('Media workers require a dedicated native persistence source.');
 }
 OwnershipWorkerProvider::$source = $source;
@@ -34,6 +35,7 @@ OwnershipWorkerProvider::$root = $options['root'];
 $app = Application::create(options: ['load_environment_variables' => false, 'extra' => ['dont-discover' => ['*'], 'providers' => [LocaleServiceProvider::class, SupportServiceProvider::class, DataServiceProvider::class, FilterableServiceProvider::class, TranslatableServiceProvider::class, OwnershipServiceProvider::class, MediaServiceProvider::class, OwnershipWorkerProvider::class]]]);
 $kernel = $app->make(Kernel::class);
 $kernel->bootstrap();
+NativeDatabaseSource::inspect($app->make('db')->connection());
 if (($options['mode'] ?? 'queue') === 'receipt') {
     file_put_contents($options['ready'], 'ready');
     $deadline = microtime(true) + 15;

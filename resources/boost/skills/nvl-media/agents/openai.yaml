@@ -1,4 +1,4 @@
 interface:
   display_name: "NVL Media"
-  short_description: "Configure media disks, folders and lifecycle"
-  default_prompt: "Use $nvl-media to implement or review multiple disks, optional folders, private files, reusable public assets, uploads, delivery, variations, and reconciliation."
+  short_description: "Integrate media disks, secure delivery and lifecycle"
+  default_prompt: "Use $nvl-media to implement or review public and private disks, CDN and application delivery, authorized temporary links, uploads, model slots, variations, and storage recovery."

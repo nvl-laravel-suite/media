@@ -6,6 +6,7 @@ namespace Nvl\Media\Tests\Fixtures\Consumer;
 
 use Closure;
 use DateTimeInterface;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
@@ -15,6 +16,7 @@ use Illuminate\Support\Collection;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Definitions\Tables\MediaTables;
+use Nvl\Media\Enums\MediaDeliveryMode;
 use Nvl\Media\MediaRegistration;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
@@ -24,6 +26,7 @@ use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Tests\Fixtures\Consumer\Contracts\HasMedia;
 use Nvl\Media\Tests\Fixtures\Consumer\Services\MediaLifecycleService;
 use Nvl\Media\Tests\Fixtures\Consumer\Services\MediaModelInteractionService;
+use Nvl\Support\Enums\SystemActor;
 
 /**
  * Provides the complete NVL media capability for one real Eloquent owner.
@@ -421,7 +424,7 @@ final class MediaOwner
     public function buildUrl(
         string $collection = 'default',
         array $parameters = [],
-        ?DateTimeInterface $expiration = null,
+        ?MediaDeliveryMode $mode = null,
     ): string {
         $media = $this->first($collection);
 
@@ -429,7 +432,7 @@ final class MediaOwner
             return $this->fallbackUrl($collection, (string) ($parameters['v'] ?? ''));
         }
 
-        return $media->buildUrl($parameters, $expiration);
+        return $media->buildUrl($parameters, $mode);
     }
 
     /**
@@ -450,6 +453,7 @@ final class MediaOwner
 
     /** Return a signed temporary URL for the first asset. */
     public function firstTemporaryUrl(
+        Authenticatable|SystemActor $actor,
         DateTimeInterface $expiration,
         string $collection = 'default',
         string $conversion = '',
@@ -460,7 +464,7 @@ final class MediaOwner
             return '';
         }
 
-        return $media->getTemporaryUrl($expiration, $conversion);
+        return $media->getTemporaryUrl($actor, $expiration, $conversion);
     }
 
     /** Resolve the registered fallback URL. */

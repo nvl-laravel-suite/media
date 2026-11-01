@@ -2,7 +2,6 @@
 
 Package routes and the deprecated Tenancy bridge have been removed. Consumers configure their own HTTP adapters. Native ownership uses declared resources and explicit contexts.
 
-
 Publish the package configuration with:
 
 ```bash
@@ -11,7 +10,7 @@ php artisan vendor:publish --tag=nvl-media-config
 
 Keep environment reads in `config/nvl-media.php`, then use `php artisan config:cache` for production. Run `php artisan nvl:media:doctor --production --strict` against the cached configuration.
 
-The values below are the shipped major 5 defaults. Application-published configuration is recursively merged with package defaults so newly added nested safety settings continue to exist after an upgrade; review `UPGRADING.md` whenever publishing or merging a new version.
+The values below describe the major 7 runtime defaults in `config/nvl-media.php`. The provider publishes these full defaults to the host config file. `resources/config/nvl-media.php` is a separate common-settings template for configuration tooling. Application configuration is merged with runtime defaults. Review list/map overrides after upgrades, especially permission maps, metadata allowlists and delivery modes. Review [UPGRADING.md](../UPGRADING.md) before rollout. The `nvl-media-skills` publish tag installs agent guidance into `.agents/skills`; `nvl-media-translations` publishes language resources.
 
 ## Configured models
 
@@ -22,21 +21,17 @@ Core model registry preserves existing native morph identities. Owned consumers
 override `ownershipDefinition()` with a native column or concrete primary pivot;
 ordinary applications retain the unscoped default.
 
-## Tenancy
+## Optional native ownership
 
-when enabled, every model class that may own Media must be listed and registered
-as a canonical tenancy resource by the host. Unknown owner types fail closed.
-Media translations and variations inherit ownership from their Media parent and
-do not define independent tenant pivots.
+Unowned installations use the unscoped default and do not require `nvl/ownership`. A model-declared native column/pivot or adopted ownership storage requires a compatible `nvl/ownership:^7.0` runtime and explicit resource/context admission. Declared ownership fails closed if its runtime is absent. Media translations and variations inherit their canonical Media parent's ownership.
 
-## Routes
+New owned storage uses the admitted `owners/<scope-hash>` or `central` partition below the configured root. The retired Tenancy bridge's configuration and tenant worklist APIs are not supported. Existing tenant-named physical columns or paths are historical facts to preserve during controlled adoption, not automatic rename instructions.
 
-| Key | Default | Meaning |
-| --- | --- | --- |
+## Consumer HTTP routes
 
-The management API and asset delivery are independent. Production doctor fails when writable management routes lack authentication/authorization middleware.
+The package registers no routes or management controllers. Register the named asset routes in [Asset delivery](#asset-delivery), then apply application authentication, authorization, throttling and response headers. Middleware lists in `nvl-media.assets` are configuration values for host adapters; the provider does not apply them. Doctor validates package configuration and infrastructure, not the security of consumer HTTP adapters. Verify those adapters in the host's tests.
 
-See [HTTP API](http-api.md).
+See [HTTP integration](http-api.md).
 
 ## Authorization
 
@@ -44,7 +39,7 @@ See [HTTP API](http-api.md).
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `enabled` | `true` | Consult compatible role/permission methods when present |
+| `enabled` | `false` | Explicitly opt into compatible role/permission methods when present |
 | `global_roles` | `[]` | Roles granting every media ability |
 | `global_permission` | `nvl.media.manage` | Permission granting every media ability |
 | `ability_permissions.list_all` | `nvl.media.view-any` | Cross-owner library listing |
@@ -71,20 +66,17 @@ Role names are empty by default so an installation cannot silently elevate an ex
 | --- | --- | --- |
 | `nvl-media.migrations.enabled` | `true` | Load package migrations automatically |
 
-Set this to `false` only for controlled adoption of an existing schema. Published migrations are still available through the `nvl-media-migrations` publish tag.
+Choose one migration owner. Keep this `true` for automatic package migrations, or publish `nvl-media-migrations` and set it to `false` before running the host-owned copies. Review populated schemas and duplicate migration names before `php artisan migrate`; do not run both sources.
 
-## Catalog copies and tenant worklists
+## Catalog copies
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `nvl-media.catalog.metadata_keys` | reviewed presentation/provenance key list | Scalar metadata allowed to cross from a granted platform asset into a tenant copy |
+| `nvl-media.catalog.metadata_keys` | reviewed presentation/provenance key list | Scalar metadata allowed to cross from a granted central asset into an owner copy |
 | `nvl-media.catalog.max_tags` | `25` | Maximum projected catalog tags |
 | `nvl-media.catalog.max_tag_length` | `100` | Maximum characters in each projected tag |
 
-Catalog metadata and tags are projected through these bounds rather than copied
-verbatim. Bind `MediaTenantWorklist` to the host directory when tenant-wide
-operations must enumerate live tenants dynamically; Media never assumes a host
-directory table or column layout.
+Catalog metadata and tags are projected through these bounds rather than copied verbatim. Use `MediaOwnerCatalog` with native owner admission and explicit `MediaCatalogAccess` grants. Imports create a private, independently verified copy on the source disk, so that disk must admit Private visibility; no destination disk is selected implicitly. A public-only CDN source cannot hold this copy. Staging and persistence recheck the policy; discard remains available after the policy is disabled.
 
 ## Owner-slot operation identity
 
@@ -133,7 +125,7 @@ redaction/workflow state, storage paths/hashes, or association metadata.
 | `nvl-media.adoption.path_sample_size` | `25` | Maximum live Media rows Doctor samples against physical storage; soft-deleted tombstones are excluded |
 | `nvl-media.default_path` | `misc` | Fallback logical folder template; an empty string omits the subfolder |
 | `nvl-media.conversions_folder` | `conversions` | Variation subdirectory |
-| `nvl-media.allowed_disks` | `['local', 'public']` | Security allowlist for HTTP and direct uploads |
+| `nvl-media.allowed_disks` | `['local', 'public']` | Security allowlist for selected upload and relocation disks |
 
 Environment:
 
@@ -163,23 +155,38 @@ Laravel owns each disk's physical root, bucket and credentials in `config/filesy
 
 Define `private` and `s3` in `filesystems.php` before selecting them. Disk names do not determine visibility: the host must keep its private disk inaccessible through public web/CDN paths, while S3 can keep even public Media objects private at rest for route-backed delivery.
 
-Upload disk precedence is an explicit builder/terminal disk, an explicit slot `useDisk()` selection, the configured visibility default, then `nvl-media.disk` / `filesystems.default` / `local`. Null visibility defaults preserve existing single-disk behavior. They do not extend `allowed_disks`, move existing records, or automatically relocate an asset when its metadata visibility changes. Lower-level Actions and multipart requests with a required disk use that explicit disk.
+Native `MediaUploader::upload()` and `MediaMultipart::initiate()` require an explicit disk. For slot-based uploads, pass `MediaSlot::resolveDisk($isPublic)`: it selects an explicit `useDisk()` value, then the configured visibility default, then `nvl-media.disk` / `filesystems.default` / `local`. Consumer-owned wrappers may offer an explicit override. Null visibility defaults preserve single-disk behavior. These defaults do not extend `allowed_disks` or move existing records. Metadata writes reject visibility changes; use verified cross-disk `MediaLibrary::relocate()` instead.
 
-An absent disk entry inherits `root_folder`; `''` overrides it and omits the base folder. Null, non-string roots, dot segments, traversal, null bytes, drive letters and URL roots are rejected. Nested relative folders are supported on local and object-storage disks. Use `''`, not `/`, for a disk root. Slot templates and `toFolder()` remain subfolders below that prefix:
+An absent disk entry inherits `root_folder`; `''` overrides it and omits the base folder. Null, non-string roots, dot segments, traversal, null bytes, drive letters and URL roots are rejected. Nested relative folders are supported on local and object-storage disks. Use `''`, not `/`, for a disk root. Slot `path()` templates and `MediaUploader::upload(folderOverride: ...)` remain subfolders below that prefix:
 
 ```php
-$private = $owner->nvlMedia()->add($file)
-    ->asPublic(false)->toFolder('')->withoutVariations()->upload();
-// On the private disk: <opaque-name>.<extension>
+use Nvl\Media\MediaRegistration;
+use Nvl\Media\Services\MediaUploader;
 
-$invoice = $owner->nvlMedia()->add($file)
-    ->toDisk('s3')->toFolder('invoices')->withoutVariations()->upload();
-// On s3: assets/uploads/invoices/<opaque-name>.<extension>
+// $owner implements HasNvlMedia and registers a private "documents" slot.
+$slot = MediaRegistration::forOwner($owner)->getSlot('documents')
+    ?? throw new LogicException('Register the documents slot first.');
+
+$invoice = app(MediaUploader::class)->upload(
+    actor: $actor,
+    file: $file,
+    disk: 's3',
+    model: $owner,
+    slot: $slot,
+    fileName: 'invoice.pdf',
+    isPublic: false,
+    folderOverride: 'invoices',
+    allowDuplicates: true,
+    deduplicateExisting: false,
+    skipAutoVariations: true,
+);
+// On s3: assets/uploads/invoices/<opaque-name>.pdf
+// folderOverride: '' uses <opaque-name>.pdf when that disk's root is also ''.
 ```
 
-Both the base prefix and the logical folder must be empty for originals directly at the disk root. Use an empty slot `path('')` or set `default_path` to `''` to make that the host default. Variations still use the configured conversions subfolder. Enabled tenancy always retains its `tenants/<tenant-id>` or `platform` partition, even when the base prefix is empty.
+Both the base prefix and the logical folder must be empty for originals directly at the disk root. Use an empty slot `path('')` or set `default_path` to `''` to make that the host default. Variations still use the configured conversions subfolder. Declared native ownership retains its admitted `owners/<scope-hash>` or `central` partition even when the base prefix is empty. The example creates a Media asset; association is a separate authorized `MediaAttachments` operation.
 
-Reconciliation uses the selected disk's prefix and active tenant partition. Whole-disk orphan deletion is always refused. With an empty standalone prefix, default `restrict_to_root=true` also refuses orphan inventory; explicit `restrict_to_root=false` permits read-only whole-disk inventory. Record-based verification, replacement and deletion still work at the disk root.
+Reconciliation uses the selected disk's prefix and admitted owner partition. Whole-disk orphan deletion is always refused. With an empty standalone prefix, default `restrict_to_root=true` also refuses orphan inventory; explicit `restrict_to_root=false` permits read-only whole-disk inventory. Record-based verification, replacement and deletion still work at the disk root.
 
 Folder configuration describes existing physical layout; changing it does not move files. Keep the source disk's existing prefix until a controlled move completes. Configure a destination disk name and its desired prefix, preview `nvl:media:migrate-disk --from=<source> --to=<destination> --dry-run`, then run the move. Originals and variations use the destination prefix with checksum verification and rollback; identical prefixes retain existing paths. `--records-only` expects objects already copied to the displayed destination layout. Rebuild configuration caches and restart workers after changes; drain active multipart sessions before changing their disk prefix. Doctor validates `storage.configuration` and samples live persisted paths using `adoption.path_sample_size`; deleted tombstones are excluded.
 
@@ -190,9 +197,9 @@ See [S3 and object storage](s3.md).
 | Key | Default | Unit |
 | --- | --- | --- |
 | `nvl-media.max_file_size` | `10 * 1024 * 1024` | Bytes per file |
-| `nvl-media.max_files_per_upload` | `10` | Files per management upload request |
+| `nvl-media.max_files_per_upload` | `10` | Suggested host request batch bound; native uploads accept one file |
 
-Slot-specific `maxFileSize()` may further restrict an upload. Source boundaries and the authoritative Action both enforce applicable limits.
+Slot-specific `maxFileSize()` may further restrict an upload. Source boundaries and the authoritative ingestion service enforce applicable file limits. Consumers validate HTTP batch counts; no package request/controller applies `max_files_per_upload`.
 
 ## Remote sources
 
@@ -280,23 +287,23 @@ NVL_MEDIA_MULTIPART_LOCK_SECONDS=300
 NVL_MEDIA_MULTIPART_LOCK_WAIT_SECONDS=30
 ```
 
-Enabling multipart in production requires a recoverable gateway, central atomic lock store, persisted session migration, real scanner attestation, expired-session pruning, provider integration tests, and a clean strict production doctor. Every completed object remains `pending_scan` until an exact `MediaScanResultData` attestation makes it available.
+Enabling multipart in production requires a recoverable gateway, central atomic lock store, persisted session migration, real scanner attestation, expired-session pruning, provider integration tests, and a clean strict production doctor. Every completed object remains `pending_scan` until an exact native scan-result array passed to `MediaScan::finalize()` makes it available.
 
 ## Query
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `nvl-media.query.maximum_page_size` | `100` | Hard cap for management and facade pagination |
+| `nvl-media.query.maximum_page_size` | `100` | Hard cap for authorized reader pagination |
 | `nvl-media.query.search_driver` | `PortableMediaSearchDriver::class` | Implementation of `MediaSearchDriver` |
 
-The portable driver performs moderate-dataset substring and JSON search. Bind or configure a PostgreSQL full-text or external implementation for larger search workloads without replacing `MediaQueryService`.
+The portable driver performs moderate-dataset substring and JSON search. Bind or configure a PostgreSQL full-text or external implementation for larger search workloads without replacing `MediaReader`.
 
 ## Reconciliation
 
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `nvl-media.reconciliation.orphan_age_minutes` | `1440` | Minimum orphan age |
-| `nvl-media.reconciliation.restrict_to_root` | `true` | Require a selected disk/tenant prefix for orphan inventory; whole-disk orphan deletion is always refused |
+| `nvl-media.reconciliation.restrict_to_root` | `true` | Require a selected disk/owner prefix for orphan inventory; whole-disk orphan deletion is always refused |
 | `nvl-media.reconciliation.page_size` | `500` | Object inventory page size |
 
 Keep root restriction enabled. Cleanup remains opt-in at the command boundary and requires `--force` in production. Objects whose adapter cannot report reliable age remain report-only.
@@ -348,8 +355,8 @@ See [Image variations and queues](images-and-queues.md).
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `nvl-media.image_driver` | resolved from `NVL_MEDIA_IMAGE_DRIVER`, default `gd` | `gd`, `imagick`, or `vips` |
-| `nvl-media.image_constraints.max_width` | `4096` | HTTP dimension rule maximum |
-| `nvl-media.image_constraints.max_height` | `4096` | HTTP dimension rule maximum |
+| `nvl-media.image_constraints.max_width` | `4096` | Suggested host upload dimension maximum |
+| `nvl-media.image_constraints.max_height` | `4096` | Suggested host upload dimension maximum |
 | `nvl-media.optimization.skip_formats` | `['svg', 'gif']` | Original formats not optimized |
 
 Environment:
@@ -358,7 +365,7 @@ Environment:
 NVL_MEDIA_IMAGE_DRIVER=gd
 ```
 
-The runtime must provide the selected driver and every encoder required by enabled output formats. Doctor checks the configured driver and encoders.
+The runtime must provide the selected driver and every encoder required by enabled output formats. Doctor checks the configured driver and encoders. Consumers must apply input dimension limits in their own request/slot validation; `image_constraints` is not an automatic pixel-limit check in the native uploader.
 
 ## Image format profiles
 
@@ -402,37 +409,65 @@ Dynamic transformation query parameters are unsupported. Only persisted named la
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `nvl-media.temporary_url_lifetime` | `5` | Default temporary URL lifetime in minutes |
 | `nvl-media.assets.public_route_name` | `nvl.media.assets.show` | Public route name |
+| `nvl-media.assets.authenticated_route_name` | `nvl.media.authenticated.show` | Private route which authenticates and authorizes each requester |
 | `nvl-media.assets.private_route_name` | `nvl.media.private.show` | Signed private route name |
-| `nvl-media.assets.public_route_middleware` | `['throttle:120,1']` | Public asset middleware |
-| `nvl-media.assets.private_route_middleware` | `[]` | Extra private asset middleware |
+| `nvl-media.assets.public_route_middleware` | `['throttle:120,1']` | Suggested public middleware for the consumer adapter |
+| `nvl-media.assets.private_route_middleware` | `[]` | Suggested extra private middleware for the consumer adapter |
 | `nvl-media.assets.private_owner_fallback` | `system` | Owner token for private media lacking uploader identity |
-| `nvl-media.assets.signed_url_lifetime` | `5` | Signed route lifetime in minutes |
 | `nvl-media.assets.public_cache_control` | `public, max-age=31536000, immutable` | Versioned public response cache header |
 | `nvl-media.assets.private_cache_control` | `private, max-age=0, no-store` | Private response cache header |
-| `nvl-media.assets.remote_public_delivery` | `route` | Route-backed remote object delivery |
 | `nvl-media.assets.allowed_parameters` | `['v']` | Asset query allowlist |
+| `nvl-media.delivery.defaults.public` | `application`; allows `application`, `direct` | Public policy inherited by disks without an override |
+| `nvl-media.delivery.defaults.private` | `application`; allows `application`, `signed_application`, `temporary_storage` | Private policy inherited by disks without an override |
+| `nvl-media.delivery.disks` | `[]` | Policies keyed by Laravel filesystem disk name |
+| `nvl-media.delivery.maximum_ttl` | `300` | Maximum bearer-link lifetime in seconds; a disk may override it |
 
-Environment:
+Physical roots, credentials, buckets, provider endpoints and CDN base URLs remain in `filesystems.php`. Delivery policy applies equally to local and remote disks, originals and variations:
 
-```dotenv
-NVL_MEDIA_ASSET_SIGNED_URL_LIFETIME=5
-NVL_MEDIA_REMOTE_PUBLIC_DELIVERY=route
+```php
+'delivery' => [
+    'maximum_ttl' => 300,
+    'disks' => [
+        'website-cdn' => [
+            'public' => ['mode' => 'direct', 'allowed' => ['direct', 'application']],
+            'private' => false,
+        ],
+        'website-masked' => [
+            'public' => ['mode' => 'application', 'allowed' => ['application']],
+            'private' => false,
+        ],
+        'documents' => [
+            'public' => false,
+            'private' => ['mode' => 'application', 'allowed' => ['application', 'signed_application', 'temporary_storage']],
+            'maximum_ttl' => 120,
+        ],
+    ],
+],
 ```
 
-Keep private URLs short-lived and use package URL builders. The `v` parameter selects a stored named variation; it is included in signed private URLs. Public URLs generated by the package include an authoritative content version. Unversioned public route requests are forced to revalidate and never receive the immutable policy.
+An omitted disk or visibility policy inherits defaults. Set a visibility to `false` to reject its uploads and delivery on that disk. The `mode` selects the default; `allowed` bounds explicit `MediaDeliveryMode` overrides. Unknown settings, invalid modes, unsupported public/private combinations and invalid lifetime bounds fail explicitly. Policies do not prove provider bucket privacy: keep private data outside publicly exposed buckets or prefixes.
+
+`application` returns a consumer-owned route. For private media it returns an authenticated URL without minting a bearer capability. Ordinary private URL reads reject bearer-mode defaults; issue the capability explicitly, or pass an allowed Application override. The route must check the actual requesting actor's Download permission every time. The application must stream/proxy bytes to keep the storage URL hidden; a redirect exposes its destination. No route failure silently switches to a storage URL.
+
+Pass the serving mode to `MediaAssetService::resolve()`: Application for public/authenticated routes, SignedApplication for signed bearer routes. Resolution enforces current visibility and mode admission, including requests using already-issued URLs. Reconciliation verifies the effective mode and lifetime bound without fetching a remote URL.
+
+Issue `signed_application` links through `MediaUrlResolver::signedUrl($actor, $media, $expiration, $parameters)`. Issue provider `temporary_storage` links through `temporaryUrl($actor, $media, $expiration, $variation)`. Both reload canonical facts on the primary database and check Download authority. Expiration must be in the future and within the disk's maximum (1–604800 seconds). Provider URLs never fall back to unsigned delivery. Owned private assets require their scoped application route and cannot use provider URLs.
+
+Signed application links are replayable bearer capabilities until expiry. Consumer endpoints must validate the signature, canonical owner/scope, current availability and signed source revision. Changing a source invalidates its application links; native provider URLs may remain usable until expiry. An explicit named variation which is unavailable or cannot be represented by the route fails instead of granting its original.
+
+Public application URLs and direct variation URLs carry a content version; originals use opaque immutable object names. Unversioned public route requests must revalidate. Visibility changes require `MediaLibrary::relocate()` to another admitted disk; metadata writes accept only unchanged visibility. Configuration changes never move existing bytes, and making a previously public asset private cannot recall cached copies already published through a CDN. Existing multipart sessions recheck policy before signing/completion; abort remains available for cleanup.
 
 ## Display filename and duplication
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `nvl-media.hash_filenames` | `true` | Compatibility setting; storage identities remain cryptographically random in hardened 2.x |
+| `nvl-media.hash_filenames` | `true` | Retained setting; storage identities remain cryptographically random |
 | `nvl-media.transliterate` | `false` | Transliterate non-ASCII display filenames during sanitization |
 | `nvl-media.allow_duplicates` | `false` | Global default for caller-requested duplicate records |
 | `nvl-media.deduplication.allow_anonymous_private` | `false` | Permit anonymous private digest reuse |
 
-`nvl-media.hash_filenames` must not be treated as a switch back to display-derived object names. Hardened ingestion always generates an opaque object name with only the validated canonical extension. `usingFileName()` affects presentation metadata.
+`nvl-media.hash_filenames` must not be treated as a switch back to display-derived object names. Hardened ingestion always generates an opaque object name with only the validated canonical extension. The uploader's `fileName` and `MediaLibrary::rename()` affect presentation metadata.
 
 Private deduplication is scoped by uploader type and identifier. Anonymous private uploads create unique records by default. Public shared slots deduplicate by validated content digest, disk, and visibility.
 
@@ -498,19 +533,19 @@ Do not add executable or server-handled extensions. Dangerous extensions are rej
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `nvl-media.delete_media_on_model_delete` | `true` | Clean media on force deletion of a media-enabled owner |
+| `nvl-media.delete_media_on_model_delete` | `true` | Host lifecycle-adapter preference; no package owner-delete hook is installed |
 | `nvl-media.delete_files_on_media_delete` | `true` | Remove objects after committed media deletion |
 | `nvl-media.prevent_deleting_reused_public_media` | `true` | Require explicit force for multiply associated public assets |
 | `nvl-media.clean_empty_directories` | `true` | Remove empty local directories after object cleanup |
 
-Soft-deleting an owner preserves associations for restoration. `deletePreservingMedia()` bypasses owner-triggered cleanup deliberately. Do not disable shared-asset protection as a substitute for correct detach semantics.
+The host owns model lifecycle hooks: preserve associations on soft deletion if restoration requires them, and call authorized `MediaAttachments::deleteAll()` for intended permanent cleanup. Implement `HasNvlMedia` with its association relation; the contract does not install deletion hooks or a `deletePreservingMedia()` method. Do not disable shared-asset protection as a substitute for correct detach semantics.
 
-## Associable API security
+## Host association adapters
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `nvl-media.allowed_associable_types` | `[]` | Exact model class allowlist for HTTP attach/detach/reorder |
-| `nvl-media.associable_mutation_abilities` | `[]` | Model-class-to-Gate-ability map; default ability is `update` |
+| `nvl-media.allowed_associable_types` | `[]` | Owner-alias/model-class allowlist retained for an association adapter |
+| `nvl-media.associable_mutation_abilities` | `[]` | Owner-reference-to-Gate-ability map retained for an association adapter |
 
 Example:
 
@@ -529,7 +564,7 @@ use App\Models\Product;
 ],
 ```
 
-The HTTP payload uses the exact allowlisted class name. The target must implement `HasNvlMedia`, exist, and pass its Gate ability. An empty allowlist denies every association mutation.
+Consumers choose and validate their own HTTP owner references; shared Core owner aliases or explicit model classes can identify permitted targets. These configuration keys do not create endpoints or automatically authorize direct native service calls. Resolve the actual `HasNvlMedia` owner, apply the host Gate policy and call `MediaAttachments` with an explicit actor; service ownership and Media authorization remain mandatory.
 
 ## File-existence cache
 
@@ -572,8 +607,6 @@ Mutation paths invalidate affected existence entries. Disable the cache for diag
 | `NVL_MEDIA_JPEG_QUALITY` | `nvl-media.image_formats.jpg.quality` |
 | `NVL_MEDIA_OPTIMIZED_IMAGE_ENABLED` | `nvl-media.output_conversion.enabled` |
 | `NVL_MEDIA_IMAGE_MAX_SIZE` | `nvl-media.output_conversion.max_size` |
-| `NVL_MEDIA_ASSET_SIGNED_URL_LIFETIME` | `nvl-media.assets.signed_url_lifetime` |
-| `NVL_MEDIA_REMOTE_PUBLIC_DELIVERY` | `nvl-media.assets.remote_public_delivery` |
 | `NVL_MEDIA_DEDUPLICATION_LOCK_ENABLED` | `nvl-media.deduplication_lock.enabled` |
 | `NVL_MEDIA_DEDUPLICATION_LOCK_STORE` | `nvl-media.locks.deduplication.store` |
 | `NVL_MEDIA_DEDUPLICATION_LOCK_SECONDS` | `nvl-media.deduplication_lock.seconds` |
@@ -618,4 +651,4 @@ Enable remote ingestion and multipart independently only where required, then ap
 - [Image variations and queues](images-and-queues.md)
 - [Command reference](commands.md)
 
-Canonical configuration/environment inputs win by presence, including false or empty values. Generic old roots/environment names are read only when explicitly selected in Core compatibility; see [Core upgrade guidance](https://github.com/nvl-laravel-suite/core/blob/main/UPGRADING.md#major-5-canonical-configuration-and-environment). Rebuild caches and restart workers after moving inputs.
+Use canonical `nvl-media` configuration and `NVL_MEDIA_*` environment names. Rebuild configuration caches and restart workers after changes. Retired bridge or transport settings do not restore the removed APIs; see [upgrade guidance](../UPGRADING.md).

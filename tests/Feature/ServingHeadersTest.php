@@ -62,7 +62,7 @@ describe('ETag header', function () {
 describe('Cache-Control headers', function () {
     beforeEach(fn () => Storage::fake('public'));
     it('uses public immutable cache for public assets', function () {
-        config(['filesystems.disks.public.url' => null, 'nvl-media.assets.public_cache_control' => 'public, max-age=31536000, immutable']);
+        config(['nvl-media.delivery.disks.public.public.mode' => 'application', 'nvl-media.assets.public_cache_control' => 'public, max-age=31536000, immutable']);
         $media = createHeaderTestMedia();
         Storage::disk('public')->put($media->buildPath(), createTinyJpeg());
         $response = $this->get($media->buildPublicUrl());

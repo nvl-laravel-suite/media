@@ -327,6 +327,25 @@
                 "View"
             ]
         },
+        "Nvl\\Media\\Enums\\MediaDeliveryMode": {
+            "kind": "enum",
+            "file": "src/Enums/MediaDeliveryMode.php",
+            "methods": [
+                "cases",
+                "from",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "Application",
+                "Direct",
+                "SignedApplication",
+                "TemporaryStorage"
+            ]
+        },
         "Nvl\\Media\\Enums\\MediaLifecycleStatus": {
             "kind": "enum",
             "file": "src/Enums/MediaLifecycleStatus.php",
@@ -1002,6 +1021,16 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Media\\Services\\MediaAssetService": {
+            "kind": "class",
+            "file": "src/Services/MediaAssetService.php",
+            "methods": [
+                "__construct",
+                "resolve"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Media\\Services\\MediaAttachments": {
             "kind": "class",
             "file": "src/Services/MediaAttachments.php",
@@ -1020,6 +1049,19 @@
                 "replaceSlot",
                 "reuse",
                 "sync"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Services\\MediaDeliveryPolicy": {
+            "kind": "class",
+            "file": "src/Services/MediaDeliveryPolicy.php",
+            "methods": [
+                "assertExpiration",
+                "assertVisibility",
+                "maximumTtl",
+                "mode",
+                "validate"
             ],
             "properties": [],
             "constants": []
@@ -1131,8 +1173,8 @@
                 "forMedia",
                 "forVariation",
                 "path",
-                "privateUrl",
                 "publicUrl",
+                "signedUrl",
                 "temporaryUrl"
             ],
             "properties": [],

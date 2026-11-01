@@ -12,6 +12,7 @@ use Nvl\Media\Services\MediaDeduplicationLock;
 use Nvl\Media\Tests\Fixtures\Http\Rules\AllowedMimeTypes;
 use Nvl\Media\Tests\Fixtures\Http\Rules\MaxFileSize;
 use Nvl\Media\Tests\Stubs\TestMediaModel;
+use Nvl\Support\Enums\SystemActor;
 
 beforeEach(function () {
     Storage::fake('public');
@@ -201,13 +202,14 @@ describe('MediaAdder MIME validation', function () {
  * Temporary URL crash protection (Task 22)
  * ================================================================= */
 describe('getTemporaryUrl crash protection', function () {
-    it('falls back to regular URL on local disk', function () {
+    it('refuses temporary provider URLs without an unsigned storage fallback', function () {
         $model = securityTestModel();
         $file = UploadedFile::fake()->image('photo.jpg', 100, 100);
-        $media = $model->addMedia($file)->asPublic()->withoutVariations()->slot('gallery');
-        // Local disk doesn't support temporaryUrl — should fall back gracefully
-        $url = $media->getTemporaryUrl(now()->addMinutes(5));
-        expect($url)->toBeString()->and($url)->not->toBeEmpty();
+        $media = $model->addMedia($file)->asPublic(false)->withoutVariations()->slot('gallery');
+        Storage::disk('public')->buildTemporaryUrlsUsing(function (string $path, DateTimeInterface $expiration, array $options): never {
+            throw new RuntimeException('Provider temporary URLs are unavailable.');
+        });
+        expect(fn () => $media->getTemporaryUrl(SystemActor::Background, now()->addMinutes(5)))->toThrow(RuntimeException::class, 'Provider temporary URLs are unavailable.');
     });
 });
 /* =================================================================

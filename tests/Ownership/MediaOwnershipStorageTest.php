@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 use Illuminate\Contracts\Bus\Dispatcher;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -15,7 +16,9 @@ use Nvl\Media\Services\MediaAssetService;
 use Nvl\Media\Services\MediaLibrary;
 use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaOwnerSlotIdempotency;
+use Nvl\Media\Services\MediaUploader;
 use Nvl\Media\Services\MediaVariations;
+use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaAssetUrl;
 use Nvl\Media\Tests\Fixtures\OwnershipActor;
 use Nvl\Media\Tests\Fixtures\OwnershipCompany;
@@ -95,7 +98,7 @@ it('binds private capabilities to ownership generation revision and exact config
     $actor = OwnershipActor::query()->firstOrFail();
     $asset = $runner->run(OwnershipCompany::query()->findOrFail(7), $actor, function () {
         $media = OwnershipMediaScenario::upload(OwnershipMediaScenario::owner());
-        $url = $media->getUrl();
+        $url = $media->buildPrivateUrl(OwnershipActor::query()->firstOrFail(), now()->addMinutes(5));
         parse_str((string) parse_url($url, PHP_URL_QUERY), $parameters);
         expect($parameters['scope'])->toBe(app(OwnershipBoundary::class)->key('media.assets', 'private-url'))->and($parameters['revision'])->toBe((string) $media->revision)->and((new Media)->resolveRouteBinding($media->id)::class)->toBe(OwnershipMedia::class);
 
@@ -107,7 +110,7 @@ it('refuses an unrevocable disk fallback for owned private delivery', function (
     app(OwnershipRunner::class)->run(OwnershipCompany::query()->findOrFail(7), OwnershipActor::query()->firstOrFail(), function (): void {
         $media = OwnershipMediaScenario::upload(OwnershipMediaScenario::owner());
         config()->set('nvl-media.assets.private_route_name', 'missing.owner.route');
-        expect(fn () => MediaAssetUrl::privateUrl($media, temporaryUrl: static fn () => 'https://unscoped-object.test/token'))->toThrow(RuntimeException::class, 'scoped signed application route');
+        expect(fn () => MediaAssetUrl::privateUrl($media, [], now()->addMinute(), temporaryUrl: static fn () => 'https://unscoped-object.test/token'))->toThrow(RuntimeException::class, 'scoped signed application route');
     });
 });
 it('keeps retained delivery handles denied after disabling the ownership runtime', function (): void {
@@ -117,3 +120,103 @@ it('keeps retained delivery handles denied after disabling the ownership runtime
     expect(fn () => $media->getPath())->toThrow(OwnershipViolation::class);
     expect(fn () => app(MediaAssetService::class)->resolve($media))->toThrow(OwnershipViolation::class);
 });
+
+it('keeps owned replacement paths and variations aligned with the transaction outcome', function (string $outcome): void {
+    config(['nvl-media.auto_generate_variations' => false, 'nvl-media.queue.enabled' => false]);
+    $actor = OwnershipActor::query()->firstOrFail();
+    app(OwnershipRunner::class)->run(OwnershipCompany::query()->findOrFail(7), $actor, function () use ($actor, $outcome): void {
+        $definition = ConversionDefinition::fromPreset('thumb', ['width' => 16, 'height' => 16, 'format' => 'png']);
+        $media = app(MediaUploader::class)->upload($actor, UploadedFile::fake()->image('source.png', 32, 32), 'public', OwnershipMediaScenario::owner(), new MediaSlot('documents'), 'source.png', skipAutoVariations: true, variationDefinitions: ['thumb' => $definition]);
+        $variation = app(MediaVariations::class)->generate($actor, $media, $definition);
+        $oldPath = $media->storage_path;
+        $oldBytes = Storage::disk('public')->get($oldPath);
+        $oldVariationPath = $variation->storage_path;
+        $oldVariationBytes = Storage::disk('public')->get($oldVariationPath);
+        $oldRevision = $media->revision;
+        $replacementFile = UploadedFile::fake()->image('replacement.png', 48, 48);
+        $replacementBytes = file_get_contents($replacementFile->getRealPath());
+        DB::beginTransaction();
+        if ($outcome === 'savepoint rollback') {
+            DB::beginTransaction();
+        }
+        $replacement = app(MediaUploader::class)->replace($actor, $media, $replacementFile);
+        $newPath = dirname($oldPath).'/'.$replacement->hash;
+        expect($replacement->storage_path)->toBe($newPath)
+            ->and(Storage::disk('public')->get($replacement->buildPath()))->toBe($replacementBytes)
+            ->and($replacement->revision)->toBe($oldRevision + 1);
+        Storage::disk('public')->assertExists($oldPath);
+        Storage::disk('public')->assertExists($oldVariationPath);
+        if ($outcome === 'commit') {
+            DB::commit();
+            $fresh = $media->fresh();
+            $freshVariation = $fresh->imageVariations()->where('label', 'thumb')->firstOrFail();
+            expect($fresh->storage_path)->toBe($newPath)
+                ->and(Storage::disk('public')->get($fresh->buildPath()))->toBe($replacementBytes)
+                ->and($freshVariation->source_revision)->toBe($fresh->revision)
+                ->and($freshVariation->storage_path)->not->toBe($oldVariationPath);
+            Storage::disk('public')->assertExists($freshVariation->storage_path);
+            Storage::disk('public')->assertMissing($oldPath);
+            Storage::disk('public')->assertMissing($oldVariationPath);
+        } else {
+            DB::rollBack();
+            Storage::disk('public')->assertMissing($newPath);
+            if ($outcome === 'savepoint rollback') {
+                DB::commit();
+            }
+            $fresh = $media->fresh();
+            $freshVariation = $fresh->imageVariations()->where('label', 'thumb')->firstOrFail();
+            expect($fresh->storage_path)->toBe($oldPath)
+                ->and($fresh->revision)->toBe($oldRevision)
+                ->and(Storage::disk('public')->get($fresh->buildPath()))->toBe($oldBytes)
+                ->and($freshVariation->storage_path)->toBe($oldVariationPath)
+                ->and($freshVariation->source_revision)->toBe($oldRevision)
+                ->and(Storage::disk('public')->get($freshVariation->storage_path))->toBe($oldVariationBytes);
+        }
+    });
+})->with(['commit', 'rollback', 'savepoint rollback']);
+
+it('keeps owned move paths and variation bytes aligned with the transaction outcome', function (string $outcome): void {
+    $actor = OwnershipActor::query()->firstOrFail();
+    app(OwnershipRunner::class)->run(OwnershipCompany::query()->findOrFail(7), $actor, function () use ($actor, $outcome): void {
+        $media = OwnershipMediaScenario::upload(OwnershipMediaScenario::owner(), true);
+        $variation = app(MediaVariations::class)->generate($actor, $media, ConversionDefinition::fromPreset('thumb', ['width' => 16, 'height' => 16, 'format' => 'png']));
+        $oldPath = $media->storage_path;
+        $oldBytes = Storage::disk('public')->get($oldPath);
+        $oldVariationPath = $variation->storage_path;
+        $oldVariationBytes = Storage::disk('public')->get($oldVariationPath);
+        $oldRevision = $media->revision;
+        DB::beginTransaction();
+        if ($outcome === 'savepoint rollback') {
+            DB::beginTransaction();
+        }
+        expect(app(MediaLibrary::class)->move($actor, [$media->id], 'moved'))->toBe(1);
+        $moved = $media->fresh();
+        $newPath = $moved->storage_path;
+        $newVariationPath = $variation->fresh()->storage_path;
+        expect($newPath)->not->toBe($oldPath)
+            ->and($newPath)->toEndWith('/moved/'.$media->hash)
+            ->and(Storage::disk('public')->get($moved->buildPath()))->toBe($oldBytes)
+            ->and($moved->revision)->toBe($oldRevision)
+            ->and(Storage::disk('public')->get($newVariationPath))->toBe($oldVariationBytes);
+        Storage::disk('public')->assertExists($oldPath);
+        Storage::disk('public')->assertExists($oldVariationPath);
+        if ($outcome === 'commit') {
+            DB::commit();
+            expect(Storage::disk('public')->get($media->fresh()->buildPath()))->toBe($oldBytes)
+                ->and(Storage::disk('public')->get($variation->fresh()->storage_path))->toBe($oldVariationBytes);
+            Storage::disk('public')->assertMissing($oldPath);
+            Storage::disk('public')->assertMissing($oldVariationPath);
+        } else {
+            DB::rollBack();
+            Storage::disk('public')->assertMissing($newPath);
+            Storage::disk('public')->assertMissing($newVariationPath);
+            if ($outcome === 'savepoint rollback') {
+                DB::commit();
+            }
+            expect($media->fresh()->storage_path)->toBe($oldPath)
+                ->and(Storage::disk('public')->get($media->fresh()->buildPath()))->toBe($oldBytes)
+                ->and($variation->fresh()->storage_path)->toBe($oldVariationPath)
+                ->and(Storage::disk('public')->get($variation->fresh()->storage_path))->toBe($oldVariationBytes);
+        }
+    });
+})->with(['commit', 'rollback', 'savepoint rollback']);

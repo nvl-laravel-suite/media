@@ -8,9 +8,14 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Support\MediaAssetUrl;
+use Nvl\Support\Enums\SystemActor;
 
 function createUrlMedia(array $overrides = []): Media
 {
+    if (isset($overrides['uploaded_by'])) {
+        $overrides += ['uploaded_by_type' => User::class];
+    }
+
     return Media::create(array_merge(['filename' => 'photo.jpg', 'hash' => 'abc123hash.jpg', 'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'size' => 2048, 'disk' => 'public', 'folder' => 'uploads/photos', 'is_public' => true, 'type' => MediaType::IMAGE, 'digest' => md5('test')], $overrides));
 }
 /* =================================================================
@@ -26,16 +31,17 @@ describe('getUrl', function () {
     it('never returns an unsigned storage URL for private media', function () {
         Storage::fake('public');
         $media = createUrlMedia(['disk' => 'public', 'is_public' => false, 'uploaded_by' => 'owner-123']);
-        expect($media->getUrl())->toContain("/nvl/media/private/owner-123/{$media->id}")->toContain('signature=')->not->toContain('/storage/');
+        expect($media->getUrl())->toContain("/nvl/media/authenticated/{$media->id}")->not->toContain('signature=')->not->toContain('/storage/');
     });
     it('fails closed when private signed routes and temporary disk URLs are unavailable', function () {
         $media = createUrlMedia(['is_public' => false, 'uploaded_by' => 'owner-123']);
         config(['nvl-media.assets.private_route_name' => 'nvl-media.private.missing']);
-        MediaAssetUrl::privateUrl(media: $media, diskUrl: static fn (string $_disk, string $_path): string => 'https://public.example.test/unsafe.jpg', temporaryUrl: static function (string $_disk, string $_path, DateTimeInterface $_expiration): never {
+        MediaAssetUrl::privateUrl(media: $media, parameters: [], expiration: now()->addMinute(), diskUrl: static fn (string $_disk, string $_path): string => 'https://public.example.test/unsafe.jpg', temporaryUrl: static function (string $_disk, string $_path, DateTimeInterface $_expiration): never {
             throw new RuntimeException('Temporary URLs are unsupported.');
         });
-    })->throws(RuntimeException::class, 'cannot be delivered securely');
+    })->throws(RuntimeException::class, 'no storage fallback');
     it('delegates to getVariationUrl when variation name given', function () {
+        config(['nvl-media.delivery.disks.public.public.mode' => 'application']);
         Storage::fake('public');
         $media = createUrlMedia(['disk' => 'public', 'folder' => 'uploads', 'hash' => 'abc.jpg']);
         config(['nvl-media.conversions_folder' => 'conversions']);
@@ -88,6 +94,7 @@ describe('getPath', function () {
  * ================================================================= */
 describe('getVariationUrl', function () {
     it('returns variation URL when variation file exists on disk', function () {
+        config(['nvl-media.delivery.disks.public.public.mode' => 'application']);
         Storage::fake('public');
         config(['nvl-media.conversions_folder' => 'conversions']);
         $media = createUrlMedia(['disk' => 'public', 'folder' => 'photos', 'hash' => 'img.jpg']);
@@ -162,9 +169,7 @@ describe('buildPath', function () {
  * ================================================================= */
 describe('centralized URL builders', function () {
     beforeEach(function () {
-        // Clear the disk URL so buildPublicUrl() falls through to the centralized route
-        // instead of returning a direct storage URL.
-        config(['filesystems.disks.public.url' => null]);
+        config(['nvl-media.delivery.disks.public.public.mode' => 'application']);
     });
     it('builds centralized public route URL', function () {
         $media = createUrlMedia(['is_public' => true]);
@@ -174,30 +179,30 @@ describe('centralized URL builders', function () {
     it('builds centralized signed private route URL', function () {
         $owner = User::withoutEvents(static fn (): User => User::forceCreate(['name' => 'Owner', 'email' => fake()->unique()->safeEmail(), 'password' => '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi']));
         $media = createUrlMedia(['is_public' => false, 'uploaded_by' => $owner->id]);
-        $url = $media->buildPrivateUrl();
+        $url = $media->buildPrivateUrl($owner, now()->addMinutes(5));
         expect($url)->toContain("/nvl/media/private/{$owner->id}/{$media->id}")->and($url)->toContain('signature=');
     });
     it('buildUrl chooses public or private route automatically', function () {
         $owner = User::withoutEvents(static fn (): User => User::forceCreate(['name' => 'Owner2', 'email' => fake()->unique()->safeEmail(), 'password' => '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi']));
         $public = createUrlMedia(['is_public' => true, 'hash' => 'public-url-hash.jpg']);
         $private = createUrlMedia(['is_public' => false, 'uploaded_by' => $owner->id, 'hash' => 'private-url-hash.jpg']);
-        expect($public->buildUrl())->toContain("/nvl/media/assets/{$public->id}")->and($private->buildUrl())->toContain("/nvl/media/private/{$owner->id}/{$private->id}");
+        expect($public->buildUrl())->toContain("/nvl/media/assets/{$public->id}")->and($private->buildUrl())->toContain("/nvl/media/authenticated/{$private->id}")->not->toContain('signature=');
     });
-    it('falls back to legacy storage URL when configured public route name is invalid', function () {
+    it('fails closed when configured public application route name is invalid', function () {
         Storage::fake('public');
         config(['filesystems.disks.public.url' => config('app.url').'/storage', 'nvl-media.assets.public_route_name' => 'media.assets.missing']);
         $media = createUrlMedia(['is_public' => true, 'folder' => 'uploads', 'hash' => 'public-route-fallback.jpg']);
-        $url = $media->buildPublicUrl();
-        expect($url)->toContain('uploads/public-route-fallback.jpg')->and($url)->not->toContain('/nvl/media/assets/');
+        expect(fn () => $media->buildPublicUrl())->toThrow(RuntimeException::class, 'unavailable');
     });
-    it('uses configurable private owner fallback and signed URL lifetime', function () {
-        config(['nvl-media.assets.private_owner_fallback' => 'pool-owner', 'nvl-media.assets.signed_url_lifetime' => 2]);
+    it('uses configurable owner fallback with an explicitly requested two minute expiration', function () {
+        config(['nvl-media.assets.private_owner_fallback' => 'pool-owner']);
         $media = createUrlMedia(['is_public' => false, 'uploaded_by' => null, 'hash' => 'private-config-hash.jpg']);
-        $url = $media->buildPrivateUrl();
+        $expiration = now()->addMinutes(2);
+        $url = $media->buildPrivateUrl(SystemActor::Background, $expiration);
         $query = [];
         parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
         $expires = isset($query['expires']) ? (int) $query['expires'] : 0;
-        expect($url)->toContain("/nvl/media/private/pool-owner/{$media->id}")->and($expires)->toBeGreaterThan(0)->and(abs($expires - now()->addMinutes(2)->timestamp))->toBeLessThanOrEqual(5);
+        expect($url)->toContain("/nvl/media/private/pool-owner/{$media->id}")->and($expires)->toBe($expiration->timestamp);
     });
 });
 /* =================================================================

@@ -1,225 +1,40 @@
-# NVL media events
+# NVL Media events
 
-This document describes the implemented source behavior. Acceptance is exercised by the owning package suites and Core committed-event regression tests; current release execution evidence is tracked in consumer-readiness.md. The authoritative machine-readable schema is [event-catalog.json](../resources/event-catalog.json), catalog version `1`. Event `schemaVersion` is independent of catalog version.
+The source event classes and [machine-readable event catalog](../resources/event-catalog.json) describe the major 7 payloads. Event `schemaVersion` is independent of catalog version. Old `*Event` aliases and model-bearing payloads are retired; use canonical class names in listeners, `Event::fake()` and assertions.
 
-## Publication and listener timing
+## Publication and transaction timing
 
-The native host dispatcher receives the captured event after the supplied source connection outer commit, or immediately when that connection has no active transaction.
+Package producers call `Nvl\Support\Events\DomainEventDispatcher::dispatch($event, $writerConnection)`. The host dispatcher receives the captured event after the actual source connection's outer commit, or immediately when that connection has no active transaction. Callbacks attach to the matching connection and nesting record; rollback of that savepoint or outer transaction discards the corresponding publication. Unrelated connection commits cannot publish them. Missing source transaction records fail before commit.
 
-Callbacks attach to the matching native connection and current nesting record; native outer/savepoint rollback discards the corresponding callbacks.
+Host after-commit listeners and queue `after_commit` policies can add their own deferral. Native `Event::dispatch()` is immediate and does not acquire package transaction handling. Host transaction infrastructure and dispatcher bindings remain in place.
 
-Missing source transaction records fail before commit; Mail Notifications reports and drops unusable observations.
+Callbacks are not a durable outbox. A process exit after commit can lose delivery, and repeated producer calls can emit repeated observations. No cross-process deduplication, crash durability or exactly-once delivery is promised. Listener errors cannot undo committed database/file ownership.
 
-Host after-commit listeners and queue after_commit policies can add their own deferral after publication. Host transaction infrastructure and dispatcher bindings are preserved.
+## Payloads and producers
 
-Local callbacks are not an outbox. Process exit between commit and callback can lose delivery; no crash durability or exactly-once delivery is promised.
+All classes implement the native `DomainEvent` and `OwnershipQueuedJob` contracts. `schemaVersion(): int` returns the payload version; `ownershipJobEnvelope()` returns the authority captured when the event was constructed. Actor/owner identifiers and envelopes do not grant a listener permission to read private storage.
 
-One canonical object is dispatched per qualifying producer call. This is local publication, not cross-process deduplication or a guarantee that repeated observations are unique.
+Association snapshots contain only `media_id`, `associable_type`, `associable_id`, `collection` and nullable `locale`. They exclude arbitrary association metadata. Payloads contain no models, private paths, object bytes, signed URLs or temporary credentials. Constructors accepting arrays do not sanitize arbitrary host-added data recursively.
 
-Use Nvl\Support\Events\DomainEventDispatcher::dispatch($event, $writerConnection). Native Event::dispatch() is immediate and has no package interception.
-
-## Payload security and no-op behavior
-
-Media/grant and morph owner identities, revisions and association snapshots only. No model, private path, object bytes, temporary credentials or signed URL. Tenant grants expose persisted ownership identifiers.
-
-Existing changed-state/association/grant guards govern publication. File effect commit marking, prior-object cleanup and variation scheduling retain their ordering before publication; listener errors after commit cannot undo committed file ownership.
-
-MediaAttached::fromAssociation snapshots the persisted association; deletion/detachment use captured association arrays because the rows may no longer be queryable at publication.
-
-Actor/owner identifiers do not grant access. Listeners must preserve the captured ownership and apply their own authorization when reading storage. Readonly payload fields and native value objects are schema facts; public constructors with mixed arrays do not create a new recursive sanitization boundary. Package producer shapes are documented below; hosts must not attach models, mutable service objects or private arbitrary data.
-
-## Canonical events
-
-| Event | Schema version | Trigger |
+| Event | Constructor fields in native order | Current package producer |
 | --- | --- | --- |
-| [MediaAttached](#mediaattached) | 1 | Generic media association persisted. |
-| [MediaCatalogGrantAudited](#mediacataloggrantaudited) | 1 | Tenant catalog grant changed. |
-| [MediaDetached](#mediadetached) | 1 | Generic association snapshots removed. |
-| [MediaMutated](#mediamutated) | 1 | Media public state changed. |
-| [MediaUploaded](#mediauploaded) | 1 | Media row and physical object created. |
+| [MediaAttached](../src/Events/MediaAttached.php) | `string $mediaId`, `array $association`, `int $schemaVersion = 1` | [MediaAttachments::attach()](../src/Services/MediaAttachments.php), on the persisted association connection |
+| [MediaDetached](../src/Events/MediaDetached.php) | `string $mediaId`, `array $affectedAssociations`, `int $schemaVersion = 1` | [MediaAttachments::detach()](../src/Services/MediaAttachments.php), on the configured Media connection |
+| [MediaMutated](../src/Events/MediaMutated.php) | `string $mediaId`, `string $mutation`, `array $affectedAssociations = []`, `int $schemaVersion = 1` | [MediaLibrary](../src/Services/MediaLibrary.php) and [MediaUploader](../src/Services/MediaUploader.php), on the affected Media connection |
+| [MediaUploaded](../src/Events/MediaUploaded.php) | `string $mediaId`, `int $schemaVersion = 1` | [MediaUploader::upload()](../src/Services/MediaUploader.php), when a new row/object is created |
+| [MediaCatalogGrantAudited](../src/Events/MediaCatalogGrantAudited.php) | `string $operation`, `string $grantId`, `string $ownerScopeKey`, `string $mediaId`, `int $sourceRevision`, `int $grantRevision`, `int $schemaVersion = 1` | Schema only: current `MediaOwnerCatalog` methods do not emit this event |
 
-### MediaAttached
+`MediaAttached::fromAssociation()` captures the persisted association. Detachment and deletion capture snapshot lists before removing rows. Mutation names currently emitted are `renamed`, `metadata_updated`, `relocated`, `deleted`, `moved` and `file_replaced`. Deletion supplies affected associations; ordinary mutations use the empty list default. Deduplicated upload reuse does not emit a new `MediaUploaded` fact. Do not assume every catalog, tag, variation or scan operation emits an event.
 
-`Nvl\Media\Events\MediaAttached` · [source](../src/Events/MediaAttached.php) · event schema `1`.
-
-Generic media association persisted.
-
-Constructor parameters, in native order:
-
-| Parameter | Native PHP type | Visibility | Default | Collection shape |
-| --- | --- | --- | --- | --- |
-| `$mediaId` | `string` | public | `required` | `string` |
-| `$association` | `array` | public | `required` | `array{media_id: string, associable_type: string, associable_id: string, collection: string, locale: string\|null}` |
-| `$schemaVersion` | `int` | public | `1` | — |
-
-Public payload fields:
-
-| Field | Native PHP type | Collection shape |
-| --- | --- | --- |
-| `$mediaId` | `string` | `string` |
-| `$association` | `array` | `array{media_id: string, associable_type: string, associable_id: string, collection: string, locale: string\|null}` |
-| `$schemaVersion` | `int` | — |
-
-Producers and exact scheduling connection expressions (variables are resolved in the linked source):
-
-| Producer | Source connection |
-| --- | --- |
-| [Actions/AttachMediaAction.php](../src/Actions/AttachMediaAction.php) | `$association->getConnection()` |
-
-### MediaCatalogGrantAudited
-
-`Nvl\Media\Events\MediaCatalogGrantAudited` · [source](../src/Events/MediaCatalogGrantAudited.php) · event schema `1`.
-
-Tenant catalog grant changed.
-
-Constructor parameters, in native order:
-
-| Parameter | Native PHP type | Visibility | Default | Collection shape |
-| --- | --- | --- | --- | --- |
-| `$operation` | `string` | public | `required` | — |
-| `$grantId` | `string` | public | `required` | — |
-| `$tenantId` | `string` | public | `required` | — |
-| `$mediaId` | `string` | public | `required` | — |
-| `$sourceRevision` | `int` | public | `required` | — |
-| `$grantRevision` | `int` | public | `required` | — |
-| `$schemaVersion` | `int` | public | `1` | — |
-
-Public payload fields:
-
-| Field | Native PHP type | Collection shape |
-| --- | --- | --- |
-| `$operation` | `string` | — |
-| `$grantId` | `string` | — |
-| `$tenantId` | `string` | — |
-| `$mediaId` | `string` | — |
-| `$sourceRevision` | `int` | — |
-| `$grantRevision` | `int` | — |
-| `$schemaVersion` | `int` | — |
-
-Producers and exact scheduling connection expressions (variables are resolved in the linked source):
-
-| Producer | Source connection |
-| --- | --- |
-| [Actions/GrantMediaToTenantAction.php](../src/Actions/GrantMediaToTenantAction.php) | `$existing->getConnection()` |
-| [Actions/GrantMediaToTenantAction.php](../src/Actions/GrantMediaToTenantAction.php) | `$grant->getConnection()` |
-| [Actions/RevokeMediaTenantGrantAction.php](../src/Actions/RevokeMediaTenantGrantAction.php) | `$grant->getConnection()` |
-
-### MediaDetached
-
-`Nvl\Media\Events\MediaDetached` · [source](../src/Events/MediaDetached.php) · event schema `1`.
-
-Generic association snapshots removed.
-
-Constructor parameters, in native order:
-
-| Parameter | Native PHP type | Visibility | Default | Collection shape |
-| --- | --- | --- | --- | --- |
-| `$mediaId` | `string` | public | `required` | `string` |
-| `$affectedAssociations` | `array` | public | `required` | `array<int, array{media_id: string, associable_type: string, associable_id: string, collection: string, locale: string\|null}>` |
-| `$schemaVersion` | `int` | public | `1` | — |
-
-Public payload fields:
-
-| Field | Native PHP type | Collection shape |
-| --- | --- | --- |
-| `$mediaId` | `string` | `string` |
-| `$affectedAssociations` | `array` | `array<int, array{media_id: string, associable_type: string, associable_id: string, collection: string, locale: string\|null}>` |
-| `$schemaVersion` | `int` | — |
-
-Producers and exact scheduling connection expressions (variables are resolved in the linked source):
-
-| Producer | Source connection |
-| --- | --- |
-| [Actions/DetachMediaAction.php](../src/Actions/DetachMediaAction.php) | `(new Media)->getConnection()` |
-
-### MediaMutated
-
-`Nvl\Media\Events\MediaMutated` · [source](../src/Events/MediaMutated.php) · event schema `1`.
-
-Media public state changed.
-
-Constructor parameters, in native order:
-
-| Parameter | Native PHP type | Visibility | Default | Collection shape |
-| --- | --- | --- | --- | --- |
-| `$mediaId` | `string` | public | `required` | `string` |
-| `$mutation` | `string` | public | `required` | `string` |
-| `$affectedAssociations` | `array` | public | `[]` | `array<int, array{media_id: string, associable_type: string, associable_id: string, collection: string, locale: string\|null}>` |
-| `$schemaVersion` | `int` | public | `1` | — |
-
-Public payload fields:
-
-| Field | Native PHP type | Collection shape |
-| --- | --- | --- |
-| `$mediaId` | `string` | `string` |
-| `$mutation` | `string` | `string` |
-| `$affectedAssociations` | `array` | `array<int, array{media_id: string, associable_type: string, associable_id: string, collection: string, locale: string\|null}>` |
-| `$schemaVersion` | `int` | — |
-
-Producers and exact scheduling connection expressions (variables are resolved in the linked source):
-
-| Producer | Source connection |
-| --- | --- |
-| [Actions/BulkMoveMediaAction.php](../src/Actions/BulkMoveMediaAction.php) | `(new Media)->getConnection()` |
-| [Actions/DeleteMediaAction.php](../src/Actions/DeleteMediaAction.php) | `$lockedMedia->getConnection()` |
-| [Actions/RelocateMediaAction.php](../src/Actions/RelocateMediaAction.php) | `$locked->getConnection()` |
-| [Actions/RenameMediaAction.php](../src/Actions/RenameMediaAction.php) | `$media->getConnection()` |
-| [Actions/ReplaceMediaFileAction.php](../src/Actions/ReplaceMediaFileAction.php) | `$lockedMedia->getConnection()` |
-| [Actions/UpdateMediaMetadataAction.php](../src/Actions/UpdateMediaMetadataAction.php) | `$media->getConnection()` |
-
-### MediaUploaded
-
-`Nvl\Media\Events\MediaUploaded` · [source](../src/Events/MediaUploaded.php) · event schema `1`.
-
-Media row and physical object created.
-
-Constructor parameters, in native order:
-
-| Parameter | Native PHP type | Visibility | Default | Collection shape |
-| --- | --- | --- | --- | --- |
-| `$mediaId` | `string` | public | `required` | — |
-| `$schemaVersion` | `int` | public | `1` | — |
-
-Public payload fields:
-
-| Field | Native PHP type | Collection shape |
-| --- | --- | --- |
-| `$mediaId` | `string` | — |
-| `$schemaVersion` | `int` | — |
-
-Producers and exact scheduling connection expressions (variables are resolved in the linked source):
-
-| Producer | Source connection |
-| --- | --- |
-| [Actions/UploadMediaAction.php](../src/Actions/UploadMediaAction.php) | `$created->getConnection()` |
-
-Deprecated alias: `Nvl\Media\Events\MediaUploadedEvent` ([shim](../src/Events/MediaUploadedEvent.php)). It is the same canonical class with this constructor.
-
-## Major 5 listener and queue migration
-
-Legacy names are deprecated for major 5 and removed no earlier than major 6. class_alias preserves imports, instanceof, listener type hints and the new versioned constructor, not the former model-bearing API.
-
-The native Laravel exact-listener bridge reads getRawListeners at delivery time and prepares legacy listeners through makeListener; strict-identical canonical registrations are skipped. Late registration, subscribers, cached discovery and queued listener preparation use the native dispatcher seams covered by Core’s committed-event and native host transaction regressions.
-
-One canonical object is emitted once. Native wildcard/interface listeners see the canonical event once; suffix-specific *Event wildcards must migrate. The bridge does not redispatch a legacy string.
-
-Drain old queued model-bearing payloads and restart workers before upgrade. New serialized alias instances restore the canonical versioned class without model restoration.
-
-Event fakes/filters and assertions use canonical class names. EventAliases::canonicalName() helps migrate old names; old fake filters are not automatically rewritten.
-
-Host custom dispatchers are retained. Explicit EventAliases::listen($event, $listener) maps through the canonical adapter; absent native bridging/host adapter, Doctor reports the deprecated-name limitation.
+## Consumer listeners
 
 ```php
-$aliases = app(\Nvl\Support\Events\EventAliases::class);
-$canonical = $aliases->canonicalName($legacyClass);
-$aliases->listen($canonical, $listener);
+use Illuminate\Support\Facades\Event;
+use Nvl\Media\Events\MediaUploaded;
+
+Event::listen(MediaUploaded::class, HandleMediaUploaded::class);
 ```
 
-## Deferred acceptance checks
+Resolve current data through authorized services in the captured ownership context. Preserve the event's source identity and revision when making downstream decisions. Use a durable host outbox if the business workflow requires crash-safe delivery.
 
-Final testing must compare catalog types/defaults/aliases with actual classes, recursively inspect producer payloads, and prove source outer commit, nested rollback, unrelated connection independence and retry behavior without an uncommitted test-harness transaction. Where applicable it must cover cached/queued listeners, canonical fakes, ownership capture, package no-op guards and observational failure containment. This document does not report those checks as passing.
-
-## Consumer event assertions
-
-Use the canonical event class for `Event::fake([...])` and `Event::assertDispatched(...)`. Laravel fake filters compare the emitted class name. Update listeners and fakes to the current source event class; old aliases are not a Light compatibility API.
-
+Drain old model-bearing queued payloads and restart workers before upgrading. Legacy aliases are not a major 7 compatibility API. See [extension contracts](extending.md), [native PHP services](php-api.md) and [upgrade guidance](../UPGRADING.md).

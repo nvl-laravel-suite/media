@@ -1,4 +1,6 @@
 # BEGIN NVL COMPOSER EXPORTS
+/composer.lock export-ignore
+/vendor export-ignore
 /composer-dependency-analyser.php export-ignore
 /.temp export-ignore
 /build export-ignore

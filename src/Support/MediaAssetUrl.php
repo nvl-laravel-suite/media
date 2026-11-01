@@ -8,14 +8,22 @@ use Closure;
 use DateTimeInterface;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
+use Nvl\Media\Enums\MediaDeliveryMode;
 use Nvl\Media\Enums\MediaLifecycleStatus;
+use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Ownership\MediaOwnership;
+use Nvl\Media\Services\MediaDeliveryPolicy;
 use RuntimeException;
 use Throwable;
 
-/** Canonical URL and path rules shared by models and the injected URL resolver. */
+/**
+ * Canonical URL assembly shared by model reads and the authorized URL resolver.
+ * Capability builders are internal; callers issue grants through MediaUrlResolver.
+ *
+ * @internal
+ */
 final class MediaAssetUrl
 {
     /** @var list<string> */
@@ -34,28 +42,21 @@ final class MediaAssetUrl
         ?Closure $exists = null,
         ?Closure $diskUrl = null,
         ?Closure $temporaryUrl = null,
+        ?MediaDeliveryMode $mode = null,
     ): string {
         self::assertAvailable($media);
 
         if (! $media->is_public) {
             $parameters = $variation !== '' ? ['v' => $variation] : [];
 
-            return self::privateUrl(
-                $media,
-                $parameters,
-                null,
-                null,
-                $exists,
-                $diskUrl,
-                $temporaryUrl,
-            );
+            return self::authenticatedUrl($media, $parameters, $mode);
         }
 
         if ($variation !== '') {
-            return self::forVariationLabel($media, $variation, $exists, $diskUrl, $temporaryUrl);
+            return self::forVariationLabel($media, $variation, $exists, $diskUrl, $temporaryUrl, $mode);
         }
 
-        return self::publicUrl($media, [], $exists, $diskUrl);
+        return self::publicUrl($media, [], $exists, $diskUrl, $mode);
     }
 
     /**
@@ -70,6 +71,7 @@ final class MediaAssetUrl
         ?Closure $exists = null,
         ?Closure $diskUrl = null,
         ?Closure $temporaryUrl = null,
+        ?MediaDeliveryMode $mode = null,
     ): string {
         MediaOwnership::assertVariationOwner($variation);
         /** @var Media $media */
@@ -77,16 +79,16 @@ final class MediaAssetUrl
         self::assertAvailable($media);
 
         if (! self::isCurrentAvailableVariation($media, $variation)) {
-            return self::forMedia($media, '', $exists, $diskUrl, $temporaryUrl);
+            return self::forMedia($media, '', $exists, $diskUrl, $temporaryUrl, $mode);
         }
 
         $path = $variation->getPath();
 
         if (! self::objectExists($media->disk, $path, $exists)) {
-            return self::forMedia($media, '', $exists, $diskUrl, $temporaryUrl);
+            return self::forMedia($media, '', $exists, $diskUrl, $temporaryUrl, $mode);
         }
 
-        return self::buildUrl($media, ['v' => $variation->label], null, null, $exists, $diskUrl, $temporaryUrl);
+        return self::buildUrl($media, ['v' => $variation->label], null, null, $exists, $diskUrl, $temporaryUrl, $mode);
     }
 
     /**
@@ -105,14 +107,19 @@ final class MediaAssetUrl
         ?Closure $exists = null,
         ?Closure $diskUrl = null,
         ?Closure $temporaryUrl = null,
+        ?MediaDeliveryMode $mode = null,
     ): string {
         self::assertAvailable($media);
 
-        if ($media->is_public) {
-            return self::publicUrl($media, $parameters, $exists, $diskUrl);
+        if ($expiration !== null || $owner !== null) {
+            throw new RuntimeException('Issue bearer links through the actor-authorized MediaUrlResolver.');
         }
 
-        return self::privateUrl($media, $parameters, $expiration, $owner, $exists, $diskUrl, $temporaryUrl);
+        if ($media->is_public) {
+            return self::publicUrl($media, $parameters, $exists, $diskUrl, $mode);
+        }
+
+        return self::authenticatedUrl($media, $parameters, $mode);
     }
 
     /**
@@ -127,26 +134,56 @@ final class MediaAssetUrl
         array $parameters = [],
         ?Closure $exists = null,
         ?Closure $diskUrl = null,
+        ?MediaDeliveryMode $mode = null,
     ): string {
         self::assertAvailable($media);
 
-        $diskConfig = self::diskConfig($media->disk);
-        $driver = $diskConfig['driver'] ?? 'local';
+        if (! $media->is_public) {
+            throw new RuntimeException('Private media cannot have an unsigned public URL.');
+        }
+
+        $selected = (new MediaDeliveryPolicy)->mode($media->disk, MediaVisibility::Public, $mode);
         $normalized = self::normalizeAssetParameters($parameters);
         $normalized = self::withoutUnavailableVariation($media, $normalized);
 
-        if ($driver !== 'local' && self::remotePublicDelivery() === 'disk') {
+        if ($selected === MediaDeliveryMode::Direct) {
             return self::diskUrl($media, (string) ($normalized['v'] ?? ''), $exists, $diskUrl);
-        }
-
-        if ($driver === 'local' && ! empty($diskConfig['url']) && $normalized === []) {
-            return self::objectUrl($media->disk, self::mediaPath($media), $diskUrl);
         }
 
         return self::assetRouteUrl($media, array_merge(
             $normalized,
             ['version' => self::versionFor($media, (string) ($normalized['v'] ?? ''))],
         ));
+    }
+
+    /**
+     * Build a protected application URL without issuing an access capability.
+     * The consumer route must authenticate and authorize every download.
+     *
+     * @param  array<string, scalar|null>  $parameters
+     */
+    public static function authenticatedUrl(Media $media, array $parameters = [], ?MediaDeliveryMode $mode = null): string
+    {
+        self::assertAvailable($media);
+
+        if ($media->is_public) {
+            throw new RuntimeException('Authenticated private delivery requires private media.');
+        }
+
+        $selected = (new MediaDeliveryPolicy)->mode($media->disk, MediaVisibility::Private, $mode);
+
+        if ($selected !== MediaDeliveryMode::Application) {
+            throw new RuntimeException('Bearer delivery requires an explicit actor-authorized URL operation.');
+        }
+
+        $parameters = self::withoutUnavailableVariation($media, self::normalizeAssetParameters($parameters));
+        $route = MediaConfiguration::string('nvl-media.assets.authenticated_route_name', 'nvl.media.authenticated.show');
+
+        try {
+            return route($route, ['media' => $media->id, ...$parameters]);
+        } catch (Throwable $exception) {
+            throw new RuntimeException('The authenticated media application route is unavailable.', previous: $exception);
+        }
     }
 
     /**
@@ -159,56 +196,47 @@ final class MediaAssetUrl
      */
     public static function privateUrl(
         Media $media,
-        array $parameters = [],
-        ?DateTimeInterface $expiration = null,
+        array $parameters,
+        DateTimeInterface $expiration,
         ?string $owner = null,
         ?Closure $exists = null,
         ?Closure $diskUrl = null,
         ?Closure $temporaryUrl = null,
     ): string {
         self::assertAvailable($media);
+        if ($media->is_public) {
+            throw new RuntimeException('Private signed delivery requires private media.');
+        }
+        $policy = new MediaDeliveryPolicy;
+        $policy->mode($media->disk, MediaVisibility::Private, MediaDeliveryMode::SignedApplication);
 
         $defaultOwner = MediaConfiguration::string(
             'nvl-media.assets.private_owner_fallback',
             'system',
         );
         $resolvedOwner = $owner ?? $media->uploaded_by ?? $defaultOwner;
+        self::assertCapabilityParameters($media, $parameters);
         $normalized = self::normalizeAssetParameters($parameters);
-        $normalized = self::withoutUnavailableVariation($media, $normalized);
         $payload = [
             'owner' => (string) $resolvedOwner,
             'media' => $media->id,
-            ...(config('nvl-ownership.enabled') === true && MediaOwnership::active() ? ['scope' => MediaOwnership::privateCapabilityKey(), 'revision' => $media->revision] : []),
+            'revision' => $media->revision,
+            ...(config('nvl-ownership.enabled') === true && MediaOwnership::active() ? ['scope' => MediaOwnership::privateCapabilityKey()] : []),
             ...$normalized,
         ];
         $routeName = MediaConfiguration::string(
             'nvl-media.assets.private_route_name',
             'nvl.media.private.show',
         );
-        $fallbackLifetime = MediaConfiguration::integer('nvl-media.temporary_url_lifetime', 5, 1);
-        $ttlMinutes = MediaConfiguration::integer(
-            'nvl-media.assets.signed_url_lifetime',
-            $fallbackLifetime,
-            1,
-        );
-        $expiresAt = $expiration ?? now()->addMinutes(max(1, $ttlMinutes));
+        $policy->assertExpiration($media->disk, $expiration);
 
         try {
-            return URL::temporarySignedRoute($routeName, $expiresAt, $payload);
+            return URL::temporarySignedRoute($routeName, $expiration, $payload);
         } catch (Throwable $routeException) {
             if (config('nvl-ownership.enabled') === true && MediaOwnership::active()) {
                 throw new RuntimeException('Owned private Media requires its scoped signed application route.', previous: $routeException);
             }
-            $path = self::pathForVariationOrOriginal($media, (string) ($normalized['v'] ?? ''));
-
-            try {
-                return self::objectTemporaryUrl($media->disk, $path, $expiresAt, $temporaryUrl);
-            } catch (Throwable) {
-                throw new RuntimeException(
-                    "Private media [{$media->id}] cannot be delivered securely: no signed route or temporary disk URL is available.",
-                    previous: $routeException,
-                );
-            }
+            throw new RuntimeException('The signed media application route is unavailable; no storage fallback is permitted.', previous: $routeException);
         }
     }
 
@@ -226,28 +254,16 @@ final class MediaAssetUrl
         ?Closure $temporaryUrl = null,
     ): string {
         self::assertAvailable($media);
-
-        if (! $media->is_public) {
-            $parameters = $variation !== '' ? ['v' => $variation] : [];
-
-            return self::privateUrl(
-                $media,
-                $parameters,
-                $expiration,
-                null,
-                null,
-                $diskUrl,
-                $temporaryUrl,
-            );
+        $policy = new MediaDeliveryPolicy;
+        $policy->mode($media->disk, $media->visibility, MediaDeliveryMode::TemporaryStorage);
+        $policy->assertExpiration($media->disk, $expiration);
+        if (! $media->is_public && MediaOwnership::active()) {
+            throw new RuntimeException('Owned private Media requires its scoped signed application route.');
         }
-
+        self::assertRequestedVariation($media, $variation);
         $path = self::pathForVariationOrOriginal($media, $variation);
 
-        try {
-            return self::objectTemporaryUrl($media->disk, $path, $expiration, $temporaryUrl);
-        } catch (Throwable) {
-            return self::objectUrl($media->disk, $path, $diskUrl);
-        }
+        return self::objectTemporaryUrl($media->disk, $path, $expiration, $temporaryUrl);
     }
 
     /**
@@ -286,14 +302,15 @@ final class MediaAssetUrl
         ?Closure $exists,
         ?Closure $diskUrl,
         ?Closure $temporaryUrl,
+        ?MediaDeliveryMode $mode = null,
     ): string {
         $variation = self::availableVariation($media, $label);
 
         if ($variation === null) {
-            return self::forMedia($media, '', $exists, $diskUrl, $temporaryUrl);
+            return self::forMedia($media, '', $exists, $diskUrl, $temporaryUrl, $mode);
         }
 
-        return self::forVariation($variation, $exists, $diskUrl, $temporaryUrl);
+        return self::forVariation($variation, $exists, $diskUrl, $temporaryUrl, $mode);
     }
 
     /**
@@ -309,8 +326,8 @@ final class MediaAssetUrl
 
         try {
             return route($routeName, $payload);
-        } catch (Throwable) {
-            return '';
+        } catch (Throwable $exception) {
+            throw new RuntimeException('The public media application route is unavailable.', previous: $exception);
         }
     }
 
@@ -436,13 +453,6 @@ final class MediaAssetUrl
         return $normalized;
     }
 
-    private static function remotePublicDelivery(): string
-    {
-        $mode = config('nvl-media.assets.remote_public_delivery', 'route');
-
-        return $mode === 'disk' ? 'disk' : 'route';
-    }
-
     /**
      * Resolve the configured subset of query parameters supported by asset delivery.
      *
@@ -538,6 +548,31 @@ final class MediaAssetUrl
         if (! $media->isAvailable()) {
             throw new RuntimeException("Media [{$media->id}] is not available for delivery.");
         }
+    }
+
+    /** Reject capability requests which would silently broaden a variation to its original. */
+    private static function assertRequestedVariation(Media $media, string $label): void
+    {
+        if ($label !== '' && ! self::availableVariation($media, $label) instanceof MediaImageVariation) {
+            throw new RuntimeException("Media variation [{$label}] is unavailable for this source revision.");
+        }
+    }
+
+    /**
+     * Validate the requested scope before parameter filtering can discard it.
+     *
+     * @param  array<string, scalar|null>  $parameters
+     */
+    private static function assertCapabilityParameters(Media $media, array $parameters): void
+    {
+        $variation = $parameters['v'] ?? null;
+        if ($variation === null || $variation === '') {
+            return;
+        }
+        if (! is_string($variation) || ! in_array('v', self::allowedParameters(), true)) {
+            throw new RuntimeException('The requested variation cannot be represented by this signed application route.');
+        }
+        self::assertRequestedVariation($media, $variation);
     }
 
     /**

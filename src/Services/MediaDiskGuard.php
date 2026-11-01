@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Services;
 
 use Illuminate\Validation\ValidationException;
+use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Support\MediaDiskResolver;
 
 /**
@@ -17,22 +18,28 @@ use Nvl\Media\Support\MediaDiskResolver;
  */
 final class MediaDiskGuard
 {
+    /** Apply the canonical disk delivery capability policy to visibility-aware writes. */
+    public function __construct(private readonly MediaDeliveryPolicy $deliveryPolicy) {}
+
     /**
      * Assert that the given disk may be used by Media uploads and migrations.
      *
      * @param  string  $disk  Filesystem disk name to evaluate
+     * @param  MediaVisibility|null  $visibility  Actual object visibility when writing files
      *
      * @throws ValidationException When the disk is not allowed for Media
      */
-    public function assertAllowed(string $disk): void
+    public function assertAllowed(string $disk, ?MediaVisibility $visibility = null): void
     {
-        if ($this->isAllowed($disk)) {
-            return;
+        if (! $this->isAllowed($disk)) {
+            throw ValidationException::withMessages([
+                'disk' => ["The disk [{$disk}] is not allowed for media operations."],
+            ]);
         }
 
-        throw ValidationException::withMessages([
-            'disk' => ["The disk [{$disk}] is not allowed for media operations."],
-        ]);
+        if ($visibility !== null) {
+            $this->deliveryPolicy->assertVisibility($disk, $visibility);
+        }
     }
 
     /**
@@ -48,7 +55,7 @@ final class MediaDiskGuard
     {
         $resolved = MediaDiskResolver::resolve($disk, $isPublic);
 
-        $this->assertAllowed($resolved);
+        $this->assertAllowed($resolved, $isPublic === null ? null : ($isPublic ? MediaVisibility::Public : MediaVisibility::Private));
 
         return $resolved;
     }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Nvl\Media\Enums\MediaDeliveryMode;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
@@ -12,19 +13,23 @@ use Nvl\Media\Support\MediaAssetVersion;
 use RuntimeException;
 
 /**
- * MediaAssetService resolves pre-existing image variations for centralized asset delivery.
+ * Resolves canonical storage metadata for consumer-owned application delivery.
  *
- * @internal
+ * Consumers authenticate and authorize requests before calling this adapter.
+ * Returned paths are server-side metadata and must not be exposed in responses.
+ *
+ * @api
  */
 final class MediaAssetService
 {
     public function __construct(
         private readonly MediaFileExistence $existence,
         private readonly MediaDeliveryGuard $delivery,
+        private readonly MediaDeliveryPolicy $policy,
     ) {}
 
     /**
-     * Resolve a media asset path and MIME type for output.
+     * Resolve an available original or pre-existing variation after request authorization.
      *
      * This method only serves pre-existing variations. It does NOT generate
      * new variations on-the-fly. Variations are created at upload time or
@@ -35,13 +40,20 @@ final class MediaAssetService
     public function resolve(
         Media $media,
         ?string $variationLabel = null,
+        MediaDeliveryMode $mode = MediaDeliveryMode::Application,
     ): array {
         $this->delivery->assertAsset($media);
         if (! $media->isAvailable()) {
             throw new RuntimeException("Media [{$media->id}] is not available for delivery.");
         }
 
-        $media->loadMissing('imageVariations');
+        if (! in_array($mode, [MediaDeliveryMode::Application, MediaDeliveryMode::SignedApplication], true)) {
+            throw new RuntimeException('Asset resolution requires an application delivery mode.');
+        }
+        $canonical = $this->canonicalAsset($media);
+        $this->policy->mode($media->disk, $media->visibility, $mode);
+
+        $media->setRelation('imageVariations', $canonical->imageVariations()->chaperone('media')->useWritePdo()->get());
 
         // Look up a named variation (e.g. ?v=thumb)
         $variation = $this->resolveNamedVariation($media, $variationLabel);
@@ -77,6 +89,22 @@ final class MediaAssetService
             'mime_type' => $media->mime_type,
             'etag' => MediaAssetVersion::etag($media),
         ];
+    }
+
+    /** Reject stale or forged storage facts before serving a carried asset. */
+    private function canonicalAsset(Media $media): Media
+    {
+        $canonical = MediaModelRegistry::query()->useWritePdo()->find($media->id);
+        if (! $canonical instanceof Media || ! $canonical->isAvailable()) {
+            throw new RuntimeException("Media [{$media->id}] is not available for delivery.");
+        }
+        foreach (['disk', 'storage_path', 'hash', 'folder', 'extension', 'mime_type', 'revision', 'status', 'visibility', 'is_public'] as $field) {
+            if ($media->getAttribute($field) !== $canonical->getAttribute($field)) {
+                throw new RuntimeException('Asset delivery requires canonical persisted storage, visibility and revision facts.');
+            }
+        }
+
+        return $canonical;
     }
 
     private function resolveNamedVariation(Media $media, ?string $variationLabel): ?MediaImageVariation

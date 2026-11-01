@@ -4,7 +4,7 @@ Native services own orchestration. Replace focused host boundaries through conta
 
 Authorization receives an explicit native actor; background identities require explicit grants. Batch policies express the complete visibility predicate in SQL before hydration and receive the admitted owner set. Register actual model slots through `HasNvlMedia` and `MediaRegistration`.
 
-Scanners return validated native results. Multipart gateways retain provider upload identity, bounded parts and recovery. Remote ingestion retains DNS/connected-IP checks and byte/time limits. Search adapters must retain native ownership and authorization predicates.
+Synchronous `MediaContentScanner::scan(UploadedFile $file): void` throws to reject content. Out-of-band scanners submit the validated native attestation array to `MediaScan::finalize()`; ordinary request metadata is not an attestation. Multipart gateways retain provider upload identity, bounded parts and recovery. Remote ingestion retains DNS/connected-IP checks and byte/time limits. Search adapters must retain native ownership and authorization predicates.
 
 ## Contracts
 
@@ -28,6 +28,5 @@ Events carry committed domain facts. Publish side effects after the real outer c
 - `MediaDetached`: [MediaDetached](../src/Events/MediaDetached.php).
 - `MediaMutated`: [MediaMutated](../src/Events/MediaMutated.php).
 - `MediaUploaded`: [MediaUploaded](../src/Events/MediaUploaded.php).
-- `MediaUploadedEvent`: [MediaUploadedEvent](../src/Events/MediaUploadedEvent.php).
 
 See [PHP API](php-api.md), [event semantics](events.md), [queues](images-and-queues.md) and [S3](s3.md).

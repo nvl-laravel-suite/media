@@ -5,15 +5,18 @@ declare(strict_types=1);
 namespace Nvl\Media\Tests\Fixtures\Consumer\Contracts;
 
 use DateTimeInterface;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Conversions\ConversionDefinition;
+use Nvl\Media\Enums\MediaDeliveryMode;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Tests\Fixtures\Consumer\MediaAdder;
+use Nvl\Support\Enums\SystemActor;
 
 /**
  * @deprecated Use HasNvlMedia and the owner-scoped API; this surface is retained through major 5.
@@ -99,7 +102,7 @@ interface HasMedia extends HasNvlMedia
      *
      * @param  array<string, scalar|null>  $parameters
      */
-    public function buildUrl(string $collection = 'default', array $parameters = [], ?DateTimeInterface $expiration = null): string;
+    public function buildUrl(string $collection = 'default', array $parameters = [], ?MediaDeliveryMode $mode = null): string;
 
     /**
      * Build a centralized public URL for the first media item in a collection.
@@ -108,7 +111,7 @@ interface HasMedia extends HasNvlMedia
      */
     public function buildPublicUrl(string $collection = 'default', array $parameters = []): string;
 
-    public function getFirstTemporaryUrl(DateTimeInterface $expiration, string $collection = 'default', string $conversion = ''): string;
+    public function getFirstTemporaryUrl(Authenticatable|SystemActor $actor, DateTimeInterface $expiration, string $collection = 'default', string $conversion = ''): string;
 
     public function getFallbackMediaUrl(string $collection = 'default', string $conversion = ''): string;
 

@@ -56,6 +56,7 @@ final readonly class MediaDoctor
             $this->migrationOwnershipCheck(),
             ...$this->diskChecks($production),
             $this->storageConfigurationCheck(),
+            $this->deliveryConfigurationCheck(),
             $this->representativeStoragePathCheck($production),
             ...$this->integrityChecks($production),
             ...$this->imageChecks(),
@@ -76,7 +77,7 @@ final readonly class MediaDoctor
     private function storageConfigurationCheck(): array
     {
         try {
-            $guard = new MediaDiskGuard;
+            $guard = $this->container->make(MediaDiskGuard::class);
             foreach ([true, false] as $isPublic) {
                 $disk = MediaDiskResolver::resolve(null, $isPublic);
                 if (! $guard->isAllowed($disk) || config("filesystems.disks.{$disk}") === null) {
@@ -98,6 +99,20 @@ final readonly class MediaDoctor
             return ['key' => 'storage.configuration', 'severity' => 'error', 'passed' => true, 'message' => 'Visibility disks and disk-relative media roots are valid.'];
         } catch (InvalidArgumentException|MediaUploadException $exception) {
             return ['key' => 'storage.configuration', 'severity' => 'error', 'passed' => false, 'message' => $exception->getMessage()];
+        }
+    }
+
+    /** @return array{key: string, severity: string, passed: bool, message: string} */
+    private function deliveryConfigurationCheck(): array
+    {
+        try {
+            $this->container->make(MediaDeliveryPolicy::class)->validate();
+
+            return ['key' => 'delivery.policy', 'severity' => 'error', 'passed' => true,
+                'message' => 'Media delivery policies and link lifetime bounds are valid.'];
+        } catch (Throwable $exception) {
+            return ['key' => 'delivery.policy', 'severity' => 'error', 'passed' => false,
+                'message' => $exception->getMessage()];
         }
     }
 

@@ -8,8 +8,8 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
-use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Enums\MediaAbility;
+use Nvl\Media\Enums\MediaDeliveryMode;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Ownership\MediaDeliveryGuard;
 use Nvl\Media\Ownership\MediaOwnership;
@@ -20,8 +20,6 @@ use Nvl\Media\Support\MediaAssetUrl;
 use Nvl\Media\Support\MediaAssetVersion;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
-use Nvl\Support\Tenancy\Services\TenantSiteAttributes;
-use Nvl\Support\Tenancy\ValueObjects\TenantSiteContext;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -33,7 +31,6 @@ final class MediaAssetController extends Controller
     public function __construct(
         private readonly MediaAssetService $assets,
         private readonly MediaDiskGateway $disks,
-        private readonly MediaAuthorization $authorization,
         private readonly MediaAccessService $access,
         private readonly MediaDeliveryGuard $delivery,
         private readonly OwnershipBoundary $ownership,
@@ -76,19 +73,18 @@ final class MediaAssetController extends Controller
     {
         abort_if($media->is_public || ! $media->isAvailable(), 404);
 
-        $this->assertSignedTenantRevision($request, $media);
+        $this->assertSignedRevision($request, $media);
 
         if (! $this->ownerMatches($owner, $media)) {
             abort(404);
         }
-
-        $this->authorizePrivateDelivery($request, $owner, $media);
 
         $validated = $this->validatedQuery($request, signed: true);
         try {
             $resolved = $this->assets->resolve(
                 media: $media,
                 variationLabel: $validated['v'] ?? null,
+                mode: MediaDeliveryMode::SignedApplication,
             );
         } catch (RuntimeException) {
             abort(404);
@@ -104,6 +100,33 @@ final class MediaAssetController extends Controller
                 'nvl-media.assets.private_cache_control',
                 'private, max-age=0, no-store',
             ),
+            request: $request,
+            etag: $resolved['etag'],
+            filename: $media->filename,
+        );
+    }
+
+    /** Serve private bytes after authorizing the actual authenticated requester. */
+    public function showAuthenticated(Request $request, Media $media): BinaryFileResponse|StreamedResponse|Response
+    {
+        abort_if($media->is_public || ! $media->isAvailable(), 404);
+        $this->delivery->assertAsset($media);
+        $actor = $request->user();
+        abort_unless($actor instanceof Authenticatable, 401);
+        abort_unless($this->access->allows($actor, MediaAbility::Download, $media), 403);
+        $validated = $this->validatedQuery($request);
+        try {
+            $resolved = $this->assets->resolve($media, $validated['v']);
+        } catch (RuntimeException) {
+            abort(404);
+        }
+        $this->ensureAssetVersionMatches($validated['version'], $resolved['etag']);
+
+        return $this->serveFile(
+            disk: $resolved['disk'],
+            path: $resolved['path'],
+            mimeType: $resolved['mime_type'],
+            cacheControl: 'private, max-age=0, no-store',
             request: $request,
             etag: $resolved['etag'],
             filename: $media->filename,
@@ -161,8 +184,11 @@ final class MediaAssetController extends Controller
     }
 
     /** Reject signed capabilities issued for another tenant, revision, or canonical origin. */
-    private function assertSignedTenantRevision(Request $request, Media $media): void
+    private function assertSignedRevision(Request $request, Media $media): void
     {
+        $revision = $request->query('revision');
+        abort_unless(is_string($revision) && ctype_digit($revision) && (string) $media->revision === $revision, 404);
+
         if (config('nvl-ownership.enabled') === true && MediaOwnership::active()) {
             $this->delivery->assertAsset($media);
             $scope = $request->query('scope');
@@ -171,22 +197,7 @@ final class MediaAssetController extends Controller
 
             return;
         }
-        if (config('nvl-tenancy.enabled') !== true) {
-            return;
-        }
 
-        $site = TenantSiteAttributes::read($request);
-        $tenant = $request->query('tenant');
-        $revision = $request->query('revision');
-        abort_unless(
-            $site instanceof TenantSiteContext
-                && is_string($tenant)
-                && hash_equals($site->tenantId->value, $tenant)
-                && is_numeric($revision)
-                && (int) $revision === $media->revision
-                && hash_equals(rtrim($site->canonicalOrigin, '/'), $request->getSchemeAndHttpHost()),
-            404,
-        );
     }
 
     /**
@@ -230,34 +241,6 @@ final class MediaAssetController extends Controller
         return hash_equals((string) $expectedOwner, $owner);
     }
 
-    /**
-     * Enforce the consumer authorization contract for every private delivery.
-     */
-    private function authorizePrivateDelivery(Request $request, string $owner, Media $media): void
-    {
-        /** @var Authenticatable|null $user */
-        $user = $request->user();
-
-        if ($user instanceof Authenticatable) {
-            abort_unless(
-                $this->access->allows($user, MediaAbility::Download, $media),
-                403,
-            );
-
-            return;
-        }
-
-        abort_unless($media->uploader instanceof Authenticatable, 403);
-        abort_unless(
-            $this->authorization->allows(
-                $media->uploader,
-                MediaAbility::Download,
-                $media,
-            ),
-            403,
-        );
-    }
-
     private function serveFile(
         string $disk,
         string $path,
@@ -288,7 +271,7 @@ final class MediaAssetController extends Controller
 
             abort_unless(file_exists($absolutePath), 404);
 
-            return response()->file($absolutePath, $baseHeaders);
+            return response()->file($absolutePath, $baseHeaders)->setCache(['public' => ! str_contains($cacheControl, 'private'), 'private' => str_contains($cacheControl, 'private')]);
         }
 
         try {

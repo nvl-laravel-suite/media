@@ -11,6 +11,7 @@ use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Tests\Fixtures\Consumer\MediaAdder;
 use Nvl\Media\Tests\Stubs\TestMediaModel;
 use Nvl\Media\Tests\Stubs\TestMediaUser;
+use Nvl\Support\Enums\SystemActor;
 
 function testModelClass(): string
 {
@@ -375,7 +376,7 @@ describe('URL and path fallbacks', function () {
     });
     it('returns empty string from getFirstTemporaryUrl when no media', function () {
         $model = createTestModel();
-        $result = $model->getFirstTemporaryUrl(now()->addMinutes(5), 'empty');
+        $result = $model->getFirstTemporaryUrl(SystemActor::Background, now()->addMinutes(5), 'empty');
         expect($result)->toBe('');
     });
 });

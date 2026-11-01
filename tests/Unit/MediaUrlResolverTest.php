@@ -10,9 +10,10 @@ use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Services\MediaUrlResolver;
 use Nvl\Media\Support\MediaAssetUrl;
 use Nvl\Media\Support\MediaAssetVersion;
+use Nvl\Support\Enums\SystemActor;
 
 beforeEach(function () {
-    config(['nvl-media.root_folder' => '', 'nvl-media.conversions_folder' => 'conversions', 'nvl-media.assets.public_route_name' => 'nvl.media.assets.show', 'nvl-media.assets.private_route_name' => 'nvl.media.private.show', 'nvl-media.assets.allowed_parameters' => ['v'], 'nvl-media.assets.private_owner_fallback' => 'system', 'nvl-media.assets.signed_url_lifetime' => 5, 'nvl-media.assets.remote_public_delivery' => 'route']);
+    config(['nvl-media.root_folder' => '', 'nvl-media.conversions_folder' => 'conversions', 'nvl-media.assets.public_route_name' => 'nvl.media.assets.show', 'nvl-media.assets.private_route_name' => 'nvl.media.private.show', 'nvl-media.assets.allowed_parameters' => ['v'], 'nvl-media.assets.private_owner_fallback' => 'system', 'nvl-media.delivery.disks.cloudflare-r2.public.mode' => 'application']);
     if (! Route::has('nvl.media.assets.show')) {
         Route::get('/test-media-assets/{media}', static fn (): string => '')->name('nvl.media.assets.show');
     }
@@ -86,7 +87,7 @@ describe('forMedia', function () {
     });
     it('returns route-based URL for remote disks by default', function () {
         Storage::fake('cloudflare-r2');
-        config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'nvl-media.assets.remote_public_delivery' => 'route']);
+        config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'nvl-media.delivery.disks.cloudflare-r2.public.mode' => 'application']);
         $media = createTestMedia(['disk' => 'cloudflare-r2']);
         $resolver = app(MediaUrlResolver::class);
         $url = $resolver->publicUrl($media);
@@ -94,7 +95,7 @@ describe('forMedia', function () {
     });
     it('keeps remote URLs route-based when route delivery has a configured disk URL', function () {
         Storage::fake('cloudflare-r2');
-        config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'filesystems.disks.cloudflare-r2.url' => 'https://media.example.test', 'nvl-media.assets.remote_public_delivery' => 'route']);
+        config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'filesystems.disks.cloudflare-r2.url' => 'https://media.example.test', 'nvl-media.delivery.disks.cloudflare-r2.public.mode' => 'application']);
         $media = createTestMedia(['disk' => 'cloudflare-r2']);
         $resolver = app(MediaUrlResolver::class);
         $url = $resolver->publicUrl($media);
@@ -102,7 +103,7 @@ describe('forMedia', function () {
     });
     it('can opt into direct disk URLs for remote public media', function () {
         Storage::fake('cloudflare-r2');
-        config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'filesystems.disks.cloudflare-r2.url' => 'https://media.example.test', 'nvl-media.assets.remote_public_delivery' => 'disk']);
+        config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'filesystems.disks.cloudflare-r2.url' => 'https://media.example.test', 'nvl-media.delivery.disks.cloudflare-r2.public.mode' => 'direct']);
         $media = createTestMedia(['disk' => 'cloudflare-r2']);
         $resolver = app(MediaUrlResolver::class);
         $url = $resolver->publicUrl($media);
@@ -124,6 +125,7 @@ describe('forVariation', function () {
         expect($url)->toBeString();
     });
     it('returns variation URL when file exists', function () {
+        config(['nvl-media.delivery.disks.public.public.mode' => 'application']);
         Storage::fake('public');
         $media = createTestMedia(['disk' => 'public']);
         $variation = createResolverVariation($media);
@@ -148,7 +150,7 @@ describe('buildUrl', function () {
         $url = $resolver->buildUrl($media);
         expect($url)->toBeString();
     });
-    it('dispatches to privateUrl for private media', function () {
+    it('dispatches to authenticated application URLs for private media', function () {
         Storage::fake('public');
         $media = createTestMedia(['is_public' => false, 'uploaded_by' => 'user-123']);
         $resolver = app(MediaUrlResolver::class);
@@ -200,13 +202,16 @@ describe('path', function () {
  * temporaryUrl
  * ================================================================= */
 describe('temporaryUrl', function () {
-    it('generates URL without variation', function () {
+    it('refuses unsupported temporary storage delivery without unsigned fallback', function () {
         Storage::fake('public');
-        $media = createTestMedia(['disk' => 'public']);
+        $media = createTestMedia(['disk' => 'public', 'is_public' => false]);
+        $media->digest = md5('temporary private media');
+        $media->save();
+        Storage::disk('public')->buildTemporaryUrlsUsing(function (string $path, DateTimeInterface $expiration, array $options): never {
+            throw new RuntimeException('Provider temporary URLs are unavailable.');
+        });
         $resolver = app(MediaUrlResolver::class);
-        $url = $resolver->temporaryUrl($media, now()->addMinutes(5));
-        // Local disk doesn't support temporaryUrl, falls back to url()
-        expect($url)->toBeString();
+        expect(fn () => $resolver->temporaryUrl(SystemActor::Background, $media, now()->addMinutes(5)))->toThrow(RuntimeException::class, 'Provider temporary URLs are unavailable.');
     });
 });
 describe('delivery availability', function () {
@@ -217,19 +222,19 @@ describe('delivery availability', function () {
         $media->setRelation('imageVariations', collect([$variation]));
         $resolver = app(MediaUrlResolver::class);
         $message = "Media [{$media->id}] is not available for delivery.";
-        $publicResolvers = [static fn (): string => $resolver->forMedia($media), static fn (): string => $resolver->buildUrl($media), static fn (): string => $resolver->publicUrl($media), static fn (): string => $resolver->temporaryUrl($media, now()->addMinutes(5)), static fn (): string => $resolver->path($media), static fn (): string => $resolver->forVariation($variation)];
+        $publicResolvers = [static fn (): string => $resolver->forMedia($media), static fn (): string => $resolver->buildUrl($media), static fn (): string => $resolver->publicUrl($media), static fn (): string => MediaAssetUrl::temporaryUrl($media, now()->addMinutes(5)), static fn (): string => $resolver->path($media), static fn (): string => $resolver->forVariation($variation)];
         foreach ($publicResolvers as $resolve) {
             expect($resolve)->toThrow(RuntimeException::class, $message);
         }
         $media->is_public = false;
         $media->uploaded_by = 'user-123';
-        expect(static fn (): string => $resolver->privateUrl($media))->toThrow(RuntimeException::class, $message);
+        expect(static fn (): string => MediaAssetUrl::privateUrl($media, [], now()->addMinute()))->toThrow(RuntimeException::class, $message);
     });
 });
 describe('variation availability', function () {
     it('falls back from stale and failed variations without exposing their direct objects', function () {
         Storage::fake('cloudflare-r2');
-        config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'filesystems.disks.cloudflare-r2.url' => 'https://media.example.test', 'nvl-media.assets.remote_public_delivery' => 'disk']);
+        config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'filesystems.disks.cloudflare-r2.url' => 'https://media.example.test', 'nvl-media.delivery.disks.cloudflare-r2.public.mode' => 'direct']);
         $media = createTestMedia(['disk' => 'cloudflare-r2', 'hash' => 'current-original.jpg', 'revision' => 3]);
         $stale = createResolverVariation($media, ['id' => 'stale-variation', 'label' => 'stale', 'storage_path' => 'test/conversions/stale.webp', 'source_revision' => 2]);
         $failed = createResolverVariation($media, ['id' => 'failed-variation', 'label' => 'failed', 'storage_path' => 'test/conversions/failed.webp', 'status' => MediaLifecycleStatus::Failed->value]);
@@ -237,18 +242,19 @@ describe('variation availability', function () {
         Storage::disk('cloudflare-r2')->put($stale->getPath(), 'stale');
         Storage::disk('cloudflare-r2')->put($failed->getPath(), 'failed');
         $resolver = app(MediaUrlResolver::class);
-        $urls = [$resolver->forMedia($media, 'stale'), $resolver->forVariation($stale), $resolver->publicUrl($media, ['v' => 'failed']), $resolver->temporaryUrl($media, now()->addMinutes(5), 'failed')];
+        $urls = [$resolver->forMedia($media, 'stale'), $resolver->forVariation($stale), $resolver->publicUrl($media, ['v' => 'failed'])];
         $media->is_public = false;
         $media->uploaded_by = 'user-123';
         config(['nvl-media.assets.private_route_name' => 'nvl-media.private.missing']);
-        $urls[] = MediaAssetUrl::privateUrl(media: $media, parameters: ['v' => 'stale'], temporaryUrl: static fn (string $_disk, string $path, DateTimeInterface $_expiration): string => "https://temporary.example.test/{$path}");
+        expect(fn () => MediaAssetUrl::privateUrl(media: $media, parameters: ['v' => 'stale'], expiration: now()->addMinute()))->toThrow(RuntimeException::class, 'unavailable');
+        expect(fn () => MediaAssetUrl::temporaryUrl($media, now()->addMinutes(5), 'failed'))->toThrow(RuntimeException::class, 'unavailable');
         foreach ($urls as $url) {
             expect($url)->toContain('current-original.jpg')->not->toContain('stale.webp')->not->toContain('failed.webp')->not->toContain('v=stale')->not->toContain('v=failed');
         }
     });
     it('uses only a current available variation for path and cache version resolution', function () {
         Storage::fake('public');
-        config(['filesystems.disks.public.url' => null]);
+        config(['nvl-media.delivery.disks.public.public.mode' => 'application']);
         $media = createTestMedia(['disk' => 'public', 'hash' => 'current-original.jpg', 'revision' => 4]);
         $current = createResolverVariation($media, ['id' => 'current-variation', 'label' => 'current', 'storage_path' => 'test/conversions/current.webp']);
         $stale = createResolverVariation($media, ['id' => 'stale-variation', 'label' => 'stale', 'storage_path' => 'test/conversions/stale.webp', 'source_revision' => 3]);
@@ -266,6 +272,7 @@ describe('variation availability', function () {
  * ================================================================= */
 describe('parameter normalization', function () {
     it('does not let configuration broaden the supported parameter set', function () {
+        config(['nvl-media.delivery.disks.public.public.mode' => 'application']);
         Storage::fake('public');
         config(['nvl-media.assets.allowed_parameters' => ['v', 'w']]);
         $media = createTestMedia(['disk' => 'public']);
@@ -280,7 +287,7 @@ describe('parameter normalization', function () {
     });
     it('lets configuration disable named variation parameters', function () {
         Storage::fake('cloudflare-r2');
-        config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'filesystems.disks.cloudflare-r2.url' => 'https://media.example.test', 'nvl-media.assets.remote_public_delivery' => 'route', 'nvl-media.assets.allowed_parameters' => []]);
+        config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'filesystems.disks.cloudflare-r2.url' => 'https://media.example.test', 'nvl-media.delivery.disks.cloudflare-r2.public.mode' => 'application', 'nvl-media.assets.allowed_parameters' => []]);
         $media = createTestMedia(['disk' => 'cloudflare-r2']);
         $resolver = app(MediaUrlResolver::class);
         $url = $resolver->publicUrl($media, ['v' => 'thumb']);
@@ -288,7 +295,7 @@ describe('parameter normalization', function () {
     });
     it('honors the narrowed allowlist for direct remote disk delivery', function () {
         Storage::fake('cloudflare-r2');
-        config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'filesystems.disks.cloudflare-r2.url' => 'https://media.example.test', 'nvl-media.assets.remote_public_delivery' => 'disk', 'nvl-media.assets.allowed_parameters' => []]);
+        config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'filesystems.disks.cloudflare-r2.url' => 'https://media.example.test', 'nvl-media.delivery.disks.cloudflare-r2.public.mode' => 'direct', 'nvl-media.assets.allowed_parameters' => []]);
         $media = createTestMedia(['disk' => 'cloudflare-r2']);
         $variation = new MediaImageVariation;
         $variation->label = 'thumb';
@@ -299,25 +306,16 @@ describe('parameter normalization', function () {
         $url = $resolver->publicUrl($media, ['v' => 'thumb']);
         expect($url)->toContain('abc123.jpg')->not->toContain('thumb.webp');
     });
-    it('omits disabled named variation parameters from private signed URLs', function () {
+    it('rejects disabled named variations rather than granting the original signed asset', function () {
         Storage::fake('public');
         config(['nvl-media.assets.allowed_parameters' => []]);
         $media = createTestMedia(['disk' => 'public', 'is_public' => false, 'uploaded_by' => 'user-123']);
-        $resolver = app(MediaUrlResolver::class);
-        $url = $resolver->privateUrl($media, ['v' => 'thumb']);
-        $query = [];
-        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
-        expect($query)->not->toHaveKey('v')->toHaveKeys(['expires', 'signature']);
+        expect(fn () => MediaAssetUrl::privateUrl($media, ['v' => 'thumb'], now()->addMinute()))->toThrow(RuntimeException::class, 'cannot be represented');
     });
-    it('uses normalized parameters when private signed routes fall back to temporary disk URLs', function () {
+    it('refuses temporary storage fallback when the signed route is missing', function () {
         config(['nvl-media.assets.allowed_parameters' => [], 'nvl-media.assets.private_route_name' => 'media.private.missing']);
         $media = createTestMedia(['disk' => 'public', 'is_public' => false, 'uploaded_by' => 'user-123']);
-        $variation = new MediaImageVariation;
-        $variation->label = 'thumb';
-        $variation->storage_path = 'test/conversions/thumb.webp';
-        $media->setRelation('imageVariations', collect([$variation]));
-        $url = MediaAssetUrl::privateUrl(media: $media, parameters: ['v' => 'thumb'], temporaryUrl: static fn (string $_disk, string $path, DateTimeInterface $_expiration): string => "https://temporary.example.test/{$path}");
-        expect($url)->toContain('abc123.jpg')->not->toContain('thumb.webp');
+        expect(fn () => MediaAssetUrl::privateUrl(media: $media, parameters: [], expiration: now()->addMinute(), temporaryUrl: static fn (string $_disk, string $path, DateTimeInterface $_expiration): string => "https://temporary.example.test/{$path}"))->toThrow(RuntimeException::class, 'no storage fallback');
     });
     it('publicUrl strips null and empty parameters', function () {
         Storage::fake('public');

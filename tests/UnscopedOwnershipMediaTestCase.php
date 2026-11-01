@@ -5,15 +5,12 @@ declare(strict_types=1);
 namespace Nvl\Media\Tests;
 
 use Nvl\Ownership\Providers\OwnershipServiceProvider;
-use Nvl\Tenancy\Providers\TenancyServiceProvider;
 
 abstract class UnscopedOwnershipMediaTestCase extends MediaTestCase
 {
     protected function getPackageProviders($app): array
     {
-        $providers = array_filter(parent::getPackageProviders($app), static fn (string $class): bool => $class !== TenancyServiceProvider::class);
-
-        return [OwnershipServiceProvider::class, ...$providers];
+        return [OwnershipServiceProvider::class, ...parent::getPackageProviders($app)];
     }
 
     protected function defineEnvironment($app): void

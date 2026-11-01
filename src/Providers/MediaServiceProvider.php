@@ -36,6 +36,7 @@ use Nvl\Media\Services\DenyMediaCatalogAccess;
 use Nvl\Media\Services\ImageOptimizationService;
 use Nvl\Media\Services\MediaAccessService;
 use Nvl\Media\Services\MediaAssetService;
+use Nvl\Media\Services\MediaDeliveryPolicy;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDoctor;
 use Nvl\Media\Services\MediaFileEffectScheduler;
@@ -206,6 +207,7 @@ final class MediaServiceProvider extends ServiceProvider implements OwnershipInt
         $this->app->scoped(MediaOwnershipParentResolver::class);
         $this->app->scoped(MediaPathResolver::class);
         $this->app->scoped(MediaUrlResolver::class);
+        $this->app->scoped(MediaDeliveryPolicy::class);
         $this->app->scoped(MediaImageTransformer::class);
         $this->app->scoped(MediaIngestionPipeline::class);
         $this->app->scoped(ImageOptimizationService::class);

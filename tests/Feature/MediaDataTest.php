@@ -24,6 +24,7 @@ function attachMediaDataRecord(TestMediaModel $owner, Media $media, string $coll
     return MediaAssociation::create(['media_id' => $media->id, 'associable_type' => $owner->getMorphClass(), 'associable_id' => $owner->id, 'collection' => $collection, 'order' => $order, 'metadata' => $metadata]);
 }
 it('serializes media using the association for the requested owner', function () {
+    config(['nvl-media.delivery.disks.public.public.mode' => 'application']);
     $productOwner = createMediaDataTestModel(['name' => 'Product owner']);
     $variantOwner = createMediaDataTestModel(['name' => 'Variant owner']);
     $media = createMediaDataRecord();

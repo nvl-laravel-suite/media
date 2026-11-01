@@ -30,6 +30,7 @@ final class MediaVariations
 {
     public function __construct(
         private readonly MediaAccessService $access,
+        private readonly MediaDiskGuard $diskGuard,
         private readonly MediaImageTransformer $imageTransformer,
         private readonly MediaFileEffectScheduler $fileEffects,
         private readonly MediaFileOperator $files,
@@ -79,6 +80,7 @@ final class MediaVariations
                 }
 
                 $definition->validate();
+                $this->diskGuard->assertAllowed($currentMedia->disk, $currentMedia->visibility);
                 $resultExtension = $definition->getResultExtension($currentMedia->extension);
                 MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($currentMedia): void {
                     $currentMedia->forceFill([

@@ -16,12 +16,13 @@ use Nvl\Media\Tests\Fixtures\OwnershipMedia;
 use Nvl\Media\Tests\Fixtures\OwnershipMediaScenario;
 use Nvl\Media\Tests\OwnershipTestCase;
 use Nvl\Ownership\Services\OwnershipRunner;
+use Nvl\Ownership\Tests\Fixtures\NativeDatabaseSource;
 use Symfony\Component\Process\Process;
 
 uses(OwnershipTestCase::class);
-it('runs real captured Media workers and concurrent receipts on native PostgreSQL', function (): void {
-    if (getenv('NVL_OWNERSHIP_TEST_DRIVER') !== 'pgsql') {
-        $this->markTestSkipped('Requires the explicitly isolated PostgreSQL persistence database.');
+it('runs real captured Media workers and concurrent receipts on native databases', function (): void {
+    if (! in_array(getenv('NVL_OWNERSHIP_TEST_DRIVER'), ['pgsql', 'mysql', 'mariadb'], true)) {
+        $this->markTestSkipped('Requires the explicitly isolated native persistence database.');
     }
     Storage::fake('public');
     $schema = DB::getSchemaBuilder();
@@ -66,7 +67,7 @@ it('runs real captured Media workers and concurrent receipts on native PostgreSQ
             return ['owner' => $owner->id, 'media' => $media->id];
         });
     }
-    $source = json_encode(config('database.connections.sqlite'), JSON_THROW_ON_ERROR);
+    $source = json_encode(NativeDatabaseSource::capture(DB::connection('sqlite')), JSON_THROW_ON_ERROR);
     $root = Storage::disk('public')->path('');
     $worker = new Process([PHP_BINARY, __DIR__.'/../Fixtures/ownership-worker.php', $source, json_encode(['root' => $root], JSON_THROW_ON_ERROR)], timeout: 40);
     $worker->mustRun();

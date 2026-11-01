@@ -43,7 +43,7 @@ final class MediaFileEffectScheduler
     }
 
     /**
-     * Delete staged object paths only when the root database transaction rolls back.
+     * Delete staged object paths when their savepoint or root transaction rolls back.
      *
      * @param  list<string>  $paths
      */
@@ -75,15 +75,29 @@ final class MediaFileEffectScheduler
     }
 
     /**
-     * Register against the root record so Laravel 12 also runs the callback only
-     * after the real outer commit.
+     * Keep real root commit timing while cancelling rolled-back savepoint effects.
      */
     private function afterRootCommit(Closure $callback): void
     {
-        $root = $this->rootTransaction();
+        $root = $this->transactionRecord();
 
         if ($root instanceof DatabaseTransactionRecord) {
-            $root->addCallback($callback);
+            $rolledBack = false;
+            $registrationId = $this->rollbackCallbacks->register(
+                connection: $root->connection,
+                rootLevel: $root->level,
+                callback: static function () use (&$rolledBack): void {
+                    $rolledBack = true;
+                },
+                origin: $this->transactionRecord(latest: true),
+            );
+            $root->addCallback(function () use ($callback, $registrationId, &$rolledBack): void {
+                $this->rollbackCallbacks->cancel($registrationId);
+
+                if (! $rolledBack) {
+                    $callback();
+                }
+            });
 
             return;
         }
@@ -92,12 +106,11 @@ final class MediaFileEffectScheduler
     }
 
     /**
-     * Register against the root record so a committed nested savepoint remains
-     * recoverable when Laravel 12 later rolls the outer transaction back.
+     * Keep staged objects recoverable until their savepoint and root both commit.
      */
     private function afterRootRollback(Closure $callback): void
     {
-        $root = $this->rootTransaction();
+        $root = $this->transactionRecord();
 
         if ($root instanceof DatabaseTransactionRecord) {
             $registrationId = $this->rollbackCallbacks->register(
@@ -106,6 +119,7 @@ final class MediaFileEffectScheduler
                 callback: function () use ($callback): void {
                     $callback();
                 },
+                origin: $this->transactionRecord(latest: true),
             );
             $root->addCallback(
                 fn (): null => $this->rollbackCallbacks->cancel($registrationId),
@@ -113,7 +127,7 @@ final class MediaFileEffectScheduler
         }
     }
 
-    private function rootTransaction(): ?DatabaseTransactionRecord
+    private function transactionRecord(bool $latest = false): ?DatabaseTransactionRecord
     {
         $connection = MediaModelRegistry::newInstance()->getConnection();
 
@@ -128,7 +142,7 @@ final class MediaFileEffectScheduler
             ->filter(
                 static fn (DatabaseTransactionRecord $transaction): bool => $transaction->connection === $connection->getName(),
             )
-            ->sortBy('level')
+            ->sortBy('level', descending: $latest)
             ->first();
 
         return $root instanceof DatabaseTransactionRecord ? $root : null;

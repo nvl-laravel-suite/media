@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Models;
 
 use DateTimeInterface;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -19,14 +20,17 @@ use Illuminate\Support\Collection;
 use Nvl\Media\Builders\MediaBuilder;
 use Nvl\Media\Database\Factories\MediaFactory;
 use Nvl\Media\Definitions\Tables\MediaTables;
+use Nvl\Media\Enums\MediaDeliveryMode;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Models\Concerns\GuardsTenantOwnership;
 use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaPathResolver;
+use Nvl\Media\Services\MediaUrlResolver;
 use Nvl\Media\Support\MediaAssetUrl;
 use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Contracts\Ownable;
 use Nvl\Support\Ownership\Traits\HasOwnership;
 use Nvl\Translatable\Contracts\TranslatableModel;
@@ -65,7 +69,7 @@ use Nvl\Translatable\Translatable;
  * @property string|null $uploaded_by_type
  * @property string|null $upload_session_id
  * @property string|null $failure_code
- * @property string|null $storage_path Immutable persisted original object path.
+ * @property string|null $storage_path Canonical persisted original object path, updated atomically by lifecycle operations.
  * @property string|null $catalog_import_key Tenant-local catalog import idempotency UUID.
  * @property string|null $catalog_source_id Immutable platform source UUID provenance.
  * @property int|null $catalog_source_revision Immutable source revision provenance.
@@ -373,9 +377,9 @@ class Media extends Model implements Ownable, TranslatableModel
     /**
      * Get the public or temporary URL for this media or a variation.
      */
-    public function getUrl(string $variation = ''): string
+    public function getUrl(string $variation = '', ?MediaDeliveryMode $mode = null): string
     {
-        return MediaAssetUrl::forMedia($this, $variation);
+        return MediaAssetUrl::forMedia($this, $variation, mode: $mode);
     }
 
     /**
@@ -389,9 +393,9 @@ class Media extends Model implements Ownable, TranslatableModel
     /**
      * Generate a temporary signed URL.
      */
-    public function getTemporaryUrl(DateTimeInterface $expiration, string $variation = ''): string
+    public function getTemporaryUrl(Authenticatable|SystemActor $actor, DateTimeInterface $expiration, string $variation = ''): string
     {
-        return MediaAssetUrl::temporaryUrl($this, $expiration, $variation);
+        return app(MediaUrlResolver::class)->temporaryUrl($actor, $this, $expiration, $variation);
     }
 
     /**
@@ -401,10 +405,9 @@ class Media extends Model implements Ownable, TranslatableModel
      */
     public function buildUrl(
         array $parameters = [],
-        ?DateTimeInterface $expiration = null,
-        ?string $owner = null,
+        ?MediaDeliveryMode $mode = null,
     ): string {
-        return MediaAssetUrl::buildUrl($this, $parameters, $expiration, $owner);
+        return MediaAssetUrl::buildUrl($this, $parameters, mode: $mode);
     }
 
     /**
@@ -412,9 +415,9 @@ class Media extends Model implements Ownable, TranslatableModel
      *
      * @param  array<string, scalar|null>  $parameters
      */
-    public function buildPublicUrl(array $parameters = []): string
+    public function buildPublicUrl(array $parameters = [], ?MediaDeliveryMode $mode = null): string
     {
-        return MediaAssetUrl::publicUrl($this, $parameters);
+        return MediaAssetUrl::publicUrl($this, $parameters, mode: $mode);
     }
 
     /**
@@ -423,11 +426,11 @@ class Media extends Model implements Ownable, TranslatableModel
      * @param  array<string, scalar|null>  $parameters
      */
     public function buildPrivateUrl(
+        Authenticatable|SystemActor $actor,
+        DateTimeInterface $expiration,
         array $parameters = [],
-        ?DateTimeInterface $expiration = null,
-        ?string $owner = null,
     ): string {
-        return MediaAssetUrl::privateUrl($this, $parameters, $expiration, $owner);
+        return app(MediaUrlResolver::class)->signedUrl($actor, $this, $expiration, $parameters);
     }
 
     /* ---------------------------------------------------------------

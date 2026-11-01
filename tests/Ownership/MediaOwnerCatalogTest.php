@@ -68,3 +68,41 @@ it('defaults grant issuance to deny and keeps copied bytes independent after rev
     });
     $runner->run(OwnershipCompany::query()->findOrFail(8), $actor, fn () => expect(fn () => app(MediaOwnerCatalog::class)->inspect(SystemActor::Background, $foreignGrant))->toThrow(OwnershipViolation::class));
 });
+
+it('requires private destination admission when staging and persisting catalog copies', function (bool $revokeAfterStage): void {
+    Storage::fake('public');
+    $runner = app(OwnershipRunner::class);
+    $actor = OwnershipActor::query()->firstOrFail();
+    $source = $runner->central('media-maintain', $actor, function () {
+        $media = MediaModelRegistry::create(['filename' => 'catalog.txt', 'hash' => 'catalog.txt', 'extension' => 'txt', 'mime_type' => 'text/plain', 'size' => 7, 'disk' => 'public', 'folder' => 'catalog', 'storage_path' => 'media/central/catalog/catalog.txt', 'is_public' => true, 'type' => MediaType::DOCUMENT, 'digest' => hash('sha256', 'catalog')]);
+        Storage::disk('public')->put($media->storage_path, 'catalog');
+
+        return $media;
+    });
+    app()->bind(MediaCatalogAccess::class, fn () => new class implements MediaCatalogAccess
+    {
+        public function assertCanGrant(Authenticatable|SystemActor $actor, string $sourceId, int $revision): void {}
+
+        public function assertCanRevoke(Authenticatable|SystemActor $actor, string $grantId): void {}
+    });
+    app()->forgetScopedInstances();
+    $runner->run(OwnershipCompany::query()->findOrFail(7), $actor, function () use ($source, $revokeAfterStage): void {
+        $catalog = app(MediaOwnerCatalog::class);
+        $grant = $catalog->grant(SystemActor::Background, $source->id, 1);
+        $snapshot = $catalog->inspect(SystemActor::Background, $grant->id);
+        $file = $revokeAfterStage ? $catalog->stage(SystemActor::Background, $snapshot) : null;
+        config(['nvl-media.delivery.disks.public.private' => false]);
+
+        if ($file !== null) {
+            expect(fn () => MediaModelRegistry::newInstance()->getConnection()->transaction(fn () => $catalog->persist(SystemActor::Background, $snapshot, $file, (string) Str::uuid())))
+                ->toThrow(RuntimeException::class, 'does not admit [private] media');
+            $catalog->discard(SystemActor::Background, $file);
+            Storage::disk('public')->assertMissing($file['storagePath']);
+        } else {
+            expect(fn () => $catalog->stage(SystemActor::Background, $snapshot))->toThrow(RuntimeException::class, 'does not admit [private] media');
+        }
+
+        expect(MediaModelRegistry::query()->count())->toBe(0)
+            ->and(Storage::disk('public')->allFiles())->toBe([$source->storage_path]);
+    });
+})->with(['before copy' => false, 'before persist' => true]);

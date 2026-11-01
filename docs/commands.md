@@ -12,11 +12,11 @@ php artisan nvl:media:doctor --production --strict
 php artisan nvl:media:doctor --strict --format=json
 ```
 
-- `--production`: enforces production schema/index, disk, remote-source, scanner, lock, queue, route, and multipart requirements.
+- `--production`: enforces production schema/index, disk, remote-source, scanner, lock, queue, optional-dependency, delivery-policy and multipart requirements.
 - `--strict`: treats failed warnings as failures.
 - `--format=text|json`: human table or machine-readable output.
 
-Checks package tables/columns/indexes, allowlisted disks and exception-enabled writes, representative live Media object paths under the configured root folder, local/public delivery, integrity policy, image drivers/encoders, durable queue timing, management-route authentication, remote cURL/bounds, multi-node locks, authorization/scanner bindings, and multipart recovery/attestation. Soft-deleted Media rows are diagnostic tombstones and do not participate in `storage.persisted_paths`, because canonical deletion may intentionally remove their objects. Disabled multipart is valid; enabled multipart must use a recoverable gateway, central locks, and scanner attestation. Run it after configuration cache is built and before accepting traffic.
+Checks package tables/columns/indexes, allowlisted disks and exception-enabled writes, representative live Media object paths under the configured root folder, delivery modes and lifetime bounds, optional S3 dependencies, integrity policy, image drivers/encoders, durable queue timing, remote cURL/bounds, multi-node locks, authorization/scanner bindings, and multipart recovery/attestation. Soft-deleted Media rows are diagnostic tombstones and do not participate in `storage.persisted_paths`, because canonical deletion may intentionally remove their objects. Disabled multipart is valid; enabled multipart must use a recoverable gateway, central locks, and scanner attestation. Run it after configuration cache is built and before accepting traffic. The provider registers no HTTP routes; Doctor does not certify authentication or authorization in consumer endpoints. Test those in the host application.
 
 ## `nvl:media:adopt-spatie`
 
@@ -28,7 +28,7 @@ php artisan nvl:media:adopt-spatie \
   --source=media_spatie_legacy \
   --translations=media_translations_legacy \
   --variations=media_variations_legacy \
-  --uploader-type='App\\Models\\User' \
+  --uploader-type='App\Models\User' \
   --apply
 ```
 
@@ -57,9 +57,9 @@ php artisan nvl:media:reconcile --production --disk=s3 --cleanup-orphans --older
 
 - `--disk=`: disk to inspect; defaults to `nvl-media.disk`.
 - `--sample=50`: maximum media records to inspect; must be positive.
-- `--public-private-routes` / `--routes`: verify both route-backed delivery contracts.
+- `--public-private-routes` / `--routes`: probe the effective delivery URL contract for each sampled original and variation, including direct, authenticated, signed application and provider temporary modes. It does not make HTTP requests to verify endpoint responses.
 - `--include-trashed`: include soft-deleted media.
-- `--orphans`: inventory paginated objects below the selected disk prefix (`root_folders[disk]`, then `root_folder`) and active tenant partition that are not referenced by live media.
+- `--orphans`: inventory paginated objects below the selected disk prefix (`root_folders[disk]`, then `root_folder`) and admitted owner partition that are not referenced by live media.
 - `--cleanup-orphans`: explicitly delete only age-eligible orphan candidates.
 - `--older-than=1440`: minimum candidate age in minutes; recent objects remain protected.
 - `--force`: required with `--cleanup-orphans` in production.
@@ -69,7 +69,9 @@ php artisan nvl:media:reconcile --production --disk=s3 --cleanup-orphans --older
 - `--cleanup`: explicitly remove the temporary probe.
 - `--no-write`: assert read-only operation; incompatible with `--live-write`.
 
-Whole-disk orphan deletion is always refused when no disk/tenant prefix exists. Root-level Media still supports record-based checks and deletion. `restrict_to_root=false` permits read-only whole-disk orphan inventory.
+Whole-disk orphan deletion is always refused when no disk/owner prefix exists. Root-level Media still supports record-based checks and deletion. `restrict_to_root=false` permits read-only whole-disk orphan inventory.
+
+Capability URL probes use `SystemActor::Background` with the disk's validated `maximum_ttl`; the host must explicitly authorize Download for that actor. They never fetch the remote URL. Disabled visibility/mode policies fail the probe, including for persisted records.
 
 Use live writes only in a controlled non-production probe. Reconciliation remains read-only unless `--live-write` or `--cleanup-orphans` is explicit. Objects with unavailable/unreliable age metadata are always retained and reported. Objects referenced only by soft-deleted media are cleanup candidates, but their database tombstones remain for diagnosis.
 
@@ -182,13 +184,13 @@ php artisan nvl:media:migrate-disk --column=folder --from=legacy --to=library --
 
 - `--from=`, `--to=`: source/destination disk or folder-prefix value.
 - `--column=disk|folder`: migration dimension.
-- `--on-disk=`: required scope option for folder-prefix migrations when desired.
+- `--on-disk=`: optional disk scope for folder-prefix migrations.
 - `--associable-type=*`, `--collection=*`: repeatable association filters.
 - `--records-only`: update database disk metadata without physical copy; use only after an independently verified external copy.
 - `--dry-run`: inspect scope without writes.
 - `--from-path=`: retained as a rejected legacy option; physical moves require a configured source disk.
 
-Cross-disk copies stream data and verify the copied object before changing database metadata. Association filters select media rows, not individual associations; shared rows move globally. Back up metadata, run dry-run, reconcile the source, perform the migration, then reconcile the destination.
+Destination policies must admit each selected record's current visibility. Cross-disk copies stream data and verify the copied object before changing database metadata; canonical storage, visibility, revision and variation snapshots are rechecked under locks before the metadata swap. Source deletion waits for the outer commit. `--records-only` skips byte verification/copy and requires an independently verified destination copy. Association filters select media rows, not individual associations; shared rows move globally. Back up metadata, run dry-run, reconcile the source, perform the migration, then reconcile the destination.
 
 Disk migration applies the destination disk root to originals and variations when roots differ, verifies copied bytes, and updates path metadata together with the disk. Equal roots preserve existing paths. Keep the source root configured until migration completes; `--records-only` assumes an external copy into the destination layout.
 

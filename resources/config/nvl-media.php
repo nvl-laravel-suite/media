@@ -42,6 +42,14 @@ return [
     'private_disk' => null,
     // An explicit empty string stores below the disk root without a base folder.
     'root_folders' => [],
+    'delivery' => [
+        'defaults' => [
+            'public' => ['mode' => 'application', 'allowed' => ['application', 'direct']],
+            'private' => ['mode' => 'application', 'allowed' => ['application', 'signed_application', 'temporary_storage']],
+        ],
+        'maximum_ttl' => 300,
+        'disks' => [],
+    ],
     'sources' => ['remote' => [
         // URL ingestion is an explicit capability. Ordinary request, local,
         // disk, and base64 uploads do not incur its DNS/cURL boundary.

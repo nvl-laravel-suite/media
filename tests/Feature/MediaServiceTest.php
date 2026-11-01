@@ -13,7 +13,6 @@ use League\Flysystem\FilesystemOperator;
 use Nvl\Media\Contracts\MediaContentScanner;
 use Nvl\Media\Contracts\MediaSearchDriver;
 use Nvl\Media\Enums\MediaType;
-use Nvl\Media\Exceptions\MediaInUseException;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
@@ -196,13 +195,13 @@ describe('update', function () {
     it('updates media metadata fields', function () {
         $media = createServiceMedia(['tags' => ['old'], 'is_public' => false]);
         $service = mediaMutationHarness();
-        $updated = $service->update($media->id, ['tags' => ['new', 'updated'], 'is_public' => true]);
-        expect($updated->tags)->toBe(['new', 'updated'])->and($updated->is_public)->toBeTrue();
+        $updated = $service->update($media->id, ['tags' => ['new', 'updated'], 'is_public' => false]);
+        expect($updated->tags)->toBe(['new', 'updated'])->and($updated->is_public)->toBeFalse();
     });
     it('preserves omitted metadata and supports explicit null clears', function () {
         $media = createServiceMedia(['tags' => ['keep-unless-cleared'], 'metadata' => ['source' => 'import'], 'is_public' => true]);
         $service = mediaMutationHarness();
-        $preserved = $service->update($media->id, ['is_public' => false]);
+        $preserved = $service->update($media->id, ['is_public' => true]);
         expect($preserved->tags)->toBe(['keep-unless-cleared'])->and($preserved->metadata)->toBe(['source' => 'import']);
         $cleared = $service->update($media->id, ['tags' => null, 'metadata' => null]);
         expect($cleared->tags)->toBeNull()->and($cleared->metadata)->toBeNull();
@@ -249,12 +248,12 @@ describe('update', function () {
         expect(fn () => mediaMutationHarness()->update($media->id, ['tags' => ['changed'], 'translations' => ['en' => ['unknown' => 'not allowed']]]))->toThrow(ValidationException::class);
         expect($media->fresh()->tags)->toBe(['original'])->and($media->fresh()->translations)->toHaveCount(0);
     });
-    it('prevents a reused public asset from becoming private', function () {
+    it('requires verified relocation rather than metadata changes for a reused public asset', function () {
         $media = createServiceMedia(['is_public' => true]);
         foreach (['owner-a', 'owner-b'] as $ownerId) {
             MediaAssociation::create(['media_id' => $media->id, 'associable_type' => 'test-owner', 'associable_id' => $ownerId, 'collection' => 'gallery', 'order' => 0]);
         }
-        expect(fn () => mediaMutationHarness()->update($media->id, ['is_public' => false]))->toThrow(MediaInUseException::class);
+        expect(fn () => mediaMutationHarness()->update($media->id, ['is_public' => false]))->toThrow(MediaUploadException::class, 'relocate');
         expect($media->fresh()->is_public)->toBeTrue();
     });
     it('wraps in transaction', function () {

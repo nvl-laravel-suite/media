@@ -1,9 +1,11 @@
 <?php
 
 declare(strict_types=1);
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Auth\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Enums\MediaType;
@@ -115,3 +117,49 @@ it('removes staged variation output when the outer transaction rolls back', func
     expect(MediaImageVariation::query()->where('media_id', $media->id)->exists())->toBeFalse();
     Storage::disk('public')->assertMissing($path);
 });
+
+it('cancels replacement effects from a rolled back savepoint while committing its sibling', function (): void {
+    $committed = createCommittedTransactionMedia(['hash' => 'committed-source.txt']);
+    $rolledBack = createCommittedTransactionMedia(['hash' => 'rolled-back-source.txt']);
+    $committedSource = $committed->buildPath();
+    $rolledBackSource = $rolledBack->buildPath();
+    DB::beginTransaction();
+    DB::beginTransaction();
+    $committedReplacement = app(MediaUploader::class)->replace(SystemActor::Background, $committed, UploadedFile::fake()->createWithContent('committed.txt', 'committed replacement'));
+    $committedDestination = $committedReplacement->buildPath();
+    DB::commit();
+    Storage::disk('public')->assertExists($committedSource);
+    DB::beginTransaction();
+    $rolledBackReplacement = app(MediaUploader::class)->replace(SystemActor::Background, $rolledBack, UploadedFile::fake()->createWithContent('rolled-back.txt', 'rolled back replacement'));
+    $rolledBackDestination = $rolledBackReplacement->buildPath();
+    DB::rollBack();
+    expect($rolledBack->fresh()?->buildPath())->toBe($rolledBackSource);
+    Storage::disk('public')->assertExists($committedDestination);
+    DB::commit();
+    expect(Storage::disk('public')->get($rolledBack->fresh()->buildPath()))->toBe('old-content')
+        ->and(Storage::disk('public')->get($committed->fresh()->buildPath()))->toBe('committed replacement');
+    Storage::disk('public')->assertMissing($committedSource);
+    Storage::disk('public')->assertMissing($rolledBackDestination);
+});
+
+it('updates explicit nonowned storage paths when the native service changes the object location', function (string $operation): void {
+    Schema::table((new Media)->getTable(), static function (Blueprint $table): void {
+        $table->string('storage_path')->nullable();
+    });
+    $media = createCommittedTransactionMedia();
+    Storage::disk('public')->move($media->buildPath(), 'adopted/original.txt');
+    $media->forceFill(['storage_path' => 'adopted/original.txt'])->save();
+    $oldPath = $media->buildPath();
+    DB::beginTransaction();
+    if ($operation === 'replace') {
+        app(MediaUploader::class)->replace(SystemActor::Background, $media, UploadedFile::fake()->createWithContent('replacement.txt', 'new explicit bytes'));
+    } else {
+        app(MediaLibrary::class)->move(SystemActor::Background, [$media->id], 'moved');
+    }
+    $updated = $media->fresh();
+    expect($updated->storage_path)->not->toBe($oldPath);
+    Storage::disk('public')->assertExists($oldPath);
+    DB::commit();
+    expect(Storage::disk('public')->get($updated->buildPath()))->toBe($operation === 'replace' ? 'new explicit bytes' : 'old-content');
+    Storage::disk('public')->assertMissing($oldPath);
+})->with(['replace', 'move']);

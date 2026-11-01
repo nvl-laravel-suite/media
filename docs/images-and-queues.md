@@ -97,7 +97,7 @@ $conversion
     ->onQueue('priority-media');
 ```
 
-Terminal uploads may supply `withVariations()` definitions as `ConversionDefinition` instances or preset arrays. Resolution precedence is upload override, model, slot, then global. Upload definitions are normalized into a stable payload and persisted on the media row so replacement and regeneration reproduce them. Deduplicated shared assets accept identical definitions and new labels, but reject conflicts for an existing label. `withoutVariations()` suppresses every automatic dispatch for that terminal upload.
+Pass `variationDefinitions` to `MediaUploader::upload()` as a label-keyed map of `ConversionDefinition` instances or preset arrays. Resolution precedence is upload override, model, slot, then global. Upload definitions are normalized into a stable payload and persisted on the media row so replacement and regeneration reproduce them. Deduplicated shared assets accept identical definitions and new labels, but reject conflicts for an existing label. Set `skipAutoVariations: true` to suppress automatic variation dispatch for that upload. Consumer-owned fluent wrappers may expose their own convenience names; none are provided by the package.
 
 ## Queue configuration
 
@@ -136,7 +136,7 @@ php artisan queue:work redis --queue=media --sleep=1 --tries=3 --timeout=60
 
 The connection's `retry_after` must be greater than the longest Media job timeout. For SQS, set the queue visibility timeout accordingly. Laravel recommends worker timeout remain several seconds shorter than the retry/visibility window. Unique jobs require all workers to share an atomic-lock-capable cache.
 
-Jobs and synchronous processing are dispatched only after the real root database commit. One media/revision/label combination has one uniqueness key, but uniqueness is only an optimization: the action-level Redis/cache mutation lock, row reload, and immediate revision comparison are the correctness boundary. A variation is written to a new immutable random object path and persisted with `updateOrCreate`; stale work removes its staged output and exits without a delete/create gap. Superseded objects are removed after commit, while rollback removes only the new object. Retry exhaustion and stale work are logged, and variation rows retain bounded failure context.
+Jobs and synchronous processing are dispatched only after the real root database commit. One media/revision/label combination has one uniqueness key, but uniqueness is only an optimization: the service-level Redis/cache mutation lock, row reload, and immediate revision comparison are the correctness boundary. A variation is written to a new immutable random object path and persisted with `updateOrCreate`; stale work removes its staged output and exits without a delete/create gap. Superseded objects are removed after commit, while rollback removes only the new object. Retry exhaustion and stale work are logged, and variation rows retain bounded failure context.
 
 ## Naming and invalidation
 
@@ -150,7 +150,7 @@ Available placeholders:
 - `{height}` (actual output height)
 - `{extension}`
 
-Changing content or replacing a source increments the media version/revision. URLs include the asset version for cache invalidation, while source-revision checks prevent stale queued work.
+Replacing or relocating a source increments its revision. Public application URLs and direct variation URLs carry a content version; direct originals use opaque immutable names. Private signed application links include the source revision. These identities and source-revision checks prevent stale queued work, but do not revoke public CDN copies or provider URLs already issued. Variation writes and delivery also recheck the current disk visibility policy.
 
 ## Production rollout
 

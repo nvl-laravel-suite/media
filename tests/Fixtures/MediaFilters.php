@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Nvl\Media\Tests\Fixtures;
 
 use Illuminate\Database\Eloquent\Builder;
-use Nvl\Filterable\Data\FilterCriterion;
 use Nvl\Filterable\Definitions\FilterDefinition;
 use Nvl\Filterable\Definitions\FilterSchema;
 use Nvl\Filterable\Definitions\SortDefinition;
@@ -15,6 +14,7 @@ use Nvl\Filterable\Exceptions\FilterableException;
 use Nvl\Filterable\Traits\Filterable;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
+use Nvl\Media\Tests\Fixtures\Data\MediaFilter;
 
 /**
  * Defines the allowlisted filter and sort surface for Media queries.
@@ -35,12 +35,12 @@ trait MediaFilters
                     'search',
                     'filename',
                     operators: [FilterOperator::Equals],
-                    handler: static function (Builder $query, FilterCriterion $criterion): Builder {
-                        if (! is_string($criterion->value)) {
+                    handler: static function (Builder $query, array $criterion): Builder {
+                        if (! is_string($criterion['value'])) {
                             throw new FilterableException('The media search filter must be a string.');
                         }
 
-                        $term = $criterion->value;
+                        $term = $criterion['value'];
 
                         return $query->where(function (Builder $searchQuery) use ($term): void {
                             $searchQuery->where('filename', 'like', "%{$term}%")

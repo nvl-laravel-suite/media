@@ -47,18 +47,24 @@ function installCorruptingMigrationDisk(string $disk): void
     };
     Storage::set($disk, new LaravelFilesystemAdapter(new Filesystem($adapter), $adapter, $fake->getConfig()));
 }
-function failMigrationDiskDeletes(string $disk, bool $throwOnDelete): void
+function failMigrationDiskDeletes(string $disk, bool $throwOnDelete, int $afterSuccessfulDeletes = 0): void
 {
     $filesystem = Storage::disk($disk);
-    $failingDisk = new class($filesystem->getDriver(), $filesystem->getAdapter(), $filesystem->getConfig(), $throwOnDelete) extends LaravelFilesystemAdapter
+    $failingDisk = new class($filesystem->getDriver(), $filesystem->getAdapter(), $filesystem->getConfig(), $throwOnDelete, $afterSuccessfulDeletes) extends LaravelFilesystemAdapter
     {
-        public function __construct(FilesystemOperator $driver, FlysystemAdapter $adapter, array $config, private readonly bool $throwOnDelete)
+        private int $deletes = 0;
+
+        public function __construct(FilesystemOperator $driver, FlysystemAdapter $adapter, array $config, private readonly bool $throwOnDelete, private readonly int $afterSuccessfulDeletes)
         {
             parent::__construct($driver, $adapter, $config);
         }
 
         public function delete($paths)
         {
+            if ($this->deletes++ < $this->afterSuccessfulDeletes) {
+                return parent::delete($paths);
+            }
+
             if ($this->throwOnDelete) {
                 throw new RuntimeException('Injected source deletion failure.');
             }
@@ -67,6 +73,26 @@ function failMigrationDiskDeletes(string $disk, bool $throwOnDelete): void
         }
     };
     Storage::set($disk, $failingDisk);
+}
+function afterMigrationDiskCopy(string $disk, Closure $callback): void
+{
+    $filesystem = Storage::disk($disk);
+    $adapter = new class($filesystem->getAdapter(), $callback) extends DecoratedAdapter
+    {
+        public function __construct(FlysystemAdapter $adapter, private ?Closure $callback)
+        {
+            parent::__construct($adapter);
+        }
+
+        public function writeStream(string $path, $contents, Config $config): void
+        {
+            $this->adapter->writeStream($path, $contents, $config);
+            $callback = $this->callback;
+            $this->callback = null;
+            $callback?->__invoke();
+        }
+    };
+    Storage::set($disk, new LaravelFilesystemAdapter(new Filesystem($adapter), $adapter, $filesystem->getConfig()));
 }
 it('updates disk records in records-only mode without requiring a configured source disk', function (): void {
     $media = createMigratableMedia(['disk' => 'legacy-media']);
@@ -84,6 +110,53 @@ it('migrates folder prefixes for matching database records', function (): void {
     $alreadyClean = createMigratableMedia(['disk' => 'public', 'folder' => 'vendors/123/docs']);
     $this->artisan('nvl:media:migrate-disk', ['--column' => 'folder', '--from' => 'media/vendors', '--to' => 'vendors', '--on-disk' => 'public'])->expectsConfirmation('Proceed?', 'yes')->assertExitCode(0);
     expect($matching->fresh()->folder)->toBe('vendors/123/docs')->and($otherDisk->fresh()->folder)->toBe('media/vendors/999/docs')->and($alreadyClean->fresh()->folder)->toBe('vendors/123/docs');
+});
+it('migrates every folder prefix beyond the first chunk', function (): void {
+    for ($index = 0; $index < 501; $index++) {
+        createMigratableMedia(['folder' => 'legacy/vendors/'.$index]);
+    }
+
+    $this->artisan('nvl:media:migrate-disk', ['--column' => 'folder', '--from' => 'legacy/vendors', '--to' => 'vendors', '--no-interaction' => true])->assertExitCode(0);
+
+    expect(Media::query()->where('folder', 'like', 'legacy/vendors/%')->count())->toBe(0)
+        ->and(Media::query()->where('folder', 'like', 'vendors/%')->count())->toBe(501);
+});
+it('leaves media inserted after the copy snapshot on its source disk', function (): void {
+    Storage::fake('public');
+    Storage::fake('cloudflare-r2');
+    config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'nvl-media.allowed_disks' => ['public', 'cloudflare-r2']]);
+    $media = createMigratableMedia(['hash' => 'snapshot-original.jpg']);
+    Storage::disk('public')->put($media->buildPath(), 'snapshot-original-content');
+    $inserted = null;
+    afterMigrationDiskCopy('cloudflare-r2', function () use (&$inserted): void {
+        $inserted = createMigratableMedia(['hash' => 'snapshot-insertion.jpg']);
+        Storage::disk('public')->put($inserted->buildPath(), 'snapshot-insertion-content');
+    });
+
+    $this->artisan('nvl:media:migrate-disk', ['--from' => 'public', '--to' => 'cloudflare-r2', '--no-interaction' => true])->assertExitCode(0);
+
+    expect($media->fresh()->disk)->toBe('cloudflare-r2')
+        ->and($inserted)->toBeInstanceOf(Media::class)
+        ->and($inserted->fresh()->disk)->toBe('public');
+    Storage::disk('public')->assertExists($inserted->buildPath());
+    Storage::disk('cloudflare-r2')->assertMissing($inserted->buildPath());
+});
+it('rejects a changed source revision before deleting source objects', function (): void {
+    Storage::fake('public');
+    Storage::fake('cloudflare-r2');
+    config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'nvl-media.allowed_disks' => ['public', 'cloudflare-r2']]);
+    $media = createMigratableMedia(['hash' => 'snapshot-revision.jpg']);
+    $sourcePath = $media->buildPath();
+    Storage::disk('public')->put($sourcePath, 'snapshot-revision-content');
+    afterMigrationDiskCopy('cloudflare-r2', function () use ($media): void {
+        Media::query()->whereKey($media->id)->update(['revision' => $media->revision + 1]);
+    });
+
+    $this->artisan('nvl:media:migrate-disk', ['--from' => 'public', '--to' => 'cloudflare-r2', '--no-interaction' => true])->assertExitCode(1);
+
+    expect($media->fresh()->disk)->toBe('public')
+        ->and(Storage::disk('public')->get($sourcePath))->toBe('snapshot-revision-content');
+    Storage::disk('cloudflare-r2')->assertMissing($sourcePath);
 });
 it('moves objects to an R2-style destination disk without requiring a local destination path', function (): void {
     Storage::fake('public');
@@ -144,6 +217,74 @@ it('preserves a pre-existing destination when source deletion throws', function 
     $this->artisan('nvl:media:migrate-disk', ['--from' => 'public', '--to' => 'cloudflare-r2', '--no-interaction' => true])->expectsOutputToContain('Injected source deletion failure')->assertExitCode(1);
     expect($media->fresh()->disk)->toBe('public')->and(Storage::disk('public')->get($media->buildPath()))->toBe($contents)->and(Storage::disk('cloudflare-r2')->get($media->buildPath()))->toBe($contents);
 });
+it('restores previously deleted sources when a later source deletion fails', function (): void {
+    Storage::fake('public');
+    Storage::fake('cloudflare-r2');
+    config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'nvl-media.allowed_disks' => ['public', 'cloudflare-r2']]);
+    $first = createMigratableMedia(['hash' => 'rollback-partial-first.jpg']);
+    $second = createMigratableMedia(['hash' => 'rollback-partial-second.jpg']);
+    Storage::disk('public')->put($first->buildPath(), 'first-source-content');
+    Storage::disk('public')->put($second->buildPath(), 'second-source-content');
+    failMigrationDiskDeletes('public', throwOnDelete: false, afterSuccessfulDeletes: 1);
+
+    $this->artisan('nvl:media:migrate-disk', ['--from' => 'public', '--to' => 'cloudflare-r2', '--no-interaction' => true])->assertExitCode(1);
+
+    expect($first->fresh()->disk)->toBe('public')
+        ->and($second->fresh()->disk)->toBe('public')
+        ->and(Storage::disk('public')->get($first->buildPath()))->toBe('first-source-content')
+        ->and(Storage::disk('public')->get($second->buildPath()))->toBe('second-source-content');
+    Storage::disk('cloudflare-r2')->assertMissing([$first->buildPath(), $second->buildPath()]);
+});
+it('preserves verified bytes when source deletion has an ambiguous failure', function (bool $failSourceExistence): void {
+    Storage::fake('public');
+    Storage::fake('cloudflare-r2');
+    config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'nvl-media.allowed_disks' => ['public', 'cloudflare-r2']]);
+    $media = createMigratableMedia(['hash' => 'ambiguous-delete.jpg']);
+    $path = $media->buildPath();
+    Storage::disk('public')->put($path, 'ambiguous-delete-content');
+    $filesystem = Storage::disk('public');
+    Storage::set('public', new class($filesystem->getDriver(), $filesystem->getAdapter(), $filesystem->getConfig(), $failSourceExistence) extends LaravelFilesystemAdapter
+    {
+        private bool $deletionAttempted = false;
+
+        public function __construct(FilesystemOperator $driver, FlysystemAdapter $adapter, array $config, private readonly bool $failSourceExistence)
+        {
+            parent::__construct($driver, $adapter, $config);
+        }
+
+        public function delete($paths)
+        {
+            parent::delete($paths);
+            $this->deletionAttempted = true;
+
+            throw new RuntimeException('Injected failure after physical source deletion.');
+        }
+
+        public function exists($path)
+        {
+            if ($this->deletionAttempted && $this->failSourceExistence) {
+                throw new RuntimeException('Unable to establish source existence.');
+            }
+
+            return parent::exists($path);
+        }
+    });
+
+    $this->artisan('nvl:media:migrate-disk', ['--from' => 'public', '--to' => 'cloudflare-r2', '--no-interaction' => true])->assertExitCode(1);
+
+    expect($media->fresh()->disk)->toBe('public');
+
+    if ($failSourceExistence) {
+        Storage::disk('cloudflare-r2')->assertExists($path);
+        expect(Storage::disk('cloudflare-r2')->get($path))->toBe('ambiguous-delete-content');
+
+        return;
+    }
+
+    Storage::disk('public')->assertExists($path);
+    expect(Storage::disk('public')->get($path))->toBe('ambiguous-delete-content');
+    Storage::disk('cloudflare-r2')->assertMissing($path);
+})->with(['source can be inspected' => false, 'source cannot be inspected' => true]);
 it('keeps the source and database unchanged when a copied destination fails checksum verification', function (): void {
     Storage::fake('public');
     installCorruptingMigrationDisk('corrupting-destination');
@@ -244,3 +385,21 @@ it('scopes records-only disk updates by comma-separated associable types', funct
     $this->artisan('nvl:media:migrate-disk', ['--from' => 'legacy-media', '--to' => 'public', '--records-only' => true, '--associable-type' => 'Domain\Content\Article,Domain\Content\Page', '--no-interaction' => true])->assertExitCode(0);
     expect($productMedia->fresh()->disk)->toBe('public')->and($variantMedia->fresh()->disk)->toBe('public')->and($vendorMedia->fresh()->disk)->toBe('legacy-media');
 });
+
+it('rejects the entire migration snapshot when a destination visibility is forbidden', function (bool $recordsOnly): void {
+    Storage::fake('public');
+    Storage::fake('cdn');
+    config(['filesystems.disks.cdn.driver' => 'local', 'nvl-media.allowed_disks' => ['public', 'cdn'], 'nvl-media.delivery.disks.cdn.private' => false]);
+    $public = createMigratableMedia(['id' => '00000000-0000-4000-8000-000000000001']);
+    $private = createMigratableMedia(['id' => '00000000-0000-4000-8000-000000000002', 'is_public' => false]);
+    foreach ([$public, $private] as $media) {
+        Storage::disk('public')->put($media->buildPath(), 'original');
+    }
+
+    $this->artisan('nvl:media:migrate-disk', ['--from' => 'public', '--to' => 'cdn', '--records-only' => $recordsOnly, '--no-interaction' => true])
+        ->expectsOutputToContain('does not admit [private] media')->assertFailed();
+
+    expect($public->fresh()->disk)->toBe('public')->and($private->fresh()->disk)->toBe('public')
+        ->and(Storage::disk('cdn')->allFiles())->toBe([]);
+    Storage::disk('public')->assertExists([$public->buildPath(), $private->buildPath()]);
+})->with(['copy files' => false, 'records only' => true]);

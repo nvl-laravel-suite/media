@@ -18,6 +18,7 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaOwnerGrant;
 use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Services\MediaCatalogProjection;
+use Nvl\Media\Services\MediaDeliveryPolicy;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaFileEffectScheduler;
 use Nvl\Media\Services\MediaFileOperator;
@@ -60,6 +61,7 @@ final class MediaOwnerCatalog implements MediaCatalogImport
         private readonly MediaVariationDispatcher $variations,
         private readonly OwnershipWriter $writer,
         private readonly MediaOwnershipConstraints $constraints,
+        private readonly MediaDeliveryPolicy $deliveryPolicy,
     ) {}
 
     /** Copy one exact authorized catalog revision with staging cleanup on failure. */
@@ -136,6 +138,7 @@ final class MediaOwnerCatalog implements MediaCatalogImport
         if ($this->inspect($actor, $source['grantId']) != $source) {
             throw new OwnershipViolation('The catalog snapshot is stale or forged.');
         }
+        $this->deliveryPolicy->assertVisibility($source['disk'], MediaVisibility::Private);
         $path = $this->paths->storageFolder('catalog', $source['disk']).'/'.MediaHashGenerator::generateForExtension($source['extension']);
         try {
             if (! $this->files->copy($source['disk'], $source['storagePath'], $source['disk'], $path, MediaVisibility::Private)
@@ -171,6 +174,7 @@ final class MediaOwnerCatalog implements MediaCatalogImport
             || ! hash_equals($file['digest'], $this->disks->checksum($file['disk'], $file['storagePath']))) {
             throw new OwnershipViolation('The staged copy, source revision or grant changed.');
         }
+        $this->deliveryPolicy->assertVisibility($file['disk'], MediaVisibility::Private);
         $existing = MediaModelRegistry::query()->where('catalog_import_key', $idempotencyKey)->lockForUpdate()->first();
         if ($existing !== null) {
             if ($existing->catalog_source_id !== $source['sourceId'] || $existing->catalog_source_revision !== $source['sourceRevision'] || $existing->catalog_source_digest !== $source['sourceDigest']) {

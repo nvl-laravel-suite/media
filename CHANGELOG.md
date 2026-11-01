@@ -5,6 +5,16 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Target PHP 8.4, Laravel 13 and major 7 NVL peers; replace transport DTOs, package Actions/controllers/routes/facades and fluent workflows with native actor-authorized services and consumer-owned adapters.
+- Configure delivery per disk and visibility, with application URLs by default, explicit authorized bearer-link issuance and bounded lifetimes, policy admission for writes and delivery, and verified cross-disk visibility changes.
+- Keep S3 and model-declared ownership optional, and align installation, operational guidance and packaged agent instructions with the native API.
+- Exclude local vendor trees and Composer lock files from release archives.
+- Exclude Image Optimizer versions with known security advisories from supported dependency resolutions.
+- Validate original SVG bytes without entity expansion; reject DTDs, processing instructions, external/obfuscated CSS and nested SVG data URLs. Document attachment, nosniff and sandbox delivery requirements.
+- Keep complete remote URLs and unexpected transport details out of public upload failure messages while preserving diagnostic causes and temporary-file cleanup.
+
 ## [6.1.0] - 2026-10-23
 
 <!-- NVL GENERATED CHANGES START -->

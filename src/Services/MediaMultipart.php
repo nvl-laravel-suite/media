@@ -62,7 +62,7 @@ final class MediaMultipart
         if (MediaActors::id($actor) === null) {
             throw new MediaUploadException('Multipart uploads require an identifiable actor.');
         }
-        $this->diskGuard->assertAllowed($data['disk']);
+        $this->diskGuard->assertAllowed($data['disk'], $data['visibility']);
         $this->disks->ensureDefined($data['disk']);
         $maximumSize = MediaConfiguration::integer('nvl-media.multipart.maximum_size', 5 * 1024 * 1024 * 1024, 1);
         if ($data['size'] < 1 || $data['size'] > $maximumSize) {
@@ -178,6 +178,7 @@ final class MediaMultipart
             if (preg_match('/^[a-f0-9]{64}$/', $part['checksum']) !== 1) {
                 throw new MediaUploadException('Multipart parts require a lowercase SHA-256 checksum.');
             }
+            $this->diskGuard->assertAllowed($session->disk, $session->visibility);
             $signedParts = is_array($session->signed_parts) ? $session->signed_parts : [];
             $existing = $signedParts[$part['partNumber']] ?? null;
             $expected = ['length' => $part['byteLength'], 'checksum' => $part['checksum']];
@@ -193,6 +194,8 @@ final class MediaMultipart
         if ($expired) {
             throw new MediaUploadException('Multipart upload session has expired.');
         }
+
+        $this->diskGuard->assertAllowed($session->disk, $session->visibility);
 
         return $this->gateway->signPart($this->sessionMapper->toData($session), ['uploadId' => $session->id, 'partNumber' => $part['partNumber'], 'checksum' => $part['checksum'], 'byteLength' => $part['byteLength']]);
     }
@@ -275,6 +278,7 @@ final class MediaMultipart
                 throw new MediaUploadException("Multipart session cannot complete from status [{$session->status->value}].");
             }
             $this->completeAssertParts($session, $parts);
+            $this->diskGuard->assertAllowed($session->disk, $session->visibility);
             $session->status = MediaMultipartStatus::Completing;
             $session->failure_code = null;
             $session->failure_context = null;
@@ -290,6 +294,7 @@ final class MediaMultipart
         }
         $sessionData = $this->sessionMapper->toData($session);
         $authoritativeCompletion = ['uploadId' => $session->id, 'parts' => $parts];
+        $this->diskGuard->assertAllowed($session->disk, $session->visibility);
         try {
             $object = $this->gateway->complete($sessionData, $authoritativeCompletion);
         } catch (Throwable $exception) {

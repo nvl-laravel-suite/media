@@ -1,12 +1,16 @@
 <?php
 
 declare(strict_types=1);
+use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Auth\User;
 use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Console\Commands\StorageHealthCommand;
+use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
+use Nvl\Media\Services\DefaultMediaAuthorization;
 use Nvl\Media\Services\MediaPathResolver;
 
 function configureStorageHealthR2Fake(): void
@@ -70,6 +74,7 @@ it('fails when an existing variation row points to a missing object', function (
 });
 it('verifies route-backed public and signed private media URL contracts', function (): void {
     configureStorageHealthR2Fake();
+    config(['nvl-media.delivery.disks.cloudflare-r2.private.mode' => 'signed_application']);
     $owner = createStorageHealthUser();
     $public = createStorageHealthMedia(['hash' => 'route-public.jpg', 'is_public' => true]);
     $private = createStorageHealthMedia(['hash' => 'route-private.jpg', 'is_public' => false, 'uploaded_by' => $owner->id]);
@@ -87,12 +92,12 @@ it('uses production mode as a read-only route and records verification preset', 
     $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--sample' => 10, '--production' => true])->expectsOutputToContain('Mode: production read-only')->expectsOutputToContain('Records checked: 2')->expectsOutputToContain('Route contracts checked: 2')->expectsOutputToContain('Media storage health check passed.')->assertExitCode(0);
     expect(Storage::disk('cloudflare-r2')->allFiles('healthchecks'))->toBe([]);
 });
-it('fails route verification when public remote media is configured for direct disk delivery', function (): void {
+it('verifies direct public delivery without requiring an application route', function (): void {
     configureStorageHealthR2Fake();
-    config(['filesystems.disks.cloudflare-r2.url' => 'https://cdn.example.test', 'nvl-media.assets.remote_public_delivery' => 'disk']);
+    config(['filesystems.disks.cloudflare-r2.url' => 'https://cdn.example.test', 'nvl-media.delivery.disks.cloudflare-r2.public' => ['mode' => 'direct', 'allowed' => ['direct']], 'nvl-media.assets.public_route_name' => 'missing.public.route']);
     $media = createStorageHealthMedia(['hash' => 'direct-public.jpg']);
     putStorageHealthOriginal($media);
-    $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--sample' => 10, '--public-private-routes' => true, '--no-write' => true])->expectsOutputToContain("Public media [{$media->id}] generated non-route URL")->assertExitCode(1);
+    $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--sample' => 10, '--public-private-routes' => true, '--no-write' => true])->expectsOutputToContain('Media storage health check passed.')->assertExitCode(0);
 });
 it('runs the optional live write probe and cleans up the healthcheck object', function (): void {
     configureStorageHealthR2Fake();
@@ -143,4 +148,76 @@ it('reports objects referenced only by soft-deleted tombstones as candidates', f
 it('requires force before production orphan cleanup', function (): void {
     configureStorageHealthR2Fake();
     $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--production' => true, '--cleanup-orphans' => true])->expectsOutputToContain('--force is required for orphan cleanup in production.')->assertFailed();
+});
+
+it('verifies private application policies without issuing a background download grant', function (): void {
+    configureStorageHealthR2Fake();
+    app()->bind(MediaAuthorization::class, DefaultMediaAuthorization::class);
+    app()->forgetScopedInstances();
+    app(Kernel::class)->registerCommand(app(StorageHealthCommand::class));
+    config(['nvl-media.delivery.disks.cloudflare-r2.private' => ['mode' => 'application', 'allowed' => ['application']]]);
+    $media = createStorageHealthMedia(['is_public' => false]);
+    putStorageHealthOriginal($media);
+    $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--production' => true])
+        ->expectsOutputToContain('Media storage health check passed.')->assertSuccessful();
+});
+
+it('bounds signed private health probes by the disk maximum lifetime', function (): void {
+    configureStorageHealthR2Fake();
+    config(['nvl-media.delivery.disks.cloudflare-r2' => ['maximum_ttl' => 120, 'private' => ['mode' => 'signed_application', 'allowed' => ['signed_application']]]]);
+    $media = createStorageHealthMedia(['is_public' => false]);
+    putStorageHealthOriginal($media);
+    $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--production' => true])
+        ->expectsOutputToContain('Media storage health check passed.')->assertSuccessful();
+});
+
+it('reports denied background capability probes as health failures', function (string $mode): void {
+    configureStorageHealthR2Fake();
+    app()->bind(MediaAuthorization::class, DefaultMediaAuthorization::class);
+    app()->forgetScopedInstances();
+    app(Kernel::class)->registerCommand(app(StorageHealthCommand::class));
+    config(['nvl-media.delivery.disks.cloudflare-r2.private' => ['mode' => $mode, 'allowed' => [$mode]]]);
+    $media = createStorageHealthMedia(['is_public' => false]);
+    putStorageHealthOriginal($media);
+    $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--production' => true])
+        ->expectsOutputToContain('cannot download')->expectsOutputToContain('Media storage health check failed.')->assertFailed();
+})->with(['signed_application', 'temporary_storage']);
+
+it('reports a missing configured application delivery route', function (): void {
+    configureStorageHealthR2Fake();
+    config(['nvl-media.assets.public_route_name' => 'missing.public.route']);
+    $media = createStorageHealthMedia();
+    putStorageHealthOriginal($media);
+    $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--production' => true])
+        ->expectsOutputToContain('Route [missing.public.route] is not registered')->assertFailed();
+});
+
+it('verifies explicitly authorized provider delivery with bounded expiration', function (): void {
+    configureStorageHealthR2Fake();
+    config(['nvl-media.delivery.disks.cloudflare-r2' => ['maximum_ttl' => 120, 'private' => ['mode' => 'temporary_storage', 'allowed' => ['temporary_storage']]]]);
+    $this->freezeTime();
+    $expirations = [];
+    Storage::disk('cloudflare-r2')->buildTemporaryUrlsUsing(function (string $path, DateTimeInterface $expiration) use (&$expirations): string {
+        $expirations[] = $expiration->getTimestamp();
+
+        return 'https://storage.example.test/'.$path.'?expires='.$expiration->getTimestamp();
+    });
+    $media = createStorageHealthMedia(['is_public' => false]);
+    putStorageHealthOriginal($media);
+    $variation = createStorageHealthVariation($media);
+    putStorageHealthVariation($media, $variation);
+    $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--production' => true])
+        ->expectsOutputToContain('remote delivery is not requested')->assertSuccessful();
+    expect($expirations)->toBe([now()->addSeconds(120)->getTimestamp(), now()->addSeconds(120)->getTimestamp()]);
+});
+
+it('reports unsupported provider delivery without falling back to another mode', function (): void {
+    configureStorageHealthR2Fake();
+    $disk = Storage::disk('cloudflare-r2');
+    Storage::set('cloudflare-r2', new FilesystemAdapter($disk->getDriver(), $disk->getAdapter(), $disk->getConfig()));
+    config(['nvl-media.delivery.disks.cloudflare-r2.private' => ['mode' => 'temporary_storage', 'allowed' => ['temporary_storage']]]);
+    $media = createStorageHealthMedia(['is_public' => false]);
+    putStorageHealthOriginal($media);
+    $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--production' => true])
+        ->expectsOutputToContain('does not support creating temporary URLs')->assertFailed();
 });

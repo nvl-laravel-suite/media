@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Nvl\Media\Services;
 
 use Closure;
+use Illuminate\Contracts\Container\Container;
+use Illuminate\Database\DatabaseTransactionRecord;
 use Illuminate\Database\Events\TransactionRolledBack;
 
 /**
- * Tracks root-transaction rollback callbacks behind Laravel's stable connection event.
+ * Tracks transaction rollback callbacks behind Laravel's stable connection event.
  *
  * The provider owns one listener for this singleton registry, while scoped Media services
  * register callbacks that are removed as soon as their root transaction finishes.
@@ -21,6 +23,7 @@ final class MediaTransactionRollbackRegistry
      * @var array<int, array{
      *     connection: string,
      *     root_level: int,
+     *     origin: ?DatabaseTransactionRecord,
      *     callback: Closure(): void,
      * }>
      */
@@ -29,16 +32,26 @@ final class MediaTransactionRollbackRegistry
     private int $nextRegistrationId = 0;
 
     /**
-     * Register a callback for rollback below its owning root transaction level.
+     * Resolve the transaction manager used by the connection event listener.
+     */
+    public function __construct(private readonly Container $container) {}
+
+    /**
+     * Register root rollback work, optionally cancelled with its originating savepoint.
      *
      * @param  Closure(): void  $callback
      */
-    public function register(string $connection, int $rootLevel, Closure $callback): int
-    {
+    public function register(
+        string $connection,
+        int $rootLevel,
+        Closure $callback,
+        ?DatabaseTransactionRecord $origin = null,
+    ): int {
         $registrationId = ++$this->nextRegistrationId;
         $this->callbacks[$registrationId] = [
             'connection' => $connection,
             'root_level' => $rootLevel,
+            'origin' => $origin,
             'callback' => $callback,
         ];
 
@@ -62,16 +75,23 @@ final class MediaTransactionRollbackRegistry
     }
 
     /**
-     * Execute callbacks whose owning root transaction was rolled back.
+     * Execute callbacks whose root or originating transaction was rolled back.
      */
     public function handle(TransactionRolledBack $event): void
     {
         $transactionLevel = $event->connection->transactionLevel();
         $registrationIds = [];
+        $transactions = $this->container->make('db.transactions');
+        $remainingTransactions = $transactions->getPendingTransactions()
+            ->merge($transactions->getCommittedTransactions());
 
         foreach ($this->callbacks as $registrationId => $registration) {
             if ($registration['connection'] === $event->connectionName
-                && $transactionLevel < $registration['root_level']) {
+                && ($transactionLevel < $registration['root_level']
+                    || ($registration['origin'] !== null
+                        && ! $remainingTransactions->contains(
+                            static fn (DatabaseTransactionRecord $transaction): bool => $transaction === $registration['origin'],
+                        )))) {
                 $registrationIds[] = $registrationId;
             }
         }

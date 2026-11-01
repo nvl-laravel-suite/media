@@ -166,7 +166,7 @@ describe('GenerateImageVariationAction', function () {
     })->with(['failTempnam', 'failRename']);
     it('materializes a temporary local source file for remote-style disks', function () {
         Storage::fake('s3');
-        config(['filesystems.disks.s3.driver' => 's3']);
+        config(['filesystems.disks.s3.driver' => 's3', 'nvl-media.allowed_disks' => ['public', 's3']]);
         $media = createVariationMedia(['disk' => 's3', 'folder' => 'uploads', 'hash' => 'remote-source.jpg']);
         Storage::disk('s3')->put($media->buildPath(), 'original');
         $remoteStoragePath = Storage::disk('s3')->path($media->buildPath());

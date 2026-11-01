@@ -55,7 +55,7 @@ describe('public media asset route', function () {
     });
     it('uses configurable immutable cache-control only for versioned public assets', function () {
         config(['nvl-media.assets.public_cache_control' => 'public, max-age=600']);
-        config(['filesystems.disks.public.url' => null]);
+        config(['nvl-media.delivery.disks.public.public.mode' => 'application']);
         $media = createAssetMedia(['is_public' => true, 'hash' => 'public-cache.jpg']);
         Storage::disk('public')->put($media->buildPath(), createTinyJpegBinary());
         $response = $this->get($media->buildPublicUrl());
@@ -91,7 +91,7 @@ describe('public media asset route', function () {
         $this->get("/nvl/media/assets/{$media->id}?v=thumb")->assertUnprocessable();
     });
     it('accepts the generated current public asset version', function () {
-        config(['filesystems.disks.public.url' => null]);
+        config(['nvl-media.delivery.disks.public.public.mode' => 'application']);
         $media = createAssetMedia(['is_public' => true, 'hash' => 'versioned-param.jpg']);
         Storage::disk('public')->put($media->buildPath(), createTinyJpegBinary());
         $url = $media->buildPublicUrl();
@@ -101,7 +101,7 @@ describe('public media asset route', function () {
         $this->get($url)->assertOk();
     });
     it('rejects a fabricated public asset version', function () {
-        config(['filesystems.disks.public.url' => null]);
+        config(['nvl-media.delivery.disks.public.public.mode' => 'application']);
         $media = createAssetMedia(['is_public' => true, 'hash' => 'fabricated-version.jpg']);
         Storage::disk('public')->put($media->buildPath(), createTinyJpegBinary());
         $url = $media->buildPublicUrl();
@@ -149,7 +149,7 @@ describe('private media asset route', function () {
         $owner = createAssetUser();
         $media = createAssetMedia(['is_public' => false, 'uploaded_by' => $owner->id]);
         Storage::disk('public')->put($media->buildPath(), createTinyJpegBinary());
-        $url = URL::temporarySignedRoute('nvl.media.private.show', now()->addMinutes(5), ['owner' => $owner->id, 'media' => $media->id]);
+        $url = URL::temporarySignedRoute('nvl.media.private.show', now()->addMinutes(5), ['owner' => $owner->id, 'media' => $media->id, 'revision' => $media->revision]);
         $this->get($url)->assertOk()->assertHeader('Content-Type', 'image/jpeg');
     });
     it('allows signed framework parameters when configuration disables variations', function () {
@@ -157,14 +157,14 @@ describe('private media asset route', function () {
         $owner = createAssetUser();
         $media = createAssetMedia(['is_public' => false, 'uploaded_by' => $owner->id, 'hash' => 'signed-framework-params.jpg']);
         Storage::disk('public')->put($media->buildPath(), createTinyJpegBinary());
-        $url = URL::temporarySignedRoute('nvl.media.private.show', now()->addMinutes(5), ['owner' => $owner->id, 'media' => $media->id]);
+        $url = URL::temporarySignedRoute('nvl.media.private.show', now()->addMinutes(5), ['owner' => $owner->id, 'media' => $media->id, 'revision' => $media->revision]);
         $this->get($url)->assertOk()->assertHeader('Content-Type', 'image/jpeg');
     });
     it('rejects unknown parameters even when covered by a valid private signature', function () {
         $owner = createAssetUser();
         $media = createAssetMedia(['is_public' => false, 'uploaded_by' => $owner->id, 'hash' => 'signed-unknown-param.jpg']);
         Storage::disk('public')->put($media->buildPath(), createTinyJpegBinary());
-        $url = URL::temporarySignedRoute('nvl.media.private.show', now()->addMinutes(5), ['owner' => $owner->id, 'media' => $media->id, 'unexpected' => 'value']);
+        $url = URL::temporarySignedRoute('nvl.media.private.show', now()->addMinutes(5), ['owner' => $owner->id, 'media' => $media->id, 'revision' => $media->revision, 'unexpected' => 'value']);
         $this->get($url)->assertUnprocessable();
     });
     it('returns 404 when owner segment does not match the media owner', function () {
@@ -172,24 +172,24 @@ describe('private media asset route', function () {
         $other = createAssetUser();
         $media = createAssetMedia(['is_public' => false, 'uploaded_by' => $owner->id]);
         Storage::disk('public')->put($media->buildPath(), createTinyJpegBinary());
-        $url = URL::temporarySignedRoute('nvl.media.private.show', now()->addMinutes(5), ['owner' => $other->id, 'media' => $media->id]);
+        $url = URL::temporarySignedRoute('nvl.media.private.show', now()->addMinutes(5), ['owner' => $other->id, 'media' => $media->id, 'revision' => $media->revision]);
         $this->get($url)->assertNotFound();
     });
-    it('enforces media policy for authenticated users', function () {
+    it('honors an authorized bearer capability independently of the recipient login', function () {
         $owner = createAssetUser();
         $other = createAssetUser();
         $media = createAssetMedia(['is_public' => false, 'uploaded_by' => $owner->id]);
         Storage::disk('public')->put($media->buildPath(), createTinyJpegBinary());
-        $url = URL::temporarySignedRoute('nvl.media.private.show', now()->addMinutes(5), ['owner' => $owner->id, 'media' => $media->id]);
-        $this->actingAs($other)->get($url)->assertForbidden();
+        $url = $media->buildPrivateUrl($owner, now()->addMinutes(5));
+        $this->actingAs($other)->get($url)->assertOk();
     });
-    it('cannot bypass the authorization contract through removed legacy config', function () {
+    it('keeps authenticated downloads protected despite removed legacy policy config', function () {
         config(['nvl-media.assets.enforce_policy_for_authenticated' => false]);
         $owner = createAssetUser();
         $other = createAssetUser();
         $media = createAssetMedia(['is_public' => false, 'uploaded_by' => $owner->id, 'hash' => 'policy-toggle.jpg']);
         Storage::disk('public')->put($media->buildPath(), createTinyJpegBinary());
-        $url = URL::temporarySignedRoute('nvl.media.private.show', now()->addMinutes(5), ['owner' => $owner->id, 'media' => $media->id]);
+        $url = $media->getUrl();
         $this->actingAs($other)->get($url)->assertForbidden();
     });
     it('streams private media from a remote-style disk when signature and owner match', function () {
@@ -198,7 +198,7 @@ describe('private media asset route', function () {
         $owner = createAssetUser();
         $media = createAssetMedia(['disk' => 's3', 'is_public' => false, 'uploaded_by' => $owner->id, 'hash' => 'remote-private.jpg']);
         Storage::disk('s3')->put($media->buildPath(), createTinyJpegBinary());
-        $url = URL::temporarySignedRoute('nvl.media.private.show', now()->addMinutes(5), ['owner' => $owner->id, 'media' => $media->id]);
+        $url = URL::temporarySignedRoute('nvl.media.private.show', now()->addMinutes(5), ['owner' => $owner->id, 'media' => $media->id, 'revision' => $media->revision]);
         $this->get($url)->assertOk()->assertHeader('Content-Type', 'image/jpeg');
     });
     it('streams private media from the cloudflare-r2 disk only through a matching signed route', function () {
@@ -207,7 +207,7 @@ describe('private media asset route', function () {
         $owner = createAssetUser();
         $media = createAssetMedia(['disk' => 'cloudflare-r2', 'is_public' => false, 'uploaded_by' => $owner->id, 'hash' => 'r2-private.jpg']);
         Storage::disk('cloudflare-r2')->put($media->buildPath(), createTinyJpegBinary());
-        $url = URL::temporarySignedRoute('nvl.media.private.show', now()->addMinutes(5), ['owner' => $owner->id, 'media' => $media->id]);
+        $url = URL::temporarySignedRoute('nvl.media.private.show', now()->addMinutes(5), ['owner' => $owner->id, 'media' => $media->id, 'revision' => $media->revision]);
         $this->get("/nvl/media/assets/{$media->id}")->assertNotFound();
         $this->get($url)->assertOk()->assertHeader('Content-Type', 'image/jpeg');
     });
@@ -232,6 +232,7 @@ describe('asset variation parameters', function () {
         $definition->width(150)->height(150)->quality(80)->format('webp');
         $variation = $action->generate(auth()->user() ?? SystemActor::Background, $media, $definition);
         expect($variation)->toBeInstanceOf(MediaImageVariation::class);
+        config(['nvl-media.delivery.disks.public.public.mode' => 'application']);
         $url = $variation->getUrl();
         $query = [];
         parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
@@ -247,3 +248,69 @@ describe('asset variation parameters', function () {
         expect($count)->toBe(0);
     });
 });
+
+describe('authenticated private media asset route', function (): void {
+    beforeEach(fn () => Storage::fake('public'));
+
+    it('requires authentication before resolving private media', function (): void {
+        $this->getJson('/nvl/media/authenticated/00000000-0000-0000-0000-000000000000')->assertUnauthorized();
+    });
+
+    it('authorizes the requesting actor on every private download', function (): void {
+        $owner = createAssetUser();
+        $other = createAssetUser();
+        $media = createAssetMedia(['is_public' => false, 'uploaded_by' => $owner->id]);
+        Storage::disk('public')->put($media->buildPath(), 'private bytes');
+        $this->actingAs($other)->get($media->getUrl())->assertForbidden();
+    });
+
+    it('serves authorized private bytes without issuing or redirecting to a bearer URL', function (): void {
+        $owner = createAssetUser();
+        $media = createAssetMedia(['is_public' => false, 'uploaded_by' => $owner->id]);
+        Storage::disk('public')->put($media->buildPath(), 'private bytes');
+        $url = $media->getUrl();
+        expect($url)->not->toContain('signature=')->not->toContain('expires=');
+        $response = $this->actingAs($owner)->get($url);
+        $response->assertOk()->assertHeaderMissing('Location');
+        expect((string) $response->headers->get('Cache-Control'))->toContain('private')->toContain('no-store');
+        ob_start();
+        $response->baseResponse->sendContent();
+        expect(ob_get_clean())->toBe('private bytes');
+    });
+
+    it('rejects signed capabilities after a standalone asset revision changes', function (): void {
+        $owner = createAssetUser();
+        $media = createAssetMedia(['is_public' => false, 'uploaded_by' => $owner->id]);
+        Storage::disk('public')->put($media->buildPath(), 'private bytes');
+        $url = $media->buildPrivateUrl($owner, now()->addMinutes(5));
+        $this->get($url)->assertOk();
+        $media->increment('revision');
+        $this->get($url)->assertNotFound();
+    });
+});
+
+it('rechecks delivery policy for previously usable asset routes', function (string $route, bool $variation, bool $disableVisibility): void {
+    Storage::fake('public');
+    $owner = createAssetUser();
+    $public = $route === 'public';
+    $media = createAssetMedia(['is_public' => $public, 'uploaded_by' => $owner->id]);
+    Storage::disk('public')->put($media->buildPath(), 'original bytes');
+    $parameters = ['media' => $media->id];
+    if ($variation) {
+        $thumb = MediaImageVariation::create(['media_id' => $media->id, 'label' => 'thumb', 'width' => 10, 'height' => 10, 'size' => 10, 'format' => 'webp', 'quality' => 80]);
+        Storage::disk('public')->put($thumb->getPath(), 'variation bytes');
+        $parameters['v'] = 'thumb';
+    }
+    $url = match ($route) {
+        'public' => route('nvl.media.assets.show', $parameters),
+        'authenticated' => route('nvl.media.authenticated.show', $parameters),
+        'signed' => URL::temporarySignedRoute('nvl.media.private.show', now()->addMinute(), [...$parameters, 'owner' => $owner->id, 'revision' => $media->revision]),
+    };
+    $this->actingAs($owner)->get($url)->assertOk();
+
+    $alternative = $public ? 'direct' : ($route === 'signed' ? 'application' : 'signed_application');
+    config(['nvl-media.delivery.disks.public.'.($public ? 'public' : 'private') => $disableVisibility
+        ? false : ['mode' => $alternative, 'allowed' => [$alternative]]]);
+
+    $this->get($url)->assertNotFound();
+})->with(['public', 'authenticated', 'signed'])->with(['original' => false, 'variation' => true])->with(['visibility disabled' => true, 'route mode removed' => false]);

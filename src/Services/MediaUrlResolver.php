@@ -6,9 +6,14 @@ namespace Nvl\Media\Services;
 
 use Closure;
 use DateTimeInterface;
+use Illuminate\Contracts\Auth\Authenticatable;
+use Nvl\Media\Enums\MediaAbility;
+use Nvl\Media\Enums\MediaDeliveryMode;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
+use Nvl\Media\Support\MediaActors;
 use Nvl\Media\Support\MediaAssetUrl;
+use Nvl\Support\Enums\SystemActor;
 
 /**
  * MediaUrlResolver: injected URL boundary for cache-aware media and variation URL generation.
@@ -20,14 +25,15 @@ final class MediaUrlResolver
     public function __construct(
         private readonly MediaDiskGateway $disks,
         private readonly MediaFileExistence $existence,
+        private readonly MediaAccessService $access,
     ) {}
 
     /**
-     * Get the public or temporary URL for a media record or one of its variations.
+     * Resolve the configured or explicitly admitted URL without issuing private capabilities.
      *
      * @param  string  $variation  Variation label, or empty for original
      */
-    public function forMedia(Media $media, string $variation = ''): string
+    public function forMedia(Media $media, string $variation = '', ?MediaDeliveryMode $mode = null): string
     {
         return MediaAssetUrl::forMedia(
             $media,
@@ -35,53 +41,55 @@ final class MediaUrlResolver
             $this->existenceChecker(),
             $this->diskUrlBuilder(),
             $this->temporaryUrlBuilder(),
+            $mode,
         );
     }
 
     /**
      * Resolve a URL only when the media and its canonical binary exist.
      */
-    public function forExistingMedia(?Media $media, string $variation = ''): ?string
+    public function forExistingMedia(?Media $media, string $variation = '', ?MediaDeliveryMode $mode = null): ?string
     {
         if (! $media instanceof Media || ! $this->existence->exists($media->disk, $media->buildPath())) {
             return null;
         }
 
-        return $this->forMedia($media, $variation);
+        return $this->forMedia($media, $variation, $mode);
     }
 
     /**
      * Get URL for a variation model, falling back to parent media if file is missing.
      */
-    public function forVariation(MediaImageVariation $variation): string
+    public function forVariation(MediaImageVariation $variation, ?MediaDeliveryMode $mode = null): string
     {
         return MediaAssetUrl::forVariation(
             $variation,
             $this->existenceChecker(),
             $this->diskUrlBuilder(),
             $this->temporaryUrlBuilder(),
+            $mode,
         );
     }
 
     /**
-     * Build a centralized public or private URL with optional named variation parameters.
+     * Resolve a delivery URL with optional named variation parameters.
      *
      * @param  array<string, scalar|null>  $parameters
      */
     public function buildUrl(
         Media $media,
         array $parameters = [],
-        ?DateTimeInterface $expiration = null,
-        ?string $owner = null,
+        ?MediaDeliveryMode $mode = null,
     ): string {
         return MediaAssetUrl::buildUrl(
             $media,
             $parameters,
-            $expiration,
-            $owner,
+            null,
+            null,
             $this->existenceChecker(),
             $this->diskUrlBuilder(),
             $this->temporaryUrlBuilder(),
+            $mode,
         );
     }
 
@@ -90,9 +98,9 @@ final class MediaUrlResolver
      *
      * @param  array<string, scalar|null>  $parameters
      */
-    public function publicUrl(Media $media, array $parameters = []): string
+    public function publicUrl(Media $media, array $parameters = [], ?MediaDeliveryMode $mode = null): string
     {
-        return MediaAssetUrl::publicUrl($media, $parameters, $this->existenceChecker(), $this->diskUrlBuilder());
+        return MediaAssetUrl::publicUrl($media, $parameters, $this->existenceChecker(), $this->diskUrlBuilder(), $mode);
     }
 
     /**
@@ -100,17 +108,19 @@ final class MediaUrlResolver
      *
      * @param  array<string, scalar|null>  $parameters
      */
-    public function privateUrl(
+    public function signedUrl(
+        Authenticatable|SystemActor $actor,
         Media $media,
+        DateTimeInterface $expiration,
         array $parameters = [],
-        ?DateTimeInterface $expiration = null,
-        ?string $owner = null,
     ): string {
+        $media = $this->authorizeDownload($actor, $media, is_string($parameters['v'] ?? null) ? $parameters['v'] : null);
+
         return MediaAssetUrl::privateUrl(
             $media,
             $parameters,
             $expiration,
-            $owner,
+            null,
             $this->existenceChecker(),
             $this->diskUrlBuilder(),
             $this->temporaryUrlBuilder(),
@@ -118,10 +128,12 @@ final class MediaUrlResolver
     }
 
     /**
-     * Generate a temporary signed URL.
+     * Authorize Download and issue a provider URL with an explicit bounded expiration.
      */
-    public function temporaryUrl(Media $media, DateTimeInterface $expiration, string $variation = ''): string
+    public function temporaryUrl(Authenticatable|SystemActor $actor, Media $media, DateTimeInterface $expiration, string $variation = ''): string
     {
+        $media = $this->authorizeDownload($actor, $media, $variation);
+
         return MediaAssetUrl::temporaryUrl(
             $media,
             $expiration,
@@ -129,6 +141,24 @@ final class MediaUrlResolver
             $this->diskUrlBuilder(),
             $this->temporaryUrlBuilder(),
         );
+    }
+
+    /**
+     * Resolve the canonical asset and its current policy before granting byte access.
+     * Carried model attributes never determine the signed object's storage identity.
+     */
+    private function authorizeDownload(Authenticatable|SystemActor $actor, Media $media, ?string $variation = null): Media
+    {
+        $actor = MediaActors::assert($actor);
+        $canonical = MediaModelRegistry::query()->useWritePdo()->findOrFail($media->id);
+        $this->access->authorize($actor, MediaAbility::Download, $canonical);
+
+        if ($variation !== null && $variation !== '') {
+            $canonical->setRelation('imageVariations', $canonical->imageVariations()->chaperone('media')
+                ->useWritePdo()->where('label', $variation)->get());
+        }
+
+        return $canonical;
     }
 
     /**

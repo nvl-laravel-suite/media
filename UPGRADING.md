@@ -1,11 +1,23 @@
-# NVL Light migration
+# Upgrading to major 7
 
-This branch targets PHP 8.4 and Laravel 13 and intentionally removes the previous DTO, Action, controller, route, facade and fluent-builder API. Consumers own their application adapters. Replace those calls with the complete [native services](docs/php-api.md); keep service authorization, validation, ownership and lifecycle guarantees.
+Enabled SVG scanning now rejects DOCTYPE declarations, processing instructions, XML Base overrides, CSS escapes/comments or external CSS resources, and embedded SVG data URLs. Re-export affected design-tool files without these features. XML declarations, local paint references and supported raster data URLs remain accepted. Scanning validates the original bytes and does not sanitize documents for same-origin inline delivery; retain attachment/nosniff/sandbox controls from [HTTP integration](docs/http-api.md).
+
+Major 7 targets PHP 8.4 and Laravel 13 and intentionally removes the previous DTO, Action, controller, route, facade and fluent-builder API. Consumers own their application adapters. Replace those calls with the complete [native services](docs/php-api.md); keep service authorization, validation, ownership and lifecycle guarantees.
 
 The deprecated Tenancy bridge and its configuration have been retired. Use declared native ownership resources and explicit admitted contexts. Unowned installations remain supported. Existing tenant-named physical columns or historical facts are not an automatic schema-renaming instruction.
+
+Upgrade required NVL peers to compatible major 7 releases. Local-only, unowned hosts need no S3 SDK/adapter or ownership runtime. Before selecting built-in S3 storage, install `league/flysystem-aws-s3-v3:^3.0` and `aws/aws-sdk-php:^3.322.9`; before declaring ownership, install `nvl/ownership:^7.0`. Optional packages outside those supported ranges are rejected by Composer.
 
 Bind host authorization and batch SQL contracts explicitly. Background actors require policy grants. Register slots through `HasNvlMedia` and `MediaRegistration`. Return models through consumer-owned resources and keep private storage/scanner fields out of public responses.
 
 Implement your own [HTTP adapters](docs/http-api.md), management middleware and signed asset endpoints. Update configured delivery route names to those consumer routes. Preserve byte identity, private access checks, scanning, idempotency, transaction callbacks and multipart recovery.
 
 Review [storage configuration](docs/configuration.md), [extension contracts](docs/extending.md), [S3](docs/s3.md) and [operational commands](docs/commands.md). Existing files do not move when prefixes or visibility defaults change. Choose one migration owner and review populated tables before applying schema changes.
+
+Delivery now uses `nvl-media.delivery.disks` with per-visibility defaults and allowed modes. Replace `assets.remote_public_delivery` and driver-dependent local URL behavior with explicit `direct` or `application` policies. A configured filesystem `url` no longer selects the delivery mode. Both defaults use application routes; register `assets.authenticated_route_name` for private authenticated delivery as well as the public and signed routes. Set visibility policies to `false` on disks which cannot safely admit them.
+
+`getUrl()` and `buildUrl()` no longer implicitly issue private bearer links. They return an authenticated private application URL. `getTemporaryUrl()` and `buildPrivateUrl()` require an explicit actor and expiration; service consumers use `MediaUrlResolver::signedUrl()` or `temporaryUrl()`. The ambiguous resolver `privateUrl()` and global URL-lifetime settings are retired. Lifetimes are explicit and bounded by the disk's `maximum_ttl` in seconds. Signed application endpoints must reject a stale revision for every asset and treat a valid scoped signature as a bearer grant; use the authenticated endpoint when every recipient must log in.
+
+Metadata `isPublic` updates may retain the current value but cannot change it. Use verified cross-disk `relocate()` with the target visibility. Multi-owner public assets cannot become private while shared. Preserve existing records and objects; these API changes require no reimport or automatic schema migration. Filesystem cleanup follows both host savepoint rollback and outer commit outcomes. New objects are removed after their originating savepoint or outer transaction rolls back; superseded objects are removed only after the outer commit. Keep native transaction management on the actual Media connection. Cleanup is best effort and logged, not a distributed storage transaction or durable outbox; reconcile failures and process crashes.
+
+Replace old event aliases and model-bearing listener payloads with the canonical classes in the [event reference](docs/events.md). Drain old queued payloads and restart workers. Republish agent guidance with `nvl-media-skills` after reviewing any application-owned changes.

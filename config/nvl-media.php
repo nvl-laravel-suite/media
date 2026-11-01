@@ -275,13 +275,6 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Temporary URL Lifetime (minutes)
-    |--------------------------------------------------------------------------
-    */
-    'temporary_url_lifetime' => 5,
-
-    /*
-    |--------------------------------------------------------------------------
     | Centralized Asset Delivery
     |--------------------------------------------------------------------------
     | Route-backed media URLs exposed by the Media module.
@@ -290,15 +283,25 @@ return [
     */
     'assets' => [
         'public_route_name' => 'nvl.media.assets.show',
+        'authenticated_route_name' => 'nvl.media.authenticated.show',
         'private_route_name' => 'nvl.media.private.show',
         'public_route_middleware' => ['throttle:120,1'],
         'private_route_middleware' => [],
         'private_owner_fallback' => 'system',
-        'signed_url_lifetime' => (int) env('NVL_MEDIA_ASSET_SIGNED_URL_LIFETIME', 5),
         'public_cache_control' => 'public, max-age=31536000, immutable',
         'private_cache_control' => 'private, max-age=0, no-store',
-        'remote_public_delivery' => env('NVL_MEDIA_REMOTE_PUBLIC_DELIVERY', 'route'),
         'allowed_parameters' => ['v'],
+    ],
+
+    /* Delivery choices are independent of filesystem drivers and object ACLs. */
+    'delivery' => [
+        'defaults' => [
+            'public' => ['mode' => 'application', 'allowed' => ['application', 'direct']],
+            'private' => ['mode' => 'application', 'allowed' => ['application', 'signed_application', 'temporary_storage']],
+        ],
+        'maximum_ttl' => 300,
+        // A disk may override either visibility policy, or set it to false.
+        'disks' => [],
     ],
 
     /*

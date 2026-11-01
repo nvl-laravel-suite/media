@@ -46,12 +46,47 @@ it('skips scanning when config is disabled', function () {
 /* =================================================================
  * XXE / DOCTYPE
  * ================================================================= */
-it('silently strips DOCTYPE declaration (common in design tool exports)', function () {
+it('rejects DOCTYPE declarations without changing uploaded bytes', function () {
     $scanner = new SvgScanner;
     $path = writeSvg('<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="40"/></svg>');
     try {
-        $scanner->scan($path);
-        expect(true)->toBeTrue();
+        $original = file_get_contents($path);
+        expect(fn () => $scanner->scan($path))->toThrow(MediaUploadException::class, 'DOCTYPE')
+            ->and(file_get_contents($path))->toBe($original);
+    } finally {
+        @unlink($path);
+    }
+});
+
+it('rejects uninspected external SVG resources and embedded active documents', function (string $payload): void {
+    $path = writeSvg($payload);
+
+    try {
+        expect(fn () => (new SvgScanner)->scan($path))->toThrow(MediaUploadException::class)
+            ->and(file_get_contents($path))->toBe($payload);
+    } finally {
+        @unlink($path);
+    }
+})->with([
+    'stylesheet processing instruction' => ['<?xml-stylesheet href="https://example.test/style.css"?><svg xmlns="http://www.w3.org/2000/svg"/>'],
+    'escaped CSS import' => ['<svg xmlns="http://www.w3.org/2000/svg"><style>@\\69mport "https://example.test/style.css";</style></svg>'],
+    'external style URL' => ['<svg xmlns="http://www.w3.org/2000/svg"><style>rect { fill: url(https://example.test/paint.svg); }</style></svg>'],
+    'external attribute URL' => ['<svg xmlns="http://www.w3.org/2000/svg"><rect fill="url(https://example.test/paint.svg)"/></svg>'],
+    'XML encoded CSS escape' => ['<svg xmlns="http://www.w3.org/2000/svg"><rect style="fill: u&#x5c;72l(https://example.test/paint.svg)"/></svg>'],
+    'nested SVG data URL' => ['<svg xmlns="http://www.w3.org/2000/svg"><use href="data:image/svg+xml,%3Csvg%20onload%3D%22alert(1)%22%2F%3E"/></svg>'],
+    'alternate XLink prefix script' => ['<svg xmlns="http://www.w3.org/2000/svg" xmlns:q="http://www.w3.org/1999/xlink"><a q:href="javascript:alert(1)">x</a></svg>'],
+    'alternate XLink prefix external image' => ['<svg xmlns="http://www.w3.org/2000/svg" xmlns:q="http://www.w3.org/1999/xlink"><image q:href="https://example.test/image.svg"/></svg>'],
+    'alternate XLink prefix nested SVG' => ['<svg xmlns="http://www.w3.org/2000/svg" xmlns:q="http://www.w3.org/1999/xlink"><use q:href="data:image/svg+xml,%3Csvg%20onload%3D%22alert(1)%22%2F%3E"/></svg>'],
+    'base override external fragment' => ['<svg xmlns="http://www.w3.org/2000/svg" xml:base="https://example.test/remote.svg"><use href="#shape"/></svg>'],
+    'UTF16 external DTD' => ["\xff\xfe".mb_convert_encoding('<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE svg SYSTEM "https://example.test/svg.dtd"><svg xmlns="http://www.w3.org/2000/svg"/>', 'UTF-16LE', 'UTF-8')],
+]);
+
+it('preserves safe local paint references and ordinary embedded styles', function (): void {
+    $path = writeSvg('<svg xmlns="http://www.w3.org/2000/svg" xmlns:q="http://www.w3.org/1999/xlink"><style>rect { fill: url(#paint); stroke: red; }</style><defs><linearGradient id="paint"/><g id="shape"><rect/></g></defs><rect fill="url(&quot;#paint&quot;)"/><use q:href="#shape"/></svg>');
+
+    try {
+        (new SvgScanner)->scan($path);
+        expect(file_get_contents($path))->toContain('url(#paint)', 'url(&quot;#paint&quot;)');
     } finally {
         @unlink($path);
     }
@@ -283,3 +318,18 @@ it('rejects SVG with set element', function () {
         @unlink($path);
     }
 })->throws(MediaUploadException::class, '<set>');
+
+it('rejects executable URI schemes containing XML-encoded browser controls', function (string $attribute, string $uri): void {
+    $path = writeSvg('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><a '.$attribute.'="'.$uri.'"><text>click</text></a></svg>');
+
+    try {
+        expect(fn () => (new SvgScanner)->scan($path))->toThrow(MediaUploadException::class);
+    } finally {
+        @unlink($path);
+    }
+})->with([
+    'tab in javascript href' => ['href', 'java&#x09;script:alert(1)'],
+    'newline in javascript xlink href' => ['xlink:href', 'java&#x0a;script:alert(1)'],
+    'carriage return in vbscript href' => ['href', 'vb&#x0d;script:MsgBox(1)'],
+    'newline in data href' => ['href', 'da&#x0a;ta:text/html;base64,PHNjcmlwdD4='],
+]);

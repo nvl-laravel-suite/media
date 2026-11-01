@@ -13,6 +13,7 @@ use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\MediaMultipartUpload;
 use Nvl\Media\Services\MediaMultipart;
 use Nvl\Media\Services\MediaScan;
+use Nvl\Media\Services\MediaTemporaryFileRegistry;
 use Nvl\Media\Tests\Stubs\TestMediaUser;
 use Nvl\Support\Enums\SystemActor;
 
@@ -278,3 +279,92 @@ it('rejects invalid scanner diagnostics before resolving or mutating an asset', 
     'nested map' => [['nested' => ['secret']]],
     'numeric keys' => [[123]],
 ])->throws(MediaUploadException::class);
+
+it('applies SVG structure checks to antivirus-clean multipart objects', function (string $contents, bool $scanning, MediaLifecycleStatus $expected, bool $remote): void {
+    config(['nvl-media.svg_scanning' => $scanning]);
+    $checksum = hash('sha256', $contents);
+    $gateway = multipartGateway(['checksum' => $checksum, 'size' => strlen($contents), 'mimeType' => 'image/svg+xml']);
+    app()->instance(MultipartUploadGateway::class, $gateway);
+    $session = app(MediaMultipart::class)->initiate(['disk' => 'public', 'filename' => 'icon.svg', 'mimeType' => 'image/svg+xml', 'size' => strlen($contents), 'checksum' => $checksum, 'visibility' => MediaVisibility::Private, 'folder' => null], multipartActor());
+    app(MediaMultipart::class)->signPart(['uploadId' => $session['uploadId'], 'partNumber' => 1, 'checksum' => $checksum, 'byteLength' => strlen($contents)], multipartActor());
+    $media = app(MediaMultipart::class)->complete(['uploadId' => $session['uploadId'], 'parts' => [['partNumber' => 1, 'etag' => 'svg-part', 'checksum' => null]]], multipartActor());
+    Storage::disk('public')->put($session['objectKey'], $contents);
+    if ($remote) {
+        config(['filesystems.disks.public.driver' => 's3']);
+    }
+
+    $media = app(MediaScan::class)->finalize(SystemActor::Background, $media, ['clean' => true, 'mimeType' => 'image/svg+xml', 'extension' => 'svg', 'size' => strlen($contents), 'checksum' => $checksum, 'diagnostics' => ['engine' => 'antivirus']]);
+
+    expect($media->status)->toBe($expected)
+        ->and($media->isAvailable())->toBe($expected === MediaLifecycleStatus::Available)
+        ->and(app(MediaTemporaryFileRegistry::class)->count())->toBe(0);
+    Storage::disk('public')->assertExists($session['objectKey']);
+    if ($expected === MediaLifecycleStatus::Quarantined) {
+        expect($media->failure_code)->toBe('scan_svg_rejected');
+    }
+})->with([
+    'script' => ['<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>', true, MediaLifecycleStatus::Quarantined, true],
+    'encoded executable URI' => ['<svg xmlns="http://www.w3.org/2000/svg"><a href="java&#x09;script:alert(1)">click</a></svg>', true, MediaLifecycleStatus::Quarantined, true],
+    'safe SVG' => ['<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>', true, MediaLifecycleStatus::Available, false],
+    'remote safe SVG' => ['<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>', true, MediaLifecycleStatus::Available, true],
+    'explicitly disabled' => ['<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>', false, MediaLifecycleStatus::Available, true],
+]);
+
+it('quarantines SVG bytes changed between storage verification and materialization', function (): void {
+    $contents = '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10"/></svg>';
+    $checksum = hash('sha256', $contents);
+    app()->instance(MultipartUploadGateway::class, multipartGateway(['checksum' => $checksum, 'size' => strlen($contents), 'mimeType' => 'image/svg+xml']));
+    $session = app(MediaMultipart::class)->initiate(['disk' => 'public', 'filename' => 'icon.svg', 'mimeType' => 'image/svg+xml', 'size' => strlen($contents), 'checksum' => $checksum, 'visibility' => MediaVisibility::Private, 'folder' => null], multipartActor());
+    app(MediaMultipart::class)->signPart(['uploadId' => $session['uploadId'], 'partNumber' => 1, 'checksum' => $checksum, 'byteLength' => strlen($contents)], multipartActor());
+    $media = app(MediaMultipart::class)->complete(['uploadId' => $session['uploadId'], 'parts' => [['partNumber' => 1, 'etag' => 'svg-part', 'checksum' => null]]], multipartActor());
+    $filesystem = Storage::disk('public');
+    $filesystem->put($session['objectKey'], $contents);
+    config(['filesystems.disks.public.driver' => 's3', 'nvl-media.svg_scanning' => true]);
+    $reads = 0;
+    $changingStorage = Mockery::mock($filesystem);
+    $changingStorage->shouldReceive('readStream')->twice()->andReturnUsing(static function () use (&$reads, $contents) {
+        $stream = fopen('php://temp', 'w+b');
+        fwrite($stream, $reads++ === 0 ? $contents : str_replace('10', '20', $contents));
+        rewind($stream);
+
+        return $stream;
+    });
+    Storage::shouldReceive('disk')->with('public')->andReturn($changingStorage);
+
+    $media = app(MediaScan::class)->finalize(SystemActor::Background, $media, ['clean' => true, 'mimeType' => 'image/svg+xml', 'extension' => 'svg', 'size' => strlen($contents), 'checksum' => $checksum]);
+
+    expect($media->status)->toBe(MediaLifecycleStatus::Quarantined)
+        ->and($media->failure_code)->toBe('scan_attestation_mismatch')
+        ->and($media->failure_context)->toBe(['mismatch' => 'materialized_bytes'])
+        ->and(app(MediaTemporaryFileRegistry::class)->count())->toBe(0);
+});
+
+it('rejects further provider writes after an active session visibility is disabled while allowing abort', function (string $operation): void {
+    [$session, $gateway, $checksum] = initiateMultipartSession('policy-change');
+    $service = app(MediaMultipart::class);
+    $actor = multipartActor();
+    $part = ['uploadId' => $session['uploadId'], 'partNumber' => 1, 'checksum' => $checksum, 'byteLength' => strlen('policy-change')];
+    if ($operation === 'complete') {
+        $service->signPart($part, $actor);
+    }
+    $signedParts = MediaMultipartUpload::query()->findOrFail($session['uploadId'])->signed_parts;
+    $signedSession = $gateway->signedSession;
+    config(['nvl-media.delivery.disks.public.private' => false]);
+    expect(function () use ($operation, $service, $part, $actor, $session): void {
+        if ($operation === 'sign') {
+            $service->signPart($part, $actor);
+        } else {
+            $service->complete(['uploadId' => $session['uploadId'], 'parts' => [['partNumber' => 1, 'etag' => 'part-etag']]], $actor);
+        }
+    })->toThrow(RuntimeException::class, 'does not admit');
+    $persisted = MediaMultipartUpload::query()->findOrFail($session['uploadId']);
+    expect($persisted->status)->toBe(MediaMultipartStatus::Initiated)
+        ->and($persisted->signed_parts)->toBe($signedParts)
+        ->and($gateway->signedSession)->toBe($signedSession)
+        ->and($gateway->completionCount)->toBe(0)
+        ->and($persisted->completedMedia()->exists())->toBeFalse()
+        ->and(Storage::disk('public')->allFiles())->toBe([]);
+    $service->abort($session['uploadId'], $actor);
+    expect($persisted->fresh()->status)->toBe(MediaMultipartStatus::Aborted)
+        ->and($gateway->abortCount)->toBe(1);
+})->with(['sign', 'complete']);

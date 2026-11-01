@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Closure;
 use finfo;
+use GuzzleHttp\Handler\CurlHandler;
+use GuzzleHttp\Psr7\FnStream;
 use GuzzleHttp\Psr7\UriResolver;
 use GuzzleHttp\Psr7\Utils;
 use GuzzleHttp\TransferStats;
@@ -19,6 +22,7 @@ use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Media\Support\MediaDiskResolver;
 use Nvl\Media\Support\MediaMimeResolver;
 use Nvl\Support\Logging\PackageLogger;
+use Symfony\Component\HttpFoundation\IpUtils;
 use Throwable;
 
 /**
@@ -35,6 +39,7 @@ final class MediaSourceResolver
         private readonly MediaHostResolver $hostResolver,
         private readonly MediaTemporaryFileRegistry $temporaryFiles,
         private PackageLogger $packageLogger,
+        private readonly CurlHandler $transport = new CurlHandler,
     ) {}
 
     /**
@@ -70,7 +75,7 @@ final class MediaSourceResolver
             $this->logRemoteRejection($url, $exception);
 
             throw new MediaUploadException(
-                "Could not download file from URL [{$url}]: {$exception->getMessage()}",
+                'Could not download remote media.',
                 previous: $exception,
             );
         }
@@ -239,12 +244,12 @@ final class MediaSourceResolver
                 $response->close();
 
                 throw new MediaUploadException(
-                    "Could not download file from URL [{$currentUrl}]. HTTP {$status}.",
+                    "Could not download remote media. HTTP {$status}.",
                 );
             }
 
-            $this->ensureContentLengthAllowed($response, $currentUrl);
-            $this->writeResponseToTempFile($response, $temporaryPath, $currentUrl);
+            $this->ensureContentLengthAllowed($response);
+            $this->writeResponseToTempFile($response, $temporaryPath);
 
             return $currentUrl;
         }
@@ -263,6 +268,7 @@ final class MediaSourceResolver
 
         foreach ($target['ips'] as $ip) {
             $connectedIp = null;
+            $sink = $this->boundedResponseSink();
             $curlResolve = $this->curlResolveEntry($target['host'], $target['port'], $ip);
 
             try {
@@ -270,9 +276,11 @@ final class MediaSourceResolver
                     MediaConfiguration::integer('nvl-media.sources.remote.connect_timeout', 5, 1),
                 )
                     ->timeout(MediaConfiguration::integer('nvl-media.sources.remote.total_timeout', 30, 1))
+                    ->setHandler($this->responseSinkHandler($this->transport->__invoke(...), $sink))
                     ->withOptions([
                         'allow_redirects' => false,
-                        'stream' => true,
+                        'stream' => false,
+                        'proxy' => '',
                         'verify' => true,
                         'curl' => [
                             CURLOPT_RESOLVE => [$curlResolve],
@@ -289,9 +297,14 @@ final class MediaSourceResolver
                     ])
                     ->get($url);
             } catch (ConnectionException $exception) {
+                $sink->close();
                 $lastException = $exception;
 
                 continue;
+            } catch (Throwable $exception) {
+                $sink->close();
+
+                throw $exception;
             }
 
             $verifyConnectedIp = (bool) config(
@@ -325,6 +338,41 @@ final class MediaSourceResolver
     }
 
     /**
+     * Attach the sink at the transport boundary after Laravel's HTTP fake handling.
+     *
+     * @return Closure(object, array<string, mixed>): mixed
+     */
+    private function responseSinkHandler(Closure $transport, FnStream $sink): Closure
+    {
+        return static function (object $request, array $options) use ($transport, $sink): mixed {
+            $options['sink'] = $sink;
+
+            return $transport($request, $options);
+        };
+    }
+
+    /** Stream curl response bytes to disk, rejecting oversized chunks before writing. */
+    private function boundedResponseSink(): FnStream
+    {
+        $stream = Utils::streamFor(Utils::tryFopen('php://temp/maxmemory:0', 'w+b'));
+        $maximumBytes = $this->maxRemoteBytes();
+        $bytesWritten = 0;
+
+        return FnStream::decorate($stream, [
+            'write' => static function (string $chunk) use ($stream, $maximumBytes, &$bytesWritten): int {
+                if ($bytesWritten + strlen($chunk) > $maximumBytes) {
+                    throw new MediaUploadException('Remote media response exceeds the maximum allowed size.');
+                }
+
+                $written = $stream->write($chunk);
+                $bytesWritten += $written;
+
+                return $written;
+            },
+        ]);
+    }
+
+    /**
      * @return array{host: string, port: int, ips: list<string>}
      */
     private function validateUrl(string $url): array
@@ -332,7 +380,7 @@ final class MediaSourceResolver
         $parsed = parse_url($url);
 
         if ($parsed === false || ! isset($parsed['scheme'], $parsed['host'])) {
-            throw new MediaUploadException("Invalid URL: [{$url}].");
+            throw new MediaUploadException('Invalid URL.');
         }
 
         $scheme = strtolower((string) $parsed['scheme']);
@@ -371,7 +419,14 @@ final class MediaSourceResolver
                 $ip,
                 FILTER_VALIDATE_IP,
                 FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE,
-            ) === false) {
+            ) === false || IpUtils::checkIp($ip, [
+                '100.64.0.0/10',
+                '64:ff9b::/96',
+                '64:ff9b:1::/48',
+                '2002::/16',
+                '2001::/32',
+                '::ffff:0:0/96',
+            ])) {
                 throw new MediaUploadException(
                     'URL resolves to a private or reserved IP address. Access denied.',
                 );
@@ -421,7 +476,7 @@ final class MediaSourceResolver
         );
     }
 
-    private function ensureContentLengthAllowed(Response $response, string $url): void
+    private function ensureContentLengthAllowed(Response $response): void
     {
         $contentLength = trim($response->header('Content-Length'));
 
@@ -435,7 +490,7 @@ final class MediaSourceResolver
             $response->close();
 
             throw new MediaUploadException(
-                "File from URL [{$url}] exceeds the maximum allowed size.",
+                'Remote media exceeds the maximum allowed size.',
             );
         }
     }
@@ -443,7 +498,6 @@ final class MediaSourceResolver
     private function writeResponseToTempFile(
         Response $response,
         string $temporaryPath,
-        string $url,
     ): void {
         $input = $response->resource();
 
@@ -451,7 +505,7 @@ final class MediaSourceResolver
             $this->copyBoundedStream(
                 $input,
                 $temporaryPath,
-                "file from URL [{$url}]",
+                'remote media',
                 $this->maxRemoteBytes(),
             );
         } finally {

@@ -77,7 +77,7 @@ describe('getUrl', function () {
         $path = $variation->getPath();
         Storage::disk('public')->put($path, 'variation content');
         $url = $variation->getUrl();
-        expect($url)->toContain('v=thumb')->and($url)->not->toContain('uploads/conversions/abc-thumb.webp');
+        expect($url)->toStartWith(Storage::disk('public')->url($path).'?version=')->not->toContain('v=thumb');
     });
     it('falls back to parent URL when variation file does not exist', function () {
         Storage::fake('public');
