@@ -27,13 +27,13 @@
         "nvl/translatable": "^7.0",
         "php": "^8.4",
         "spatie/image": "^3.0",
-        "symfony/http-foundation": "^7.0 || ^8.0",
-        "symfony/http-kernel": "^7.0 || ^8.0"
+        "symfony/http-foundation": "^7.4.19 || ^8.1.7"
     },
     "require-dev": {
         "aws/aws-sdk-php": "^3.322.9",
         "ext-gd": "*",
         "ext-pcntl": "*",
+        "ext-phar": "*",
         "larastan/larastan": "^3.10",
         "laravel/pint": "^1.27",
         "league/flysystem-aws-s3-v3": "^3.0",
@@ -98,6 +98,8 @@
     },
     "archive": {
         "exclude": [
+            "/composer.lock",
+            "/vendor",
             "/composer-dependency-analyser.php",
             "/.temp",
             "/build",
@@ -127,7 +129,8 @@
     "conflict": {
         "aws/aws-sdk-php": "<3.322.9 || >=4.0",
         "league/flysystem-aws-s3-v3": "<3.0 || >=4.0",
-        "nvl/ownership": "<7.0 || >=8.0"
+        "nvl/ownership": "<7.0 || >=8.0",
+        "spatie/image-optimizer": "<1.7.3"
     },
     "homepage": "https://github.com/nvl-laravel-suite/media",
     "authors": [
