@@ -85,10 +85,13 @@ Namespace: `Nvl\Media\Services\MediaLibrary`.
 - `updateMetadata(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media|string $media, array $data): Nvl\Media\Models\Media`
 - `relocate(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media|string $media, string $disk, Nvl\Media\Enums\MediaVisibility $visibility, ?int $expectedRevision = …): Nvl\Media\Models\Media`
 - `delete(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media|string $media, bool $force = …, ?Illuminate\Database\Eloquent\Model $owner = …): bool`
+- `purgeDeletedFiles(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media|string $media, ?Illuminate\Database\Eloquent\Model $owner = …): bool`
 - `bulkDelete(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, array $ids): int`
 - `move(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, array $ids, string $folder): int`
 - `bulkTag(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, array $ids, array $tags): int`
 - `tag(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media|string $media, array $add = …, array $remove = …): Nvl\Media\Models\Media`
+
+`purgeDeletedFiles()` retries physical deletion for a canonical soft-deleted asset. It requires current Delete authorization, no ambient transaction on the actual Media connection, and any supplied canonical owner on that same connection. It returns true only after the original and every retained variation object are confirmed absent; false permits retry after storage failure. The tombstone and variation history remain intact. Explicit purge is independent of `delete_files_on_media_delete`.
 
 `updateMetadata()` accepts only `isPublic?: bool`, `tags?: list<string>|null`, `metadata?: array<string, mixed>|null`, `translations?: array<string, array{title?: string|null, alt?: string|null, caption?: string|null, description?: string|null}>|null`, and `translation_mode?: Nvl\Translatable\Enums\TranslationSyncMode`. The translation mode is a native enum; omitted means Patch. Unsupported fields fail. A supplied `isPublic` must equal the current visibility.
 

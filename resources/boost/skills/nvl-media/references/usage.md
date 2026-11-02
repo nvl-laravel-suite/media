@@ -92,7 +92,7 @@ Upload and association have separate transactions in this example; an attachment
 
 Use `MediaReader::getMany`/`findMany` and `slots` for bounded list-page reads. Keep requested ID/owner/slot limits and native actor visibility. Select the appropriate strict-vs-finding semantics from [API](api.md). Direct model relations do not independently apply a current actor policy.
 
-`MediaLibrary::updateMetadata` owns its field allowlist and localized title/alt/caption seam. Byte hash, scanner identity, disk/path and ownership do not become localized/client-editable metadata. `rename` and verified `relocate` retain storage and integrity checks. Visibility changes are file lifecycle operations. Deletion uses transactional cleanup scheduling and durable recovery; do not unlink files or synthesize a successful database rollback around an already published storage effect. Preserve enclosing transaction commit/rollback and worker context.
+`MediaLibrary::updateMetadata` owns its field allowlist and localized title/alt/caption seam. Byte hash, scanner identity, disk/path and ownership do not become localized/client-editable metadata. `rename` and verified `relocate` retain storage and integrity checks. Visibility changes are file lifecycle operations. Deletion uses transactional cleanup scheduling and retained tombstone recovery; do not unlink files or synthesize a successful database rollback around an already published storage effect. Preserve enclosing transaction commit/rollback and worker context.
 
 For multipart uploads, use the real native session start/part/complete/abort methods from [API](api.md); preserve immutable upload ID, owner, checksum and configured bounds. Cleanup remains available after restrictive policy changes. Variation/scanning callbacks must carry the original byte/revision identity and provider attestations, not a caller's assertion that a file is ready.
 
@@ -155,3 +155,10 @@ The public application route defaults to `nvl.media.assets.show` and also receiv
 ## Verify and operate
 
 Use the declared command names in [installation](installation.md) and installed `--help` for doctor, reconcile, variations, disk migration and recovery options. Test rejected upload/slot/privacy input, owner/actor isolation, replacement model hooks, scanner failures, bounded bulk reads, actual delivery mode/TTL, source outer commit/rollback and cleanup replay. Optional dependency absence and real storage-provider behavior are separate checks; a fake disk does not certify S3, CDN or a production queue worker.
+
+
+### Confirming tombstone byte removal
+
+`MediaLibrary::purgeDeletedFiles(Authenticatable|SystemActor $actor, Media|string $media, ?Model $owner = null): bool` explicitly retries physical deletion after native `delete()` has committed. Call it outside an existing transaction on Media's actual connection. A supplied owner must retain canonical persisted identity and use that same connection. Current Delete policy is checked against the current tombstone and owner on every call, including retries after all bytes are gone; system identity grants no bypass.
+
+A true result confirms every canonical original/variation object is absent using uncached checks. False means storage deletion or verification failed and the caller may retry. Live media is rejected; an unknown identity fails as missing. No Media tombstone or variation history is rewritten, and automatic `delete_files_on_media_delete` settings do not disable this explicitly requested purge. Consumers should mark domain byte-deletion timestamps only after true; a successful `delete()` alone confirms logical deletion, not deferred storage cleanup.

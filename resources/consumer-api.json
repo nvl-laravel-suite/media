@@ -1085,6 +1085,7 @@
                 "bulkTag",
                 "delete",
                 "move",
+                "purgeDeletedFiles",
                 "relocate",
                 "rename",
                 "tag",

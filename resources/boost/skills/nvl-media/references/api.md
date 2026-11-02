@@ -1320,7 +1320,7 @@ public function adopt(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enum
 
 ```text
 final class Nvl\Media\Services\MediaLibrary
-public function __construct(Nvl\Media\Services\MediaAccessService $access, Nvl\Media\Services\MediaMutationLock $mutationLock, Nvl\Support\Events\DomainEventDispatcher $domainEvents, Nvl\Translatable\Services\RelatedTranslationStore $translations, Nvl\Media\Services\MediaDiskGateway $disks, Nvl\Media\Services\MediaDiskGuard $diskGuard, Nvl\Media\Services\MediaFileEffectScheduler $fileEffects, Nvl\Media\Services\MediaFileExistence $existence, Nvl\Media\Services\MediaFileOperator $files, Nvl\Support\Events\ConnectionCommitCallbacks $eventCommits, Nvl\Media\Services\MediaPathResolver $paths, Nvl\Media\Services\MediaReader $queries, Nvl\Media\Services\MediaPathResolver $pathResolver): mixed
+public function __construct(Nvl\Media\Services\MediaAccessService $access, Nvl\Media\Services\MediaMutationLock $mutationLock, Nvl\Support\Events\DomainEventDispatcher $domainEvents, Nvl\Translatable\Services\RelatedTranslationStore $translations, Nvl\Media\Services\MediaDiskGateway $disks, Nvl\Media\Services\MediaDiskGuard $diskGuard, Nvl\Media\Services\MediaFileEffectScheduler $fileEffects, Nvl\Media\Services\MediaFileExistence $existence, Nvl\Media\Services\MediaFileOperator $files, Nvl\Support\Events\ConnectionCommitCallbacks $eventCommits, Nvl\Media\Services\MediaPathResolver $paths, Nvl\Media\Services\MediaReader $queries, Nvl\Media\Services\MediaPathResolver $pathResolver, Nvl\Media\Ownership\MediaOwnershipParentResolver $owners): mixed
 public function bulkDelete(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, array $ids): int
 @param array<int, string> $ids
 @return int
@@ -1332,6 +1332,9 @@ public function delete(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enu
 public function move(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, array $ids, string $folder): int
 @param list<string> $ids
 @throws Throwable
+public function purgeDeletedFiles(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media|string $media, ?Illuminate\Database\Eloquent\Model $owner=null): bool
+@throws MediaUploadException
+resolved @throws Nvl\Media\Exceptions\MediaUploadException
 public function relocate(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media|string $media, string $disk, Nvl\Media\Enums\MediaVisibility $visibility, ?int $expectedRevision=null): Nvl\Media\Models\Media
 @throws MediaUploadException
 resolved @throws Nvl\Media\Exceptions\MediaUploadException

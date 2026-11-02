@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Services;
 
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Validator;
 use Nvl\Media\Enums\MediaAbility;
@@ -15,6 +16,7 @@ use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Ownership\MediaOwnership;
+use Nvl\Media\Ownership\MediaOwnershipParentResolver;
 use Nvl\Media\Support\MediaActors;
 use Nvl\Media\Support\MediaAssociationSnapshot;
 use Nvl\Support\Enums\SystemActor;
@@ -47,6 +49,7 @@ final class MediaLibrary
         private readonly MediaPathResolver $paths,
         private readonly MediaReader $queries,
         private readonly MediaPathResolver $pathResolver,
+        private readonly MediaOwnershipParentResolver $owners,
     ) {}
 
     /**
@@ -357,6 +360,92 @@ final class MediaLibrary
             $mediaId,
             fn (): bool => $this->deleteExecuteUnderAcquiredLock($actor, $mediaId, $force),
         );
+    }
+
+    /**
+     * Confirm physical removal of an already deleted asset's retained objects.
+     *
+     * Explicit purge is independent of automatic deletion configuration. It must
+     * begin outside a Media transaction and any supplied owner must share that
+     * actual connection. False leaves the tombstone available for another retry;
+     * true confirms that every canonical original and variation object is absent.
+     * Tombstone attributes and diagnostic variation rows are never rewritten.
+     *
+     * @throws MediaUploadException When invoked in a transaction, for live media or with divergent owner storage.
+     */
+    public function purgeDeletedFiles(Authenticatable|SystemActor $actor, Media|string $media, ?Model $owner = null): bool
+    {
+        $connection = MediaModelRegistry::newInstance()->getConnection();
+        $this->assertPurgeTransaction($connection, 0);
+        if ($owner !== null && $owner->getConnection() !== $connection) {
+            throw new MediaUploadException('Deleted Media files and their owner must share the same actual connection.');
+        }
+        $actor = MediaActors::assert($actor);
+        $mediaId = $media instanceof Media ? $media->id : $media;
+
+        return $this->mutationLock->execute($mediaId, function () use ($actor, $mediaId, $owner, $connection): bool {
+            $this->assertPurgeTransaction($connection, 0);
+
+            return $connection->transaction(function () use ($actor, $mediaId, $owner, $connection): bool {
+                $current = MediaModelRegistry::query()->withTrashed()->useWritePdo()->whereKey($mediaId)->lockForUpdate()->firstOrFail();
+                $currentOwner = $owner === null ? null : $this->owners->resolve($owner, lock: true);
+                $this->access->authorize($actor, MediaAbility::Delete, $current, $currentOwner);
+                if (! $current->trashed()) {
+                    throw new MediaUploadException('Only deleted Media may have its retained files purged.');
+                }
+                $this->assertPurgeTransaction($connection, 1);
+                if ($current->getConnection() !== $connection || ($currentOwner !== null && $currentOwner->getConnection() !== $connection)) {
+                    throw new MediaUploadException('Deleted Media purge must retain its own actual source connection and transaction.');
+                }
+
+                $paths = [$current->buildPath()];
+                foreach ($current->imageVariations()->lockForUpdate()->get() as $variation) {
+                    if ($variation->getConnection() !== $connection) {
+                        throw new MediaUploadException('Deleted Media variations must share the actual source connection.');
+                    }
+                    $variation->setRelation('media', $current);
+                    $paths[] = $variation->getPath();
+                }
+                $paths = array_values(array_unique($paths));
+                foreach ($paths as $path) {
+                    if ($path === '') {
+                        throw new MediaUploadException('Deleted Media must retain a non-empty object path.');
+                    }
+                    MediaPathResolver::assertSafe($path);
+                }
+
+                try {
+                    foreach ($paths as $path) {
+                        if ($this->existence->existsFresh($current->disk, $path) && ! $this->files->delete($current->disk, $path)) {
+                            return false;
+                        }
+                    }
+                    foreach ($paths as $path) {
+                        if ($this->existence->existsFresh($current->disk, $path)) {
+                            return false;
+                        }
+                    }
+                } catch (Throwable) {
+                    return false;
+                }
+
+                return true;
+            });
+        });
+    }
+
+    /**
+     * Read the live connection depth before and after transaction/host callbacks.
+     *
+     * @phpstan-impure
+     */
+    private function assertPurgeTransaction(Connection $connection, int $expectedLevel): void
+    {
+        if ($connection->transactionLevel() !== $expectedLevel) {
+            throw new MediaUploadException($expectedLevel === 0
+                ? 'Deleted Media files must be purged outside an existing source transaction.'
+                : 'Deleted Media purge must retain its own actual source transaction.');
+        }
     }
 
     /**
