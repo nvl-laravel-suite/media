@@ -5,6 +5,10 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [7.0.0] - 2026-11-03
+
+- Adopt the reviewed NVL 7 family for PHP 8.4+ and Laravel 13, with compatible required and optional NVL peers. Review the package upgrade guide before deployment.
+
 ### Changed
 
 - Target PHP 8.4, Laravel 13 and major 7 NVL peers; replace transport DTOs, package Actions/controllers/routes/facades and fluent workflows with native actor-authorized services and consumer-owned adapters.
