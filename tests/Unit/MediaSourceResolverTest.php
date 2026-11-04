@@ -5,6 +5,7 @@ use GuzzleHttp\Handler\CurlFactory;
 use GuzzleHttp\Handler\CurlFactoryInterface;
 use GuzzleHttp\Handler\CurlHandler;
 use GuzzleHttp\Handler\EasyHandle;
+use GuzzleHttp\RequestOptions;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -274,6 +275,12 @@ it('uses the pinned curl transport and bounds its response sink before buffering
                 ->and($options['proxy'])->toBe('')
                 ->and($options['allow_redirects'])->toBeFalse()
                 ->and($options['verify'])->toBeTrue();
+            if (defined(RequestOptions::class.'::PROTOCOLS')) {
+                expect($options['protocols'])->toBe(['http', 'https'])
+                    ->and($options['curl'])->not->toHaveKey(CURLOPT_PROTOCOLS);
+            } else {
+                expect($options['curl'][CURLOPT_PROTOCOLS])->toBe(CURLPROTO_HTTP | CURLPROTO_HTTPS);
+            }
             $this->easy = $this->factory->create($request, $options);
             foreach ($this->chunks as $chunk) {
                 $this->easy->sink->write($chunk);

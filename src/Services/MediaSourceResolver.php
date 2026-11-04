@@ -10,6 +10,7 @@ use GuzzleHttp\Handler\CurlHandler;
 use GuzzleHttp\Psr7\FnStream;
 use GuzzleHttp\Psr7\UriResolver;
 use GuzzleHttp\Psr7\Utils;
+use GuzzleHttp\RequestOptions;
 use GuzzleHttp\TransferStats;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
@@ -270,6 +271,10 @@ final class MediaSourceResolver
             $connectedIp = null;
             $sink = $this->boundedResponseSink();
             $curlResolve = $this->curlResolveEntry($target['host'], $target['port'], $ip);
+            $curlOptions = [CURLOPT_RESOLVE => [$curlResolve]];
+            if (! defined(RequestOptions::class.'::PROTOCOLS')) {
+                $curlOptions[CURLOPT_PROTOCOLS] = CURLPROTO_HTTP | CURLPROTO_HTTPS;
+            }
 
             try {
                 $response = Http::connectTimeout(
@@ -282,10 +287,8 @@ final class MediaSourceResolver
                         'stream' => false,
                         'proxy' => '',
                         'verify' => true,
-                        'curl' => [
-                            CURLOPT_RESOLVE => [$curlResolve],
-                            CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-                        ],
+                        'protocols' => ['http', 'https'],
+                        'curl' => $curlOptions,
                         'on_stats' => static function (TransferStats $stats) use (&$connectedIp): void {
                             $handlerStats = $stats->getHandlerStats();
                             $primaryIp = $handlerStats['primary_ip'] ?? null;
