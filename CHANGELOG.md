@@ -5,6 +5,14 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [7.0.1] - 2026-11-04
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- support PSR-7 3 in remote downloads
+<!-- NVL GENERATED CHANGES END -->
+
 ## [7.0.0] - 2026-11-03
 
 - Adopt the reviewed NVL 7 family for PHP 8.4+ and Laravel 13, with compatible required and optional NVL peers. Review the package upgrade guide before deployment.
