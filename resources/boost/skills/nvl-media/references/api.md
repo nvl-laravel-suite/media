@@ -861,7 +861,9 @@ public function buildPublicUrl(array $parameters=[], ?Nvl\Media\Enums\MediaDeliv
 @param array<string, (scalar | null)> $parameters
 public function buildUrl(array $parameters=[], ?Nvl\Media\Enums\MediaDeliveryMode $mode=null): string
 @param array<string, (scalar | null)> $parameters
-public function delete(): ?bool
+public function delete(): mixed
+@return ($this is Pivot ? (bool | int | null) : (bool | null))
+resolved @return ($this is Illuminate\Database\Eloquent\Relations\Pivot ? (bool | int | null) : (bool | null))
 public function fileExistsOnDisk(): bool
 public function fresh(mixed $with=[]): ?static
 @param (array<array-key, mixed> | string) $with
@@ -1063,7 +1065,9 @@ public const string TABLE=\Nvl\Media\Definitions\Tables\MediaTables::Association
 public function associable(): Illuminate\Database\Eloquent\Relations\MorphTo
 @return MorphTo<Model, $this>
 resolved @return Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model, $this>
-public function delete(): ?bool
+public function delete(): mixed
+@return ($this is Pivot ? (bool | int | null) : (bool | null))
+resolved @return ($this is Illuminate\Database\Eloquent\Relations\Pivot ? (bool | int | null) : (bool | null))
 public function fresh(mixed $with=[]): ?static
 @param (array<array-key, mixed> | string) $with
 public function getConnectionName(): ?string
@@ -1115,7 +1119,9 @@ resolved @property (Illuminate\Support\Carbon | null) $updated_at
 ```text
 class Nvl\Media\Models\MediaImageVariation extends Illuminate\Database\Eloquent\Model implements Nvl\Support\Ownership\Contracts\Ownable
 public const string TABLE=\Nvl\Media\Definitions\Tables\MediaTables::ImageVariations
-public function delete(): ?bool
+public function delete(): mixed
+@return ($this is Pivot ? (bool | int | null) : (bool | null))
+resolved @return ($this is Illuminate\Database\Eloquent\Relations\Pivot ? (bool | int | null) : (bool | null))
 public function fresh(mixed $with=[]): ?static
 @param (array<array-key, mixed> | string) $with
 public function getConnectionName(): ?string
@@ -1164,7 +1170,9 @@ resolved @property (Illuminate\Support\Carbon | null) $updated_at
 ```text
 final class Nvl\Media\Models\MediaOwnerGrant extends Illuminate\Database\Eloquent\Model implements Nvl\Support\Ownership\Contracts\Ownable
 public const string TABLE=\Nvl\Media\Definitions\Tables\MediaTables::OwnerGrants
-public function delete(): ?bool
+public function delete(): mixed
+@return ($this is Pivot ? (bool | int | null) : (bool | null))
+resolved @return ($this is Illuminate\Database\Eloquent\Relations\Pivot ? (bool | int | null) : (bool | null))
 public function fresh(mixed $with=[]): ?static
 @param (array<array-key, mixed> | string) $with
 public function getConnectionName(): ?string
@@ -1202,7 +1210,9 @@ resolved @property (Illuminate\Support\Carbon | null) $updated_at
 ```text
 class Nvl\Media\Models\MediaTranslation extends Illuminate\Database\Eloquent\Model implements Nvl\Support\Ownership\Contracts\Ownable
 public const string TABLE=\Nvl\Media\Definitions\Tables\MediaTables::I18n
-public function delete(): ?bool
+public function delete(): mixed
+@return ($this is Pivot ? (bool | int | null) : (bool | null))
+resolved @return ($this is Illuminate\Database\Eloquent\Relations\Pivot ? (bool | int | null) : (bool | null))
 public function fresh(mixed $with=[]): ?static
 @param (array<array-key, mixed> | string) $with
 public function getConnectionName(): ?string
