@@ -19,7 +19,7 @@ final readonly class MediaMutationHarness
     public function __construct(private MediaLibrary $update, private MediaLibrary $delete, private MediaLibrary $rename, private MediaUploader $replace, private MediaLibrary $bulkDelete, private MediaLibrary $bulkTag, private MediaLibrary $bulkMove) {}
 
     /**
-     * @param  UpdateMediaPayload|array<string, mixed>  $payload
+     * @param  array<string, mixed>  $payload
      */
     public function update(string $id, array $payload): Media
     {

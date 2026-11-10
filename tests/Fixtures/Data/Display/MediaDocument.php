@@ -4,19 +4,14 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Tests\Fixtures\Data\Display;
 
-use Nvl\Media\Tests\Fixtures\DataTransform;
-use Spatie\LaravelData\Attributes\MapInputName;
-use Spatie\LaravelData\Attributes\MapOutputName;
-use Spatie\LaravelData\Data;
-use Spatie\LaravelData\Mappers\CamelCaseMapper;
+use Illuminate\Contracts\Support\Arrayable;
+use JsonSerializable;
+use Nvl\Media\Tests\Fixtures\SerializesMediaProjection;
 
 /** MediaDocument: type-specific payload for document media such as PDF files. */
-#[MapInputName(CamelCaseMapper::class)]
-#[MapOutputName(CamelCaseMapper::class)]
-
-final class MediaDocument extends Data
+final class MediaDocument implements Arrayable, JsonSerializable
 {
-    use DataTransform;
+    use SerializesMediaProjection;
 
     public function __construct(
         /** @var string|null */

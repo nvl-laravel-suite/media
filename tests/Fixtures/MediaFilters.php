@@ -14,7 +14,6 @@ use Nvl\Filterable\Exceptions\FilterableException;
 use Nvl\Filterable\Traits\Filterable;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
-use Nvl\Media\Tests\Fixtures\Data\MediaFilter;
 
 /**
  * Defines the allowlisted filter and sort surface for Media queries.
@@ -61,7 +60,7 @@ trait MediaFilters
             ],
             sorts: array_map(
                 static fn (string $column): SortDefinition => new SortDefinition($column, $column),
-                [...MediaFilter::ALLOWED_SORT_COLUMNS, 'id'],
+                ['created_at', 'updated_at', 'filename', 'size', 'type', 'extension', 'mime_type', 'id'],
             ),
             defaultSorts: ['-created_at'],
             tieBreakerSort: 'id',

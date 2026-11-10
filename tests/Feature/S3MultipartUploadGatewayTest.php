@@ -33,7 +33,7 @@ function configureMultipartS3TestDisk(MockHandler $handler): string
 }
 /**
  * @param  array<string, mixed>|null  $providerState
- * @return array{MultipartUploadSessionData, MediaMultipartUpload}
+ * @return array{array<string, mixed>, MediaMultipartUpload}
  */
 function createMultipartS3TestSession(string $disk, string $contents, ?array $providerState = null): array
 {

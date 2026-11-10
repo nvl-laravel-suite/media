@@ -124,11 +124,11 @@ final class FakeMediaLibrary implements MediaLibraryContract
     }
 
     /**
-     * @param  MediaFilter|array<string, mixed>  $filters
+     * @param  array<string, mixed>  $filters
      * @return LengthAwarePaginator<int, Media>
      */
     public function paginate(
-        MediaFilter|array $filters = [],
+        array $filters = [],
         ?Authenticatable $actor = null,
         bool $includeVariations = false,
     ): LengthAwarePaginator {
@@ -326,7 +326,7 @@ final class FakeMediaLibrary implements MediaLibraryContract
     ): array {
         $result = $this->invoke('initiateMultipart', ['data' => $data, 'actor' => $actor]);
         if (! is_array($result)) {
-            throw new TypeError('FakeMediaLibrary::initiateMultipart requires a scripted MultipartUploadSessionData.');
+            throw new TypeError('FakeMediaLibrary::initiateMultipart requires a scripted session array.');
         }
 
         return $result;
@@ -339,7 +339,7 @@ final class FakeMediaLibrary implements MediaLibraryContract
     ): array {
         $result = $this->invoke('signMultipartPart', ['part' => $part, 'actor' => $actor]);
         if (! is_array($result)) {
-            throw new TypeError('FakeMediaLibrary::signMultipartPart requires a scripted SignedMultipartPartData.');
+            throw new TypeError('FakeMediaLibrary::signMultipartPart requires a scripted signed part array.');
         }
 
         return $result;

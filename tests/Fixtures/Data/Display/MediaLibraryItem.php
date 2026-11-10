@@ -4,23 +4,18 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Tests\Fixtures\Data\Display;
 
-use Nvl\Media\Tests\Fixtures\DataTransform;
-use Spatie\LaravelData\Attributes\MapInputName;
-use Spatie\LaravelData\Attributes\MapOutputName;
-use Spatie\LaravelData\Data;
-use Spatie\LaravelData\Mappers\CamelCaseMapper;
+use Illuminate\Contracts\Support\Arrayable;
+use JsonSerializable;
+use Nvl\Media\Tests\Fixtures\SerializesMediaProjection;
 
 /**
  * Privileged media-library projection for authorized management clients.
  *
  * @api
  */
-#[MapInputName(CamelCaseMapper::class)]
-#[MapOutputName(CamelCaseMapper::class)]
-
-final class MediaLibraryItem extends Data
+final class MediaLibraryItem implements Arrayable, JsonSerializable
 {
-    use DataTransform;
+    use SerializesMediaProjection;
 
     public function __construct(
         /** @var string */

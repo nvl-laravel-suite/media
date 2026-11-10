@@ -211,7 +211,7 @@ function batchMediaAssociation(Model $owner, Media $asset, string $slot = 'docum
     return MediaAssociation::query()->create(['media_id' => $asset->id, 'associable_type' => $owner->getMorphClass(), 'associable_id' => (string) $owner->getKey(), 'collection' => $slot, 'order' => $order, 'is_active' => $active]);
 }
 /** Read exact native identity fields from a public object map.
- * @return list<OwnerMediaSlotItemData>
+ * @return list<array<string, mixed>>
  */
 function batchMediaItems(array $result, Model $owner, string $slot = 'document'): array
 {

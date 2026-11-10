@@ -111,7 +111,7 @@ final readonly class MediaLibrary implements MediaLibraryContract
     }
 
     /**
-     * @param  MediaFilter|array<string, mixed>  $filters
+     * @param  array<string, mixed>  $filters
      * @return LengthAwarePaginator<int, Media>
      */
     public function paginate(

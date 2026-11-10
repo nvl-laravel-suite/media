@@ -5,6 +5,10 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Remove the obsolete Spatie Laravel Data development dependency. Media test adapters now use native validation and explicit projections without TypeScript transformer attributes.
+
 ## [7.0.2] - 2026-11-09
 
 ### Changed

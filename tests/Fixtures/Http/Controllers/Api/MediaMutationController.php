@@ -8,19 +8,18 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Nvl\Media\Definitions\Tables\MediaTables;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaAssociableResolver;
 use Nvl\Media\Services\MediaLibrary;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\MediaReader;
-use Nvl\Media\Tests\Fixtures\Data\Mutations\BulkMediaPayload;
-use Nvl\Media\Tests\Fixtures\Data\Mutations\RenameMediaData;
-use Nvl\Media\Tests\Fixtures\Data\Mutations\ReorderMediaPayload;
-use Nvl\Media\Tests\Fixtures\Data\Mutations\UpdateMediaPayload;
 use Nvl\Media\Tests\Fixtures\MediaManagementDataFactory;
-use Spatie\LaravelData\Optional;
+use Nvl\Translatable\Enums\TranslationSyncMode;
+use Nvl\Translatable\Rules\SupportedLocaleMapRule;
 
 /**
  * Handles metadata, ordering, and lifecycle mutations.
@@ -43,14 +42,32 @@ final class MediaMutationController extends Controller
 
     public function update(
         Request $request,
-        UpdateMediaPayload $data,
         Media $media,
     ): JsonResponse {
         $this->authorize('update', $media);
 
-        $attributes = array_filter(get_object_vars($data), static fn ($value): bool => ! $value instanceof Optional);
-        unset($attributes['translationMode']);
-        $attributes['translation_mode'] = $data->translationMode;
+        if ($request->exists('is_public')) {
+            $request->merge(['isPublic' => $request->input('is_public')]);
+        }
+        $attributes = $request->validate([
+            'isPublic' => ['sometimes', 'boolean'],
+            'tags' => ['nullable', 'array'],
+            'tags.*' => ['string'],
+            'metadata' => ['nullable', 'array'],
+            'translations' => ['nullable', 'array', new SupportedLocaleMapRule],
+            'translations.*' => ['array:title,alt,caption,description'],
+            'translations.*.title' => ['nullable', 'string', 'max:255'],
+            'translations.*.alt' => ['nullable', 'string', 'max:255'],
+            'translations.*.caption' => ['nullable', 'string'],
+            'translations.*.description' => ['nullable', 'string'],
+            'translation_mode' => ['sometimes', Rule::enum(TranslationSyncMode::class)],
+        ]);
+        if (array_key_exists('isPublic', $attributes)) {
+            $attributes['isPublic'] = (bool) $attributes['isPublic'];
+        }
+        $attributes['translation_mode'] = TranslationSyncMode::from(
+            $attributes['translation_mode'] ?? TranslationSyncMode::Patch->value,
+        );
         $updated = $this->updateMetadata->updateMetadata($request->user(), $media, $attributes);
 
         return response()->json([
@@ -68,13 +85,16 @@ final class MediaMutationController extends Controller
         ]);
     }
 
-    public function rename(Request $request, RenameMediaData $data, Media $media): JsonResponse
+    public function rename(Request $request, Media $media): JsonResponse
     {
         $this->authorize('update', $media);
+        $data = $request->validate([
+            'filename' => ['required', 'string', 'max:255', 'regex:/^[^\/\\\\]+$/'],
+        ]);
 
         $renamed = $this->renameMedia->rename(auth()->user(),
             $media,
-            $data->filename,
+            $data['filename'],
         );
 
         return response()->json([
@@ -83,19 +103,26 @@ final class MediaMutationController extends Controller
         ]);
     }
 
-    public function reorder(ReorderMediaPayload $data): JsonResponse
+    public function reorder(Request $request): JsonResponse
     {
-        $mediaItems = $this->queries->findMany(auth()->user(), $data->mediaIds);
+        $data = $request->validate([
+            'mediaIds' => ['required', 'array', 'min:1'],
+            'mediaIds.*' => ['uuid', 'exists:'.MediaTables::get(MediaTables::Media).',id'],
+            'associableType' => ['required', 'string', 'max:255'],
+            'associableId' => ['required', 'string', 'max:255'],
+            'collection' => ['nullable', 'string', 'max:50'],
+        ]);
+        $mediaItems = $this->queries->findMany(auth()->user(), $data['mediaIds']);
 
         foreach ($mediaItems as $media) {
             $this->authorize('update', $media);
         }
 
         $associable = $this->associables->resolveForMutation(
-            $data->associableType,
-            $data->associableId,
+            $data['associableType'],
+            $data['associableId'],
         );
-        $associable->nvlMedia()->order($data->mediaIds, $data->collection);
+        $associable->nvlMedia()->order($data['mediaIds'], $data['collection'] ?? 'default');
 
         return response()->json([
             'data' => ['reordered' => true],
@@ -103,11 +130,19 @@ final class MediaMutationController extends Controller
         ]);
     }
 
-    public function bulk(BulkMediaPayload $data): JsonResponse
+    public function bulk(Request $request): JsonResponse
     {
-        if ($data->action === 'move' && $data->folder !== null) {
+        $data = $request->validate([
+            'action' => ['required', 'string', 'in:delete,tag,move'],
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['uuid'],
+            'tags' => ['required_if:action,tag', 'nullable', 'array'],
+            'tags.*' => ['string', 'max:50'],
+            'folder' => ['required_if:action,move', 'nullable', 'string', 'max:255'],
+        ]);
+        if ($data['action'] === 'move' && isset($data['folder'])) {
             try {
-                MediaPathResolver::assertSafe($data->folder);
+                MediaPathResolver::assertSafe($data['folder']);
             } catch (MediaUploadException) {
                 throw ValidationException::withMessages([
                     'folder' => ['Folder path contains invalid characters.'],
@@ -115,17 +150,17 @@ final class MediaMutationController extends Controller
             }
         }
 
-        $ability = $data->action === 'delete' ? 'delete' : 'update';
-        $mediaItems = $this->queries->findMany(auth()->user(), $data->ids);
+        $ability = $data['action'] === 'delete' ? 'delete' : 'update';
+        $mediaItems = $this->queries->findMany(auth()->user(), $data['ids']);
 
         foreach ($mediaItems as $media) {
             $this->authorize($ability, $media);
         }
 
-        $count = match ($data->action) {
-            'delete' => $this->bulkDelete->bulkDelete(auth()->user(), $data->ids),
-            'tag' => $this->bulkTag->bulkTag(auth()->user(), $data->ids, $data->tags ?? []),
-            'move' => $this->bulkMove->move(auth()->user(), $data->ids, $data->folder ?? ''),
+        $count = match ($data['action']) {
+            'delete' => $this->bulkDelete->bulkDelete(auth()->user(), $data['ids']),
+            'tag' => $this->bulkTag->bulkTag(auth()->user(), $data['ids'], $data['tags'] ?? []),
+            'move' => $this->bulkMove->move(auth()->user(), $data['ids'], $data['folder'] ?? ''),
             default => 0,
         };
 
@@ -133,7 +168,7 @@ final class MediaMutationController extends Controller
             'data' => ['affected' => $count],
             'message' => (string) trans(
                 'nvl-media::media/messages.success.bulk_completed',
-                ['action' => $data->action],
+                ['action' => $data['action']],
             ),
         ]);
     }

@@ -5,27 +5,22 @@ declare(strict_types=1);
 namespace Nvl\Media\Tests\Fixtures\Data\Display;
 
 use Carbon\Carbon;
+use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Database\Eloquent\Model;
+use JsonSerializable;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Support\MediaImageConfiguration;
-use Nvl\Media\Tests\Fixtures\DataTransform;
-use Spatie\LaravelData\Attributes\MapInputName;
-use Spatie\LaravelData\Attributes\MapOutputName;
-use Spatie\LaravelData\Data;
-use Spatie\LaravelData\Mappers\CamelCaseMapper;
+use Nvl\Media\Tests\Fixtures\SerializesMediaProjection;
 use Throwable;
 
 /** MediaPayload: privileged owner-aware DTO containing storage and association details. */
-#[MapInputName(CamelCaseMapper::class)]
-#[MapOutputName(CamelCaseMapper::class)]
-
-final class MediaPayload extends Data
+final class MediaPayload implements Arrayable, JsonSerializable
 {
-    use DataTransform;
+    use SerializesMediaProjection;
 
     private const SIZE_SOURCE_ORIGINAL = 'original';
 
@@ -83,11 +78,9 @@ final class MediaPayload extends Data
         public readonly ?string $extension,
 
         /** @var MediaType */
-        #[TypeScriptType(MediaType::class)]
         public readonly MediaType $type,
 
         /** @var MediaLifecycleStatus */
-        #[TypeScriptType(MediaLifecycleStatus::class)]
         public readonly MediaLifecycleStatus $status,
 
         /** @var string */
@@ -115,15 +108,12 @@ final class MediaPayload extends Data
         public readonly ?array $associationMetadata,
 
         /** @var MediaImage|null */
-        #[TypeScriptType(MediaImage::class)]
         public readonly ?MediaImage $image,
 
         /** @var MediaDocument|null */
-        #[TypeScriptType(MediaDocument::class)]
         public readonly ?MediaDocument $document,
 
         /** @var MediaFile|null */
-        #[TypeScriptType(MediaFile::class)]
         public readonly ?MediaFile $file,
 
         /** @var Carbon|null */

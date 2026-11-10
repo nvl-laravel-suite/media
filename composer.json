@@ -44,7 +44,6 @@
         "pestphp/pest": "^4.0",
         "pestphp/pest-plugin-laravel": "^4.0",
         "shipmonk/composer-dependency-analyser": "^1.8",
-        "spatie/laravel-data": "^4.23",
         "symfony/process": "^7.0 || ^8.0"
     },
     "autoload": {

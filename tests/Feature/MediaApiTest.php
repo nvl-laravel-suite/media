@@ -135,10 +135,23 @@ describe('GET /nvl/api/v1/media (index)', function () {
         $response = $this->actingAs($user)->getJson('/nvl/api/v1/media?type=document');
         $response->assertStatus(200);
     });
-    it('rejects invalid filter values through the declared DTO rules', function (string $query) {
+    it('rejects invalid filter values through native request validation', function (string $query) {
         $user = createApiUser();
         $this->actingAs($user)->getJson('/nvl/api/v1/media?'.$query)->assertUnprocessable();
     })->with(['oversized search' => ['search='.str_repeat('a', 256)], 'unknown type' => ['type=unknown'], 'invalid public flag' => ['isPublic=maybe'], 'zero page size' => ['per_page=0'], 'unknown sort column' => ['sortBy=uploaded_by'], 'invalid sort direction' => ['sortDirection=sideways']]);
+    it('normalizes query pagination and visibility values before native reader calls', function (): void {
+        $user = createApiUser();
+        createApiMedia(['filename' => 'public-first.jpg', 'is_public' => true]);
+        createApiMedia(['filename' => 'public-second.jpg', 'is_public' => true]);
+        createApiMedia(['filename' => 'private.jpg', 'is_public' => false, 'uploaded_by' => $user->id]);
+
+        $this->actingAs($user)->getJson('/nvl/api/v1/media?isPublic=1&per_page=1&page=2&sortBy=filename&sortDirection=asc')
+            ->assertOk()
+            ->assertJsonPath('data.media.items.0.filename', 'public-second.jpg')
+            ->assertJsonPath('data.media.meta.currentPage', 2)
+            ->assertJsonPath('data.media.meta.per_page', 1)
+            ->assertJsonPath('data.media.meta.total', 2);
+    });
     it('scopes results to own media and public media', function () {
         Storage::fake('public');
         $owner = createApiUser();
@@ -319,6 +332,39 @@ describe('POST /nvl/api/v1/media (store)', function () {
  * PUT /nvl/api/v1/media/{id} (update)
  * ================================================================= */
 describe('PUT /nvl/api/v1/media/{id} (update)', function () {
+    it('normalizes string visibility flags without changing private media', function (string $field): void {
+        $user = createApiUser();
+        $media = createApiMedia(['is_public' => false, 'uploaded_by' => $user->id]);
+
+        $this->actingAs($user)->putJson("/nvl/api/v1/media/{$media->id}", [$field => '0', 'tags' => ['retained-private']])
+            ->assertOk()->assertJsonPath('data.isPublic', false);
+
+        expect($media->refresh()->is_public)->toBeFalse()
+            ->and($media->tags)->toBe(['retained-private']);
+    })->with(['camel case' => 'isPublic', 'snake case' => 'is_public']);
+
+    it('preserves omitted metadata fields while retaining explicit null clears', function (): void {
+        $user = createApiUser();
+        $media = createApiMedia(['tags' => ['old'], 'metadata' => ['marker' => 'keep'], 'uploaded_by' => $user->id]);
+
+        $this->actingAs($user)->putJson("/nvl/api/v1/media/{$media->id}", ['tags' => ['new']])->assertOk();
+        expect($media->fresh()->metadata)->toBe(['marker' => 'keep']);
+
+        $this->putJson("/nvl/api/v1/media/{$media->id}", ['metadata' => null])->assertOk();
+        expect($media->fresh()->metadata)->toBeNull()->and($media->fresh()->tags)->toBe(['new']);
+    });
+    it('validates translation modes and maps replace mode to the native enum', function (): void {
+        $user = createApiUser();
+        $media = createApiMedia(['uploaded_by' => $user->id]);
+        $media->translations()->create(['locale' => 'en', 'title' => 'Original']);
+        $media->translations()->create(['locale' => 'bg', 'title' => 'Оригинал']);
+
+        $this->actingAs($user)->putJson("/nvl/api/v1/media/{$media->id}", ['translation_mode' => 'invalid'])
+            ->assertUnprocessable()->assertInvalid(['translation_mode']);
+        $this->putJson("/nvl/api/v1/media/{$media->id}", ['translations' => ['en' => ['title' => 'Replacement']], 'translation_mode' => 'replace'])
+            ->assertOk()->assertJsonPath('data.translations.en.title', 'Replacement');
+        expect($media->translations()->pluck('locale')->all())->toBe(['en']);
+    });
     it('updates media metadata as owner', function () {
         $user = createApiUser();
         $media = createApiMedia(['tags' => ['old'], 'uploaded_by' => $user->id]);

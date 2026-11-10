@@ -75,7 +75,7 @@ function ownerSlotWorkflowActorData(OwnerSlotWorkflowModel $actor): Authenticata
     return $actor;
 }
 /**
- * @param  Closure(MediaActorData, MediaAbility, ?Media, ?Model): bool  $callback
+ * @param  Closure(Authenticatable|SystemActor, MediaAbility, ?Media, ?Model): bool  $callback
  */
 function useOwnerSlotAuthorization(Closure $callback): void
 {
@@ -83,7 +83,7 @@ function useOwnerSlotAuthorization(Closure $callback): void
     app()->instance(MediaAuthorization::class, new readonly class($callback) implements MediaAuthorization
     {
         /**
-         * @param  Closure(MediaActorData, MediaAbility, ?Media, ?Model): bool  $callback
+         * @param  Closure(Authenticatable|SystemActor, MediaAbility, ?Media, ?Model): bool  $callback
          */
         public function __construct(private Closure $callback) {}
 

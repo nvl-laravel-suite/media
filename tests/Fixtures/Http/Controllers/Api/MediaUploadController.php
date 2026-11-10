@@ -15,8 +15,9 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaDiskGuard;
 use Nvl\Media\Services\MediaUploader;
 use Nvl\Media\Slots\MediaSlot;
-use Nvl\Media\Tests\Fixtures\Data\Mutations\ReplaceMediaData;
-use Nvl\Media\Tests\Fixtures\Data\Mutations\StoreMediaPayload;
+use Nvl\Media\Support\MediaConfiguration;
+use Nvl\Media\Tests\Fixtures\Http\Rules\AllowedMimeTypes;
+use Nvl\Media\Tests\Fixtures\Http\Rules\MaxFileSize;
 use Nvl\Media\Tests\Fixtures\MediaManagementDataFactory;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
@@ -34,16 +35,26 @@ final class MediaUploadController extends Controller
         private readonly MediaManagementDataFactory $resources,
     ) {}
 
-    public function store(Request $request, StoreMediaPayload $data): JsonResponse
+    public function store(Request $request): JsonResponse
     {
         $this->authorize('create', Media::class);
+        $data = $request->validate([
+            'files' => ['required', 'array', 'min:1', 'max:'.MediaConfiguration::integer('nvl-media.max_files_per_upload', 10, 1)],
+            'files.*' => ['required', 'file', new MaxFileSize, new AllowedMimeTypes],
+            'collection' => ['nullable', 'string', 'max:50'],
+            'disk' => ['nullable', 'string', 'max:25'],
+            'isPublic' => ['nullable', 'boolean'],
+            'tags' => ['nullable', 'array'],
+            'tags.*' => ['string', 'max:50'],
+        ]);
+        $isPublic = (bool) ($data['isPublic'] ?? false);
 
-        $slot = new MediaSlot($data->collection ?? 'default');
+        $slot = new MediaSlot($data['collection'] ?? 'default');
         $slot->useDisk($this->diskGuard->resolveAllowed(
-            is_string($data->disk) ? $data->disk : null,
-            $data->isPublic,
+            $data['disk'] ?? null,
+            $isPublic,
         ));
-        $slot->isPublic($data->isPublic);
+        $slot->isPublic($isPublic);
 
         $owner = $request->user();
 
@@ -65,8 +76,8 @@ final class MediaUploadController extends Controller
                 model: $owner,
                 slot: $slot,
                 fileName: $file->getClientOriginalName(),
-                isPublic: $data->isPublic,
-                tags: array_values($data->tags ?? []),
+                isPublic: $isPublic,
+                tags: array_values($data['tags'] ?? []),
             );
 
             $uploaded[] = $this->resources->fromModel($media);
@@ -78,11 +89,14 @@ final class MediaUploadController extends Controller
         ], HttpResponse::HTTP_CREATED);
     }
 
-    public function replace(Request $request, ReplaceMediaData $data, Media $media): JsonResponse
+    public function replace(Request $request, Media $media): JsonResponse
     {
         $this->authorize('update', $media);
+        $data = $request->validate([
+            'file' => ['required', 'file', new MaxFileSize, new AllowedMimeTypes],
+        ]);
 
-        $replacement = $data->file;
+        $replacement = $data['file'];
 
         if (! $replacement instanceof UploadedFile) {
             throw ValidationException::withMessages([

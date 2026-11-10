@@ -13,6 +13,6 @@ final class MediaManagementDataFactory
     /** @return array<string, mixed> */
     public function fromModel(Media $media): array
     {
-        return MediaManagementData::fromModel($media)->toArray();
+        return (new MediaManagementData($media))->resolve();
     }
 }

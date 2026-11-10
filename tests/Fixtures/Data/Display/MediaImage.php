@@ -4,20 +4,14 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Tests\Fixtures\Data\Display;
 
-use Nvl\Media\Tests\Fixtures\DataTransform;
-use Spatie\LaravelData\Attributes\DataCollectionOf;
-use Spatie\LaravelData\Attributes\MapInputName;
-use Spatie\LaravelData\Attributes\MapOutputName;
-use Spatie\LaravelData\Data;
-use Spatie\LaravelData\Mappers\CamelCaseMapper;
+use Illuminate\Contracts\Support\Arrayable;
+use JsonSerializable;
+use Nvl\Media\Tests\Fixtures\SerializesMediaProjection;
 
 /** MediaImage: type-specific payload for image media and generated variations. */
-#[MapInputName(CamelCaseMapper::class)]
-#[MapOutputName(CamelCaseMapper::class)]
-
-final class MediaImage extends Data
+final class MediaImage implements Arrayable, JsonSerializable
 {
-    use DataTransform;
+    use SerializesMediaProjection;
 
     public function __construct(
         /** @var int|null */
@@ -36,15 +30,12 @@ final class MediaImage extends Data
         public readonly string $previewUrl,
 
         /** @var array<int, MediaImageBreakpoint> */
-        #[DataCollectionOf(MediaImageBreakpoint::class)]
         public readonly array $breakpoints,
 
         /** @var array<int, MediaImageSize> */
-        #[DataCollectionOf(MediaImageSize::class)]
         public readonly array $sizes,
 
         /** @var array<int, MediaImageVariationPayload> */
-        #[DataCollectionOf(MediaImageVariationPayload::class)]
         public readonly array $variations,
     ) {}
 }

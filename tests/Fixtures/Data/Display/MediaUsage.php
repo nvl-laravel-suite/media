@@ -4,24 +4,19 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Tests\Fixtures\Data\Display;
 
+use Illuminate\Contracts\Support\Arrayable;
+use JsonSerializable;
 use Nvl\Media\Models\MediaAssociation;
-use Nvl\Media\Tests\Fixtures\DataTransform;
-use Spatie\LaravelData\Attributes\MapInputName;
-use Spatie\LaravelData\Attributes\MapOutputName;
-use Spatie\LaravelData\Data;
-use Spatie\LaravelData\Mappers\CamelCaseMapper;
+use Nvl\Media\Tests\Fixtures\SerializesMediaProjection;
 
 /**
  * MediaUsage: read-only DTO representing a media association usage row.
  *
  * @api
  */
-#[MapInputName(CamelCaseMapper::class)]
-#[MapOutputName(CamelCaseMapper::class)]
-
-final class MediaUsage extends Data
+final class MediaUsage implements Arrayable, JsonSerializable
 {
-    use DataTransform;
+    use SerializesMediaProjection;
 
     public function __construct(
         /** @var string */

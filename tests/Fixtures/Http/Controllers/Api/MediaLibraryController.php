@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Routing\Controller;
+use Illuminate\Validation\Rule;
 use LogicException;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
@@ -20,7 +21,6 @@ use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaReader;
 use Nvl\Media\Tests\Fixtures\Data\Display\MediaImageVariationPayload;
 use Nvl\Media\Tests\Fixtures\Data\Display\MediaUsage;
-use Nvl\Media\Tests\Fixtures\Data\MediaFilter;
 use Nvl\Media\Tests\Fixtures\MediaLibraryItemDataFactory;
 use Nvl\Media\Tests\Fixtures\MediaManagementDataFactory;
 use Nvl\Support\Facades\PackageLog;
@@ -46,7 +46,31 @@ final class MediaLibraryController extends Controller
     {
         $this->authorize('viewAny', Media::class);
 
-        $filters = MediaFilter::validateAndCreate($request->query())->toArray();
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:255'],
+            'type' => ['nullable', Rule::enum(MediaType::class)],
+            'disk' => ['nullable', 'string', 'max:25'],
+            'isPublic' => ['nullable', 'boolean'],
+            'collection' => ['nullable', 'string', 'max:50'],
+            'tag' => ['nullable', 'string', 'max:50'],
+            'folder' => ['nullable', 'string', 'max:255'],
+            'mimeType' => ['nullable', 'string', 'max:100'],
+            'extension' => ['nullable', 'string', 'max:10'],
+            'locale' => ['nullable', 'string', 'max:5'],
+            'associableType' => ['nullable', 'string', 'max:255'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'sortBy' => ['nullable', Rule::in(['created_at', 'updated_at', 'filename', 'size', 'type', 'extension', 'mime_type'])],
+            'sortDirection' => ['nullable', Rule::in(['asc', 'desc'])],
+        ]);
+        foreach (['per_page', 'page'] as $integerFilter) {
+            if (isset($filters[$integerFilter])) {
+                $filters[$integerFilter] = (int) $filters[$integerFilter];
+            }
+        }
+        if (isset($filters['isPublic'])) {
+            $filters['isPublic'] = (bool) $filters['isPublic'];
+        }
         $user = $request->user();
         $includeVariations = $request->boolean('include_variations', true);
         $paginator = $this->queryService->paginate(

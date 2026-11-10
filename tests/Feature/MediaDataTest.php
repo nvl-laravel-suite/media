@@ -6,6 +6,7 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Tests\Fixtures\Data\Display\MediaPayload;
 use Nvl\Media\Tests\Fixtures\Data\Display\PublicMedia;
+use Nvl\Media\Tests\Fixtures\MediaManagementDataFactory;
 use Nvl\Media\Tests\Stubs\TestMediaModel;
 
 beforeEach(function () {
@@ -35,6 +36,15 @@ it('serializes media using the association for the requested owner', function ()
     $data = MediaPayload::fromMedia($media->fresh(['associations', 'translations', 'imageVariations']), $variantOwner, 'featured', 'bg');
     expect($data->modelType)->toBe($variantOwner->getMorphClass())->and($data->modelId)->toBe($variantOwner->id)->and($data->collectionName)->toBe('featured')->and($data->order)->toBe(3)->and($data->alt)->toBe('Variant featured alt')->and($data->title)->toBe('Преведено изображение')->and($data->caption)->toBe('Преведен надпис')->and($data->image)->not->toBeNull()->and($data->document)->toBeNull()->and($data->file)->toBeNull();
     expect($data->image?->width)->toBe(1200)->and($data->image?->height)->toBe(800)->and($data->image?->aspectRatio)->toBe(1.5)->and($data->image?->variations)->toHaveCount(1)->and($data->previewUrl)->toContain('v=thumb');
+    $payload = $data->toArray();
+    expect($payload['type'])->toBe(MediaType::IMAGE->value)
+        ->and($payload['status'])->toBe($media->status->value)
+        ->and($payload['createdAt'])->toBe($data->createdAt?->format(DATE_ATOM))
+        ->and($payload['image']['variations'][0]['label'])->toBe('thumb')
+        ->and($payload['image']['sizes'][0]['isGenerated'])->toBeFalse()
+        ->and($payload['image']['sizes'][1]['aspectRatio'])->toBe(1.0)
+        ->and($payload['document'])->toBeNull()
+        ->and(json_decode(json_encode($data, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION), true, flags: JSON_THROW_ON_ERROR))->toBe($payload);
     $breakpoints = collect($data->image?->breakpoints ?? []);
     $sizes = collect($data->image?->sizes ?? []);
     $generatedThumb = $sizes->first(fn ($size): bool => $size->label === 'thumb' && $size->source === 'variation');
@@ -62,6 +72,9 @@ it('projects public-safe media data without internal attachment fields', functio
     foreach (['modelType', 'modelId', 'disk', 'folder', 'isPublic', 'metadata', 'associationMetadata', 'fileName', 'name'] as $internalKey) {
         expect(array_key_exists($internalKey, $payload))->toBeFalse();
     }
+    expect($payload['type'])->toBe(MediaType::IMAGE->value)
+        ->and($payload['image']['sizes'][0]['label'])->toBe('thumb')
+        ->and($payload['image']['sizes'][0])->not->toHaveKeys(['quality', 'isAvailable']);
     $sizes = collect($data?->image?->sizes ?? []);
     expect($sizes->pluck('label')->all())->toBe(['thumb', 'preview'])->and($sizes->pluck('name')->all())->toBe(['small', 'preview'])->and($sizes->pluck('source')->all())->toBe(['variation', 'variation'])->and($data?->image?->srcSet)->toContain('320w')->and($data?->image?->srcSet)->toContain('1200w')->and($data?->image?->srcSet)->not->toContain('small')->and($sizes->firstWhere('label', 'preview')?->size)->toBe(1024);
     expect($sizes->pluck('label')->all())->not->toContain('original');
@@ -88,4 +101,22 @@ it('keeps generated size mismatches and configured expectations separate', funct
     $dynamic = $sizes->firstWhere('label', 'dyn-c6cc0a43e2923aca8a871840');
     $mediums = $sizes->filter(fn ($size): bool => $size->label === 'medium')->values();
     expect($sizes->pluck('label')->all())->toBe(['original', 'dyn-c6cc0a43e2923aca8a871840', 'medium', 'thumb', 'small', 'medium'])->and($dynamic?->name)->toBe('thumbnail')->and($dynamic?->source)->toBe('variation')->and($dynamic?->isAvailable)->toBeTrue()->and($mediums)->toHaveCount(2)->and($mediums->get(0)?->source)->toBe('variation')->and($mediums->get(0)?->height)->toBe(429)->and($mediums->get(0)?->isAvailable)->toBeTrue()->and($mediums->get(1)?->source)->toBe('configured')->and($mediums->get(1)?->height)->toBe(640)->and($mediums->get(1)?->isAvailable)->toBeFalse();
+});
+
+it('omits unloaded management fields while serializing loaded empty relationships', function (): void {
+    $media = createMediaDataRecord();
+    $resources = app(MediaManagementDataFactory::class);
+    $unloaded = $resources->fromModel($media->fresh());
+
+    expect($unloaded)->not->toHaveKeys(['imageVariations', 'translations', 'associationsCount', 'usages', 'fileExists']);
+
+    $loaded = $resources->fromModel($media->fresh(['imageVariations', 'translations', 'associations'])->loadCount('associations'));
+
+    expect($loaded['type'])->toBe(MediaType::IMAGE->value)
+        ->and($loaded['createdAt'])->toBe($media->created_at?->format(DATE_ATOM))
+        ->and($loaded['imageVariations'])->toBe([])
+        ->and($loaded['translations'])->toBe([])
+        ->and($loaded['usages'])->toBe([])
+        ->and($loaded['associationsCount'])->toBe(0)
+        ->and($loaded['fileExists'])->toBeBool();
 });

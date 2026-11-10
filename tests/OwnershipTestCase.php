@@ -34,7 +34,6 @@ use Nvl\Support\Providers\LocaleServiceProvider;
 use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Translatable\Providers\TranslatableServiceProvider;
 use Orchestra\Testbench\TestCase;
-use Spatie\LaravelData\LaravelDataServiceProvider as DataServiceProvider;
 
 /** Exercises committed ownership and audit behavior without NVL Tenancy or Auth providers. */
 abstract class OwnershipTestCase extends TestCase
@@ -50,7 +49,7 @@ abstract class OwnershipTestCase extends TestCase
     /** @return list<class-string> */
     protected function getPackageProviders($app): array
     {
-        return [LocaleServiceProvider::class, SupportServiceProvider::class, FilterableServiceProvider::class, TranslatableServiceProvider::class, DataServiceProvider::class, OwnershipServiceProvider::class, MediaServiceProvider::class, ConsumerMediaProvider::class];
+        return [LocaleServiceProvider::class, SupportServiceProvider::class, FilterableServiceProvider::class, TranslatableServiceProvider::class, OwnershipServiceProvider::class, MediaServiceProvider::class, ConsumerMediaProvider::class];
     }
 
     /** @return class-string<Media> */

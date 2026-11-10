@@ -22,7 +22,6 @@ use Nvl\Support\Providers\LocaleServiceProvider;
 use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Translatable\Providers\TranslatableServiceProvider;
 use Orchestra\Testbench\Foundation\Application;
-use Spatie\LaravelData\LaravelDataServiceProvider as DataServiceProvider;
 
 require dirname(__DIR__, 5).'/vendor/autoload.php';
 $source = json_decode($argv[1], true, flags: JSON_THROW_ON_ERROR);
@@ -32,7 +31,7 @@ if (! is_array($source) || ! in_array($source['driver'] ?? null, ['pgsql', 'mysq
 }
 OwnershipWorkerProvider::$source = $source;
 OwnershipWorkerProvider::$root = $options['root'];
-$app = Application::create(options: ['load_environment_variables' => false, 'extra' => ['dont-discover' => ['*'], 'providers' => [LocaleServiceProvider::class, SupportServiceProvider::class, DataServiceProvider::class, FilterableServiceProvider::class, TranslatableServiceProvider::class, OwnershipServiceProvider::class, MediaServiceProvider::class, OwnershipWorkerProvider::class]]]);
+$app = Application::create(options: ['load_environment_variables' => false, 'extra' => ['dont-discover' => ['*'], 'providers' => [LocaleServiceProvider::class, SupportServiceProvider::class, FilterableServiceProvider::class, TranslatableServiceProvider::class, OwnershipServiceProvider::class, MediaServiceProvider::class, OwnershipWorkerProvider::class]]]);
 $kernel = $app->make(Kernel::class);
 $kernel->bootstrap();
 NativeDatabaseSource::inspect($app->make('db')->connection());

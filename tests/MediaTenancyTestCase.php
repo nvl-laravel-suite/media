@@ -21,7 +21,6 @@ use Nvl\Tenancy\Providers\TenancyServiceProvider;
 use Nvl\Translatable\Providers\TranslatableServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 use ReflectionClass;
-use Spatie\LaravelData\LaravelDataServiceProvider as DataServiceProvider;
 
 /** Boots Media's non-transactional tenancy adoption fixture. */
 abstract class MediaTenancyTestCase extends Orchestra
@@ -31,7 +30,7 @@ abstract class MediaTenancyTestCase extends Orchestra
     /** @return list<class-string> */
     protected function getPackageProviders($app): array
     {
-        return [LocaleServiceProvider::class, DataServiceProvider::class, FilterableServiceProvider::class, SupportServiceProvider::class, MediaTenancyFixtureServiceProvider::class, TenancyServiceProvider::class, TranslatableServiceProvider::class, MediaServiceProvider::class];
+        return [LocaleServiceProvider::class, FilterableServiceProvider::class, SupportServiceProvider::class, MediaTenancyFixtureServiceProvider::class, TenancyServiceProvider::class, TranslatableServiceProvider::class, MediaServiceProvider::class];
     }
 
     /** Configure tenancy structurally before package providers boot. */

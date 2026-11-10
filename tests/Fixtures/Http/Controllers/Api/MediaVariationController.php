@@ -6,13 +6,13 @@ namespace Nvl\Media\Tests\Fixtures\Http\Controllers\Api;
 
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Services\MediaConfiguredVariationService;
 use Nvl\Media\Services\MediaVariations;
 use Nvl\Media\Tests\Fixtures\Data\Display\MediaImageVariationPayload;
-use Nvl\Media\Tests\Fixtures\Data\Mutations\RequestMediaVariationsData;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 /**
@@ -42,9 +42,13 @@ final class MediaVariationController extends Controller
         ]);
     }
 
-    public function regenerate(RequestMediaVariationsData $data, Media $media): JsonResponse
+    public function regenerate(Request $request, Media $media): JsonResponse
     {
         $this->authorize('regenerate', $media);
+        $data = $request->validate([
+            'variations' => ['sometimes', 'array', 'max:50'],
+            'variations.*' => ['string', 'max:255'],
+        ]);
         $media->loadMissing('imageVariations');
 
         if (! $media->type->supportsConversions()) {
@@ -54,7 +58,7 @@ final class MediaVariationController extends Controller
             ], HttpResponse::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        $requested = $data->variations;
+        $requested = $data['variations'] ?? null;
         $labels = is_array($requested)
             ? array_values(array_filter($requested, 'is_string'))
             : [];

@@ -4,106 +4,77 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Tests\Fixtures\Data\Display;
 
-use Illuminate\Support\Carbon;
-use Nvl\Media\Enums\MediaType;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Support\MediaImageConfiguration;
-use Nvl\Media\Tests\Fixtures\DataTransform;
 use Nvl\Support\Facades\PackageLog;
-use Spatie\LaravelData\Attributes\MapOutputName;
-use Spatie\LaravelData\Data;
-use Spatie\LaravelData\Mappers\CamelCaseMapper;
-use Spatie\LaravelData\Optional;
 use Throwable;
 
-/** Privileged management projection of a media record. */
-#[MapOutputName(CamelCaseMapper::class)]
-
-final class MediaManagementData extends Data
+/** Native Laravel resource for the privileged management projection used by the host fixture. */
+final class MediaManagementData extends JsonResource
 {
-    use DataTransform;
-
-    /**
-     * @param  list<string>  $tags
-     * @param  array<string, mixed>|null  $metadata
-     * @param  list<MediaImageVariationPayload>|Optional  $imageVariations
-     * @param  array<string, array<string, string|null>>|Optional  $translations
-     * @param  list<MediaUsage>|Optional  $usages
-     */
-    public function __construct(
-        public readonly string $id,
-        public readonly string $filename,
-        public readonly string $extension,
-        public readonly string $mimeType,
-        public readonly int $size,
-        public readonly string $humanReadableSize,
-        public readonly string $disk,
-        public readonly ?string $folder,
-        public readonly bool $isPublic,
-        public readonly MediaType $type,
-        public readonly string $digest,
-        public readonly array $tags,
-
-        public readonly ?array $metadata,
-        public readonly ?string $uploadedBy,
-        public readonly ?string $url,
-        public readonly ?string $previewUrl,
-        public readonly array|Optional $imageVariations,
-        public readonly array|Optional $translations,
-        public readonly int|Optional $associationsCount,
-        public readonly array|Optional $usages,
-        public readonly bool|Optional $fileExists,
-        public readonly ?Carbon $createdAt,
-        public readonly ?Carbon $updatedAt,
-    ) {}
-
-    public static function fromModel(Media $media): self
+    /** @return array<string, mixed> */
+    public function toArray(Request $request): array
     {
+        /** @var Media $media */
+        $media = $this->resource;
         $url = self::safeUrl($media);
 
-        return new self(
-            id: $media->id,
-            filename: $media->filename,
-            extension: $media->extension,
-            mimeType: $media->mime_type,
-            size: $media->size,
-            humanReadableSize: $media->humanReadableSize(),
-            disk: $media->disk,
-            folder: $media->folder,
-            isPublic: $media->is_public,
-            type: $media->type,
-            digest: $media->digest,
-            tags: array_values($media->tags ?? []),
-            metadata: $media->metadata,
-            uploadedBy: $media->uploaded_by,
-            url: $url,
-            previewUrl: self::safePreviewUrl($media, $url),
-            imageVariations: $media->relationLoaded('imageVariations')
-                ? array_values($media->imageVariations->map(fn (MediaImageVariation $variation): MediaImageVariationPayload => MediaImageVariationPayload::fromModel($variation))->all())
-                : Optional::create(),
-            translations: $media->relationLoaded('translations')
-                ? $media->translations->mapWithKeys(fn (MediaTranslation $translation): array => [
+        return [
+            'id' => $media->id,
+            'filename' => $media->filename,
+            'extension' => $media->extension,
+            'mimeType' => $media->mime_type,
+            'size' => $media->size,
+            'humanReadableSize' => $media->humanReadableSize(),
+            'disk' => $media->disk,
+            'folder' => $media->folder,
+            'isPublic' => $media->is_public,
+            'type' => $media->type->value,
+            'digest' => $media->digest,
+            'tags' => array_values($media->tags ?? []),
+            'metadata' => $media->metadata,
+            'uploadedBy' => $media->uploaded_by,
+            'url' => $url,
+            'previewUrl' => self::safePreviewUrl($media, $url),
+            'imageVariations' => $this->when(
+                $media->relationLoaded('imageVariations'),
+                fn (): array => array_values($media->imageVariations->map(
+                    static fn (MediaImageVariation $variation): array => MediaImageVariationPayload::fromModel($variation)->toArray(),
+                )->all()),
+            ),
+            'translations' => $this->when(
+                $media->relationLoaded('translations'),
+                fn (): array => $media->translations->mapWithKeys(static fn (MediaTranslation $translation): array => [
                     $translation->locale => [
                         'title' => $translation->title,
                         'alt' => $translation->alt,
                         'caption' => $translation->caption,
                         'description' => $translation->description,
                     ],
-                ])->all()
-                : Optional::create(),
-            associationsCount: array_key_exists('associations_count', $media->getAttributes())
-                ? (int) $media->associations_count
-                : Optional::create(),
-            usages: $media->relationLoaded('associations')
-                ? array_values($media->associations->map(fn (MediaAssociation $association): MediaUsage => MediaUsage::fromModel($association))->all())
-                : Optional::create(),
-            fileExists: $media->relationLoaded('associations') ? $media->fileExistsOnDisk() : Optional::create(),
-            createdAt: $media->created_at,
-            updatedAt: $media->updated_at,
-        );
+                ])->all(),
+            ),
+            'associationsCount' => $this->when(
+                array_key_exists('associations_count', $media->getAttributes()),
+                fn (): int => (int) $media->associations_count,
+            ),
+            'usages' => $this->when(
+                $media->relationLoaded('associations'),
+                fn (): array => array_values($media->associations->map(
+                    static fn (MediaAssociation $association): array => MediaUsage::fromModel($association)->toArray(),
+                )->all()),
+            ),
+            'fileExists' => $this->when(
+                $media->relationLoaded('associations'),
+                fn (): bool => $media->fileExistsOnDisk(),
+            ),
+            'createdAt' => $media->created_at?->format(DATE_ATOM),
+            'updatedAt' => $media->updated_at?->format(DATE_ATOM),
+        ];
     }
 
     private static function safeUrl(Media $media): ?string

@@ -4,29 +4,23 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Tests\Fixtures\Data\Display;
 
+use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Database\Eloquent\Model;
+use JsonSerializable;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
-use Nvl\Media\Tests\Fixtures\DataTransform;
-use Spatie\LaravelData\Attributes\MapInputName;
-use Spatie\LaravelData\Attributes\MapOutputName;
-use Spatie\LaravelData\Data;
-use Spatie\LaravelData\Mappers\CamelCaseMapper;
+use Nvl\Media\Tests\Fixtures\SerializesMediaProjection;
 
 /** PublicMedia: public-safe media projection for public HTTP payloads. */
-#[MapInputName(CamelCaseMapper::class)]
-#[MapOutputName(CamelCaseMapper::class)]
-
-final class PublicMedia extends Data
+final class PublicMedia implements Arrayable, JsonSerializable
 {
-    use DataTransform;
+    use SerializesMediaProjection;
 
     public function __construct(
         /** @var string */
         public readonly string $id,
 
         /** @var MediaType */
-        #[TypeScriptType(MediaType::class)]
         public readonly MediaType $type,
 
         /** @var string|null */
@@ -60,11 +54,9 @@ final class PublicMedia extends Data
         public readonly string $previewUrl,
 
         /** @var PublicMediaImage|null */
-        #[TypeScriptType(PublicMediaImage::class)]
         public readonly ?PublicMediaImage $image,
 
         /** @var PublicMediaFile|null */
-        #[TypeScriptType(PublicMediaFile::class)]
         public readonly ?PublicMediaFile $file,
     ) {}
 

@@ -14,7 +14,6 @@ use Nvl\Support\Providers\LocaleServiceProvider;
 use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Translatable\Providers\TranslatableServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
-use Spatie\LaravelData\LaravelDataServiceProvider as DataServiceProvider;
 
 /**
  * Base test case for Media module feature tests.
@@ -31,7 +30,7 @@ abstract class MediaTestCase extends Orchestra
      */
     protected function getPackageProviders($app): array
     {
-        return [LocaleServiceProvider::class, DataServiceProvider::class, FilterableServiceProvider::class, SupportServiceProvider::class, TranslatableServiceProvider::class, MediaServiceProvider::class, ConsumerMediaProvider::class];
+        return [LocaleServiceProvider::class, FilterableServiceProvider::class, SupportServiceProvider::class, TranslatableServiceProvider::class, MediaServiceProvider::class, ConsumerMediaProvider::class];
     }
 
     protected function defineDatabaseMigrationsAfterDatabaseRefreshed(): void
