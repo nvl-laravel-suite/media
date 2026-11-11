@@ -5,6 +5,8 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [7.0.4] - 2026-11-11
+
 ### Fixed
 
 - Return a model's media associations in a stable order when several share the same `order` value (the default is 0). The `nvlMediaAssociations()` relation and the `ordered()` scope sorted by `order` alone, so PostgreSQL and MySQL could return two files of one slot in either order; they now break ties by identifier, as the paginated readers already did.
@@ -39,6 +41,12 @@ All notable changes to `nvl/media` are documented here.
 - `nvl:media:doctor` inspects Media tables and persisted paths on the Media connection.
 - `ConversionDefinition::crop()` honours its position, `watermark()` honours its opacity, and `validate()` rejects flip, orientation and position values the image pipeline would ignore.
 - Remove unused `MediaHashGenerator::generate()`, `MediaFileOperator::deleteDirectory()` and the `MediaTables::MEDIA*` aliases.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- scope builder writes, stabilise ordering and harden uploads and adoption
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.0.3] - 2026-11-10
 
