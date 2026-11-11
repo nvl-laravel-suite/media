@@ -65,11 +65,12 @@ return [
     'content_scanner' => NullMediaContentScanner::class,
     'scanner' => ['required' => env('NVL_MEDIA_SCANNER_REQUIRED', false), 'allow_noop' => env('NVL_MEDIA_ALLOW_NOOP_SCANNER', false), 'untrusted_uploads' => env('NVL_MEDIA_UNTRUSTED_UPLOADS', true)],
     'multipart' => [
-        // Direct uploads are opt-in. Production diagnostics require a
-        // recoverable gateway, scanner attestation, and a central lock store.
+        // Direct uploads are opt-in. Every completed object stays pending_scan
+        // until MediaScan::finalize() accepts a scanner attestation. Production
+        // diagnostics require a recoverable gateway, a real scanner, and a
+        // central lock store.
         'enabled' => env('NVL_MEDIA_MULTIPART_ENABLED', false),
         'gateway' => S3MultipartUploadGateway::class,
-        'required_scan' => true,
         'lock' => ['seconds' => (int) env('NVL_MEDIA_MULTIPART_LOCK_SECONDS', 300)],
     ],
     /*

@@ -16,7 +16,7 @@ php artisan nvl:media:doctor --strict --format=json
 - `--strict`: treats failed warnings as failures.
 - `--format=text|json`: human table or machine-readable output.
 
-Checks package tables/columns/indexes, allowlisted disks and exception-enabled writes, representative live Media object paths under the configured root folder, delivery modes and lifetime bounds, optional S3 dependencies, integrity policy, image drivers/encoders, durable queue timing, remote cURL/bounds, multi-node locks, authorization/scanner bindings, and multipart recovery/attestation. Soft-deleted Media rows are diagnostic tombstones and do not participate in `storage.persisted_paths`, because canonical deletion may intentionally remove their objects. Disabled multipart is valid; enabled multipart must use a recoverable gateway, central locks, and scanner attestation. Run it after configuration cache is built and before accepting traffic. The provider registers no HTTP routes; Doctor does not certify authentication or authorization in consumer endpoints. Test those in the host application.
+Checks package tables/columns/indexes, allowlisted disks and exception-enabled writes, representative live Media object paths under the configured root folder, delivery modes and lifetime bounds, optional S3 dependencies, image drivers/encoders, durable queue timing, remote cURL/bounds, multi-node locks, authorization/scanner bindings, and multipart recovery/attestation. Soft-deleted Media rows are diagnostic tombstones and do not participate in `storage.persisted_paths`, because canonical deletion may intentionally remove their objects. Disabled multipart is valid; enabled multipart must use a recoverable gateway, central locks, and scanner attestation. Run it after configuration cache is built and before accepting traffic. The provider registers no HTTP routes; Doctor does not certify authentication or authorization in consumer endpoints. Test those in the host application.
 
 ## `nvl:media:adopt-spatie`
 
@@ -61,7 +61,7 @@ php artisan nvl:media:reconcile --production --disk=s3 --cleanup-orphans --older
 - `--include-trashed`: include soft-deleted media.
 - `--orphans`: inventory paginated objects below the selected disk prefix (`root_folders[disk]`, then `root_folder`) and admitted owner partition that are not referenced by live media.
 - `--cleanup-orphans`: explicitly delete only age-eligible orphan candidates.
-- `--older-than=1440`: minimum candidate age in minutes; recent objects remain protected.
+- `--older-than=<minutes>`: minimum candidate age in minutes; recent objects remain protected. Defaults to `nvl-media.reconciliation.orphan_age_minutes` (1440).
 - `--force`: required with `--cleanup-orphans` in production.
 - `--require-records`: fail when the selected disk has no rows.
 - `--production`: enables route verification and record requirement, prohibits live-write probes, and requires `--force` for orphan cleanup.

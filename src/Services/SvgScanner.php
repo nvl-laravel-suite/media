@@ -31,11 +31,8 @@ final class SvgScanner
         'set',
     ];
 
-    /** @var array<int, string> Elements safe with internal refs but dangerous with external ones. */
-    private const EXTERNAL_REF_ELEMENTS = [
-        'use',
-        'image',
-    ];
+    /** Browsers build real HTML elements for this namespace wherever it appears in an SVG document. */
+    private const XHTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 
     /** @var array<int, string> Attributes that can contain executable URIs. */
     private const URI_ATTRIBUTES = [
@@ -160,19 +157,23 @@ final class SvgScanner
             throw new MediaUploadException("SVG contains a forbidden <{$local_name}> element.");
         }
 
+        if ($element->namespaceURI === self::XHTML_NAMESPACE) {
+            throw new MediaUploadException("SVG contains an embedded HTML <{$local_name}> element, which is not allowed.");
+        }
+
         if ($local_name === 'style') {
             $this->checkCssValue($element->textContent);
         }
 
-        // <use> and <image> are safe with internal refs (#id) but dangerous with external URLs
-        if (in_array($local_name, self::EXTERNAL_REF_ELEMENTS, true)) {
+        // A hyperlink may point anywhere; every other element (use, image, feImage, pattern, gradients,
+        // textPath, ...) loads what its href names, so only a local fragment or an inline image is accepted.
+        if ($local_name !== 'a') {
             $this->checkForExternalReference($element, $local_name);
         }
-
     }
 
     /**
-     * Block <use> and <image> elements that reference external resources.
+     * Block elements that reference external resources.
      * Internal references (href="#symbol-id") are safe.
      *
      * @throws MediaUploadException
@@ -233,11 +234,11 @@ final class SvgScanner
         }
     }
 
-    /** Reject external CSS resources and obfuscation without rewriting uploaded bytes. */
+    /** Reject external CSS resources (url(), image-set(), @import) and obfuscation without rewriting uploaded bytes. */
     private function checkCssValue(string $value): void
     {
         $withoutLocalReferences = preg_replace('~url\(\s*(["\']?)#[a-z0-9_.:-]+\1\s*\)~i', '', $value) ?? $value;
-        if (preg_match('~@import\b|url\s*\(|\\\\|/\*~i', $withoutLocalReferences) === 1) {
+        if (preg_match('~@import\b|url\s*\(|image-set\s*\(|\\\\|/\*~i', $withoutLocalReferences) === 1) {
             throw new MediaUploadException('SVG contains external or obfuscated CSS, which is not allowed.');
         }
     }

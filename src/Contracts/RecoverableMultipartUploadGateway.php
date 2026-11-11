@@ -14,7 +14,7 @@ use Nvl\Media\Enums\MediaVisibility;
 interface RecoverableMultipartUploadGateway extends MultipartUploadGateway
 {
     /** @param array{uploadId: string, disk: string, objectKey: string, filename: string, mimeType: string, size: int, checksum: string, visibility: MediaVisibility, uploaderId: int|string|null, uploaderType: string|null, expiresAt: \DateTimeImmutable, minimumPartSize: int, maximumParts: int} $session
-     * @return array{path: string, checksum: string, size: int, mimeType: string, objectIdentity: string|null}|null
+     * @return array{path: string, checksum: string|null, size: int, mimeType: string, objectIdentity: string|null}|null
      */
     public function inspect(
         array $session,

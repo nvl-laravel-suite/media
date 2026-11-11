@@ -185,3 +185,30 @@ describe('GenerateImageVariationAction', function () {
         Storage::disk('s3')->assertExists($variation?->getPath() ?? '');
     });
 });
+
+it('keeps a still-valid variation deliverable when its regeneration fails', function (): void {
+    Storage::fake('public');
+    config(['nvl-media.conversions_folder' => 'conversions']);
+    $media = createVariationMedia();
+    Storage::disk('public')->put($media->buildPath(), 'source image');
+    $current = MediaImageVariation::query()->create(['media_id' => $media->id, 'label' => 'thumb', 'storage_path' => 'media/test/conversions/current-thumb.webp', 'status' => MediaLifecycleStatus::Available->value, 'width' => 10, 'height' => 10, 'size' => 5, 'format' => 'webp', 'quality' => 80, 'source_revision' => $media->revision, 'attempts' => 1]);
+    $stale = MediaImageVariation::query()->create(['media_id' => $media->id, 'label' => 'medium', 'storage_path' => 'media/test/conversions/stale-medium.webp', 'status' => MediaLifecycleStatus::ProcessingVariations->value, 'width' => 10, 'height' => 10, 'size' => 5, 'format' => 'webp', 'quality' => 80, 'source_revision' => $media->revision, 'attempts' => 1]);
+    Storage::disk('public')->put($current->getPath(), 'thumb');
+    $transformer = Mockery::mock(MediaImageTransformer::class);
+    $transformer->shouldReceive('process')->andThrow(new ConversionFailedException('The encoder is temporarily unavailable.'));
+    app()->instance(MediaImageTransformer::class, $transformer);
+
+    foreach (['thumb', 'medium'] as $label) {
+        expect(fn () => app(MediaVariations::class)->generate(SystemActor::Background, $media, (new ConversionDefinition($label))->width(10)))
+            ->toThrow(ConversionFailedException::class);
+    }
+
+    $current->refresh();
+    expect($current->status)->toBe(MediaLifecycleStatus::Available->value)
+        ->and($current->attempts)->toBe(2)
+        ->and($current->failure_context['message'] ?? null)->toContain('temporarily unavailable')
+        ->and($media->refresh()->load('imageVariations')->getUrl('thumb'))->toContain('current-thumb.webp')
+        ->and($stale->refresh()->status)->toBe(MediaLifecycleStatus::Failed->value)
+        ->and($media->status)->toBe(MediaLifecycleStatus::Available);
+    Storage::disk('public')->assertExists($current->getPath());
+});

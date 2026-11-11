@@ -221,3 +221,33 @@ it('reports unsupported provider delivery without falling back to another mode',
     $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--production' => true])
         ->expectsOutputToContain('does not support creating temporary URLs')->assertFailed();
 });
+it('uses the configured orphan age when --older-than is not passed', function (): void {
+    configureStorageHealthR2Fake();
+    $orphan = 'media/orphans/configured-age.txt';
+    Storage::disk('cloudflare-r2')->put($orphan, 'orphan');
+
+    config(['nvl-media.reconciliation.orphan_age_minutes' => 0]);
+    $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--cleanup-orphans' => true, '--older-than' => 60])->expectsOutputToContain('Orphan objects deleted: 0')->assertSuccessful();
+    Storage::disk('cloudflare-r2')->assertExists($orphan);
+
+    $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--cleanup-orphans' => true])->expectsOutputToContain('Orphan objects deleted: 1')->assertSuccessful();
+    Storage::disk('cloudflare-r2')->assertMissing($orphan);
+});
+it('classifies live, soft-deleted and variation objects across reference chunks', function (): void {
+    configureStorageHealthR2Fake();
+    $live = createStorageHealthMedia(['hash' => 'live.jpg']);
+    putStorageHealthOriginal($live, 'live');
+    $variation = MediaImageVariation::query()->create(['media_id' => $live->id, 'label' => 'thumb', 'storage_path' => 'media/storage-health/conversions/live-thumb.webp', 'status' => 'available', 'width' => 1, 'height' => 1, 'size' => 1, 'format' => 'webp', 'quality' => 80]);
+    Storage::disk('cloudflare-r2')->put($variation->getPath(), 'thumb');
+    $deleted = createStorageHealthMedia(['hash' => 'deleted.jpg']);
+    putStorageHealthOriginal($deleted, 'deleted');
+    $deleted->delete();
+    Storage::disk('cloudflare-r2')->put('media/storage-health/stray.jpg', 'stray');
+
+    $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--cleanup-orphans' => true, '--older-than' => 0])->expectsOutputToContain('Orphan candidates: 2')->expectsOutputToContain('Orphan objects deleted: 2')->assertSuccessful();
+
+    Storage::disk('cloudflare-r2')->assertExists($live->buildPath());
+    Storage::disk('cloudflare-r2')->assertExists($variation->getPath());
+    Storage::disk('cloudflare-r2')->assertMissing($deleted->buildPath());
+    Storage::disk('cloudflare-r2')->assertMissing('media/storage-health/stray.jpg');
+});

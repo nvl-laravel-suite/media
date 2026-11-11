@@ -131,6 +131,37 @@ test('mutation locks survive savepoint rollback and release on either root outco
     }
 });
 
+test('mutation locks follow the configured media connection instead of the default connection', function (): void {
+    $connectionName = 'media-configured-mutation-lock';
+    config([
+        "database.connections.{$connectionName}" => config('database.connections.'.DB::getDefaultConnection()),
+        'nvl-media.connection' => $connectionName,
+        'nvl-media.mutation_lock.enabled' => true,
+        'nvl-media.locks.mutation.store' => 'array',
+        'nvl-media.mutation_lock.wait_seconds' => 0,
+    ]);
+    $connection = DB::connection($connectionName);
+    $lock = app(MediaMutationLock::class);
+    try {
+        $connection->beginTransaction();
+        $lock->execute('split-committed', static fn (): null => null);
+        expect(mediaRollbackMutationLockIsAvailable('split-committed'))->toBeFalse();
+        $connection->commit();
+        expect(mediaRollbackMutationLockIsAvailable('split-committed'))->toBeTrue();
+
+        $connection->beginTransaction();
+        $lock->execute('split-rolled-back', static fn (): null => null);
+        expect(mediaRollbackMutationLockIsAvailable('split-rolled-back'))->toBeFalse();
+        $connection->rollBack();
+        expect(mediaRollbackMutationLockIsAvailable('split-rolled-back'))->toBeTrue();
+    } finally {
+        while ($connection->transactionLevel() > 0) {
+            $connection->rollBack();
+        }
+        DB::purge($connectionName);
+    }
+});
+
 test('file effects use the configured media connection and cancel only its rolled back branch', function (): void {
     Storage::fake('public');
     $connectionName = 'media-configured-file-effects';

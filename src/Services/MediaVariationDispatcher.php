@@ -11,6 +11,7 @@ use Nvl\Media\Jobs\GenerateImageVariationJob;
 use Nvl\Media\MediaRegistration;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Slots\MediaSlot;
+use Nvl\Media\Support\MediaImageConfiguration;
 use Nvl\Media\Support\MediaQueueConfiguration;
 use Nvl\Media\Support\MediaQueueEnvelope;
 use Nvl\Support\Logging\PackageLogger;
@@ -185,6 +186,7 @@ final class MediaVariationDispatcher
     ): void {
         if (! $media->isAvailable()
             || ! $media->type->supportsConversions()
+            || ! MediaImageConfiguration::driverDecodes($media->extension)
             || empty($definitions)) {
             return;
         }

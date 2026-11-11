@@ -72,7 +72,7 @@ final class MediaReader
             'folder' => ['nullable', 'string', 'max:255'],
             'mimeType' => ['nullable', 'string', 'max:100'],
             'extension' => ['nullable', 'string', 'max:10'],
-            'locale' => ['nullable', 'string', 'max:5'],
+            'locale' => ['nullable', 'string', 'max:35'],
             'associableType' => ['nullable', 'string', 'max:255'],
             'per_page' => ['nullable', 'integer', 'min:1'],
             'page' => ['nullable', 'integer', 'min:1'],
@@ -331,7 +331,11 @@ final class MediaReader
             $ownerType = MediaActors::type($actor);
 
             $query->where(function (Builder $builder) use ($ownerId, $ownerType): void {
-                $builder->where('is_public', true)
+                // Public visibility covers deliverable assets only: another uploader's pending or quarantined
+                // file stays out of the shared library until a scan makes it available.
+                $builder->where(function (Builder $publicQuery): void {
+                    $publicQuery->where('is_public', true)->available();
+                })
                     ->orWhere(function (Builder $ownerQuery) use ($ownerId, $ownerType): void {
                         $ownerQuery
                             ->where('uploaded_by', $ownerId)

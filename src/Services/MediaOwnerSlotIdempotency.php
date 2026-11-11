@@ -417,7 +417,7 @@ final class MediaOwnerSlotIdempotency
 
         if (! is_int($timeout) || $timeout < 1 || $timeout > 1_440) {
             throw new InvalidArgumentException(
-                'media.owner_slots.idempotency.processing_timeout_minutes must be between 1 and 1440.',
+                'nvl-media.owner_slots.idempotency.processing_timeout_minutes must be between 1 and 1440.',
             );
         }
 

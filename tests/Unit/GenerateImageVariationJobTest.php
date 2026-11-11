@@ -33,6 +33,18 @@ describe('GenerateImageVariationJob', function () {
             ->and($captured[0]->sourceRevision)->toBe(7)
             ->and($captured[0]->definition->targetWidth)->toBe(150);
     });
+    it('does not dispatch variations the GD driver can never decode', function (string $extension, string $mimeType): void {
+        Queue::fake();
+        $media = Media::factory()->create(['type' => MediaType::IMAGE, 'status' => MediaLifecycleStatus::Available, 'extension' => $extension, 'mime_type' => $mimeType]);
+
+        config(['nvl-media.image_driver' => 'gd']);
+        app(MediaVariationDispatcher::class)->dispatchConfiguredForUpload($media);
+        Queue::assertNotPushed(GenerateImageVariationJob::class);
+
+        config(['nvl-media.image_driver' => 'imagick']);
+        app(MediaVariationDispatcher::class)->dispatchConfiguredForUpload($media);
+        Queue::assertPushed(GenerateImageVariationJob::class, 1);
+    })->with([['svg', 'image/svg+xml'], ['ico', 'image/vnd.microsoft.icon']]);
     it('is dispatchable to the configured queue', function () {
         Queue::fake();
         GenerateImageVariationJob::dispatch('media-123', 'thumb', ['width' => 150, 'height' => 150]);

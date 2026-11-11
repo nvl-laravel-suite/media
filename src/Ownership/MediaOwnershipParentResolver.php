@@ -6,6 +6,7 @@ namespace Nvl\Media\Ownership;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Support\OwnerRegistry;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
@@ -13,6 +14,7 @@ use Nvl\Support\Ownership\Contracts\OwnershipContext;
 use Nvl\Support\Ownership\Enums\OwnershipContextMode;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
+use ReflectionMethod;
 
 /**
  * Reloads exact host records and ignores carried relation or owner attributes.
@@ -73,13 +75,33 @@ final readonly class MediaOwnershipParentResolver
      */
     public function classForIdentity(string $type): string
     {
+        $aliased = Relation::getMorphedModel($type);
+
         foreach ($this->resources->all() as $definition) {
-            if ((new $definition->model)->getMorphClass() === $type) {
-                return $definition->model;
+            $model = $definition->model;
+
+            // Eloquent's own getMorphClass() only answers with the model's morph-map alias or class name.
+            if ($model !== $type && $model !== $aliased && ! $this->morphClassNeedsInstance($model)) {
+                continue;
+            }
+
+            if ((new $model)->getMorphClass() === $type) {
+                return $model;
             }
         }
 
         return $this->identities->model($type);
+    }
+
+    /**
+     * Whether only an instance can answer: a customised morph class, or the violation an enforced morph map raises.
+     *
+     * @param  class-string<Model>  $model
+     */
+    private function morphClassNeedsInstance(string $model): bool
+    {
+        return (new ReflectionMethod($model, 'getMorphClass'))->class !== Model::class
+            || (Relation::requiresMorphMap() && ! in_array($model, Relation::morphMap(), true));
     }
 
     /** Reload a scalar association target under its canonical resource or native anchor. */

@@ -75,7 +75,7 @@ final class MediaConfiguration
             MediaTables::get(MediaTables::MultipartUploads),
         ], true)) {
             throw new InvalidArgumentException(
-                'media.owner_slots.idempotency.table must not collide with another Media table.',
+                'nvl-media.tables.owner_slot_operations must not collide with another Media table.',
             );
         }
 
@@ -89,9 +89,16 @@ final class MediaConfiguration
         return is_string($value) && $value !== '' ? $value : $default;
     }
 
+    /**
+     * Read an integer setting, accepting the whole-number strings that environment variables supply.
+     */
     public static function integer(string $key, int $default, int $minimum = 0): int
     {
         $value = config($key, $default);
+
+        if (is_string($value)) {
+            $value = filter_var($value, FILTER_VALIDATE_INT);
+        }
 
         return is_int($value) && $value >= $minimum ? $value : $default;
     }

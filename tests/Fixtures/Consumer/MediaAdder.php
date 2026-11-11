@@ -16,7 +16,6 @@ use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
-use Nvl\Media\Services\ImageOptimizationService;
 use Nvl\Media\Services\MediaAttachments;
 use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaMutationLock;
@@ -85,7 +84,6 @@ class MediaAdder implements MediaUploadBuilder
     public function __construct(
         protected Model&HasNvlMedia $model,
         protected UploadedFile|string $file,
-        protected ImageOptimizationService $imageOptimizationService,
         protected MediaUploader $uploadMediaAction,
         protected MediaAttachments $attachMediaAction,
         protected MediaLifecycleService $lifecycleService,
@@ -292,8 +290,6 @@ class MediaAdder implements MediaUploadBuilder
             $slotConfig = $this->resolveSlotConfig($slotName);
             $uploadedFile = $this->resolveUploadedFile();
             $sourceTemporaryPath = $this->trackedPath($uploadedFile);
-            $uploadedFile = $this->imageOptimizationService->optimize($uploadedFile, $slotConfig);
-            $optimizedTemporaryPath = $this->trackedPath($uploadedFile);
             $media = $this->executeUpload($uploadedFile, $slotConfig, $slotName);
             $attachAndEnforceLimit = function () use ($media, $slotConfig, $slotName): Media {
                 $this->attachToModel($media, $slotName);
@@ -315,11 +311,8 @@ class MediaAdder implements MediaUploadBuilder
 
             throw $exception;
         } finally {
-            foreach (array_unique(array_filter([
-                $sourceTemporaryPath ?? null,
-                $optimizedTemporaryPath ?? null,
-            ])) as $temporaryPath) {
-                $this->temporaryFiles->release($temporaryPath);
+            if (is_string($sourceTemporaryPath ?? null)) {
+                $this->temporaryFiles->release($sourceTemporaryPath);
             }
         }
 
@@ -337,10 +330,6 @@ class MediaAdder implements MediaUploadBuilder
     {
         $is_public = $this->publicOverride ?? $slot_config->isPublic;
         $resolved_disk = $this->diskOverride ?? $slot_config->resolveDisk($is_public);
-        $all_tags = array_values(array_unique(array_merge(
-            $slot_config->defaultTags,
-            $this->tags,
-        )));
         $should_deduplicate = ! $this->allowDuplicates && $slot_config->isShared();
 
         return $this->uploadMediaAction->upload($this->uploader ?? auth()->user() ?? SystemActor::Background,
@@ -350,7 +339,7 @@ class MediaAdder implements MediaUploadBuilder
             slot: $slot_config,
             fileName: $this->resolveFileName($uploaded_file),
             isPublic: $is_public,
-            tags: $all_tags,
+            tags: $this->tags,
             metadata: $this->customProperties,
             folderOverride: $this->folderOverride,
             allowDuplicates: $this->allowDuplicates,

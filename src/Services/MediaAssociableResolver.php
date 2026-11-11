@@ -80,10 +80,10 @@ final class MediaAssociableResolver
         if (is_array($allowed)) {
             foreach ($allowed as $index => $reference) {
                 if (! is_string($reference)) {
-                    throw new InvalidArgumentException('media.allowed_associable_types must contain owner references.');
+                    throw new InvalidArgumentException('nvl-media.allowed_associable_types must contain owner references.');
                 }
 
-                $allowedModels[] = $this->identities->reference($reference, "media.allowed_associable_types.{$index}");
+                $allowedModels[] = $this->identities->reference($reference, "nvl-media.allowed_associable_types.{$index}");
             }
         }
 

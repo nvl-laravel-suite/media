@@ -135,7 +135,7 @@ it('diagnoses root-folder path drift against representative persisted rows', fun
     Storage::disk('public')->put('legacy/existing.pdf', 'existing');
     config(['nvl-media.root_folder' => 'media']);
     $drifted = collect(app(MediaDoctor::class)->inspect())->firstWhere('key', 'storage.persisted_paths');
-    expect($drifted)->not->toBeNull()->and($drifted['passed'])->toBeFalse()->and($drifted['message'])->toContain('empty media.root_folder');
+    expect($drifted)->not->toBeNull()->and($drifted['passed'])->toBeFalse()->and($drifted['message'])->toContain('empty nvl-media.root_folder');
     config(['nvl-media.root_folder' => '']);
     $aligned = collect(app(MediaDoctor::class)->inspect())->firstWhere('key', 'storage.persisted_paths');
     expect($aligned)->not->toBeNull()->and($aligned['passed'])->toBeTrue()->and($media->buildPath())->toBe('legacy/existing.pdf');

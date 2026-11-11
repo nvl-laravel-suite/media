@@ -5,14 +5,12 @@ use Aws\CommandInterface;
 use Aws\MockHandler;
 use Aws\Result;
 use Aws\S3\Exception\S3Exception;
-use GuzzleHttp\Psr7\Utils;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Nvl\Media\Enums\MediaMultipartStatus;
 use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Models\MediaMultipartUpload;
-use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\S3MultipartUploadGateway;
 use Nvl\Support\Logging\PackageLogger;
 
@@ -46,22 +44,26 @@ function createMultipartS3TestSession(string $disk, string $contents, ?array $pr
 
     return [$session, $persisted];
 }
-it('streams the object to verify a composite AWS SHA-256 checksum as a full checksum', function () {
+it('does not read a composite-checksum object back and leaves its SHA-256 to scan finalisation', function () {
     $contents = 'composite-provider-object';
     $commands = [];
     $handler = new MockHandler([function (CommandInterface $command) use (&$commands, $contents): Result {
         $commands[] = $command->getName();
 
         return new Result(['ContentLength' => strlen($contents), 'ContentType' => 'text/plain', 'ChecksumSHA256' => base64_encode(hash('sha256', 'part-checksum', true)).'-1', 'ChecksumType' => 'COMPOSITE', 'ETag' => '"composite-etag-1"']);
-    }, function (CommandInterface $command) use (&$commands, $contents): Result {
-        $commands[] = $command->getName();
-
-        return new Result(['Body' => Utils::streamFor($contents), 'ContentLength' => strlen($contents), 'ContentType' => 'text/plain']);
     }]);
     $disk = configureMultipartS3TestDisk($handler);
     [$session] = createMultipartS3TestSession($disk, $contents);
-    $object = (new S3MultipartUploadGateway(app(MediaDiskGateway::class), app(PackageLogger::class)))->inspect($session);
-    expect($object)->not->toBeNull()->and($object['checksum'])->toBe(hash('sha256', $contents))->and($commands)->toBe(['HeadObject', 'GetObject']);
+    $object = (new S3MultipartUploadGateway(app(PackageLogger::class)))->inspect($session);
+    expect($object)->not->toBeNull()->and($object['checksum'])->toBeNull()->and($object['size'])->toBe(strlen($contents))->and($object['objectIdentity'])->toBe('composite-etag-1')->and($commands)->toBe(['HeadObject']);
+});
+it('reports the provider SHA-256 when S3 attests a full-object checksum', function () {
+    $contents = 'full-object-provider-checksum';
+    $handler = new MockHandler([fn (CommandInterface $command): Result => new Result(['ContentLength' => strlen($contents), 'ContentType' => 'text/plain', 'ChecksumSHA256' => base64_encode(hash('sha256', $contents, true)), 'ChecksumType' => 'FULL_OBJECT', 'ETag' => '"full-etag"'])]);
+    $disk = configureMultipartS3TestDisk($handler);
+    [$session] = createMultipartS3TestSession($disk, $contents);
+    $object = (new S3MultipartUploadGateway(app(PackageLogger::class)))->inspect($session);
+    expect($object['checksum'] ?? null)->toBe(hash('sha256', $contents))->and(count($handler))->toBe(0);
 });
 it('treats AWS NoSuchUpload as an idempotent abort success', function () {
     $commands = [];
@@ -74,7 +76,7 @@ it('treats AWS NoSuchUpload as an idempotent abort success', function () {
     $contents = 'already-aborted';
     [$session, $persisted] = createMultipartS3TestSession($disk, $contents);
     $persisted->forceFill(['provider_state' => ['upload_id' => 'provider-upload-id', 'bucket' => MULTIPART_S3_TEST_BUCKET, 'key' => $session['objectKey']]])->save();
-    (new S3MultipartUploadGateway(app(MediaDiskGateway::class), app(PackageLogger::class)))->abort($session);
+    (new S3MultipartUploadGateway(app(PackageLogger::class)))->abort($session);
     expect($commands)->toBe(['AbortMultipartUpload'])->and(count($handler))->toBe(0);
 });
 it('discovers and aborts only exact-key provider uploads when provider state was not persisted', function () {
@@ -93,7 +95,7 @@ it('discovers and aborts only exact-key provider uploads when provider state was
     }]);
     $disk = configureMultipartS3TestDisk($handler);
     [$session] = createMultipartS3TestSession($disk, 'orphan-provider-state');
-    (new S3MultipartUploadGateway(app(MediaDiskGateway::class), app(PackageLogger::class)))->abort($session);
+    (new S3MultipartUploadGateway(app(PackageLogger::class)))->abort($session);
     expect($commands)->toBe(['ListMultipartUploads', 'AbortMultipartUpload'])->and($abortedUploadId)->toBe('orphan-provider-upload')->and(count($handler))->toBe(0);
 });
 it('compensates immediately when the provider upload id cannot be persisted', function () {
@@ -110,6 +112,6 @@ it('compensates immediately when the provider upload id cannot be persisted', fu
     }]);
     $disk = configureMultipartS3TestDisk($handler);
     [$session] = createMultipartS3TestSession($disk, 'provider-state-persistence');
-    expect(fn () => (new S3MultipartUploadGateway(app(MediaDiskGateway::class), app(PackageLogger::class)))->initiate($session))->toThrow(ModelNotFoundException::class);
+    expect(fn () => (new S3MultipartUploadGateway(app(PackageLogger::class)))->initiate($session))->toThrow(ModelNotFoundException::class);
     expect($commands)->toBe(['CreateMultipartUpload', 'AbortMultipartUpload'])->and(count($handler))->toBe(0);
 });

@@ -250,7 +250,7 @@ class MediaSlot
     }
 
     /**
-     * Register a fallback URL returned when the slot is empty.
+     * Declare a fallback URL for an empty slot; the host reads it with getFallbackUrl().
      *
      * @param  string  $url  Fallback URL
      * @param  string  $conversion  Conversion name ('' for default/original)
@@ -263,7 +263,7 @@ class MediaSlot
     }
 
     /**
-     * Register a fallback path returned when the slot is empty.
+     * Declare a fallback path for an empty slot; the host reads it with getFallbackPath().
      *
      * @param  string  $path  Fallback file path
      * @param  string  $conversion  Conversion name ('' for default/original)
@@ -334,7 +334,7 @@ class MediaSlot
     }
 
     /**
-     * Set default tags applied to all uploads in this slot.
+     * Set default tags that MediaUploader::upload() adds to every upload into this slot.
      *
      * @param  array<int, string>  $tags  Tag names
      */
@@ -402,7 +402,7 @@ class MediaSlot
     // ── Original file optimization ──────────────────────────────────
 
     /**
-     * Convert the original file to the given format before storing.
+     * Convert an uploaded original image to the given format before MediaUploader::upload() stores it.
      *
      * @param  MimeType|string  $format  Target format (e.g. MimeType::Webp or 'webp')
      */

@@ -47,3 +47,25 @@ it('keeps the optional consumer filter fixture compatible with native criterion 
     expect($search($query, ['alias' => 'search', 'operator' => FilterOperator::Equals, 'value' => 'launch'])->pluck('id')->all())
         ->toBe([$match->id]);
 });
+
+it('treats LIKE wildcards and escape characters in a search as literal text on every engine', function (string $search, array $expected): void {
+    foreach (['100%_done.pdf', '100x-done.pdf', 'plain.pdf', 'back\\slash.pdf', 'bang!mark.pdf'] as $filename) {
+        Media::factory()->create(['filename' => $filename, 'extension' => 'pdf', 'mime_type' => 'application/pdf', 'disk' => 'public', 'type' => MediaType::DOCUMENT, 'tags' => []]);
+    }
+
+    $found = app(MediaReader::class)->paginate(SystemActor::Background, ['search' => $search])->pluck('filename')->sort()->values()->all();
+
+    expect($found)->toBe($expected);
+})->with([
+    'percent' => ['100%', ['100%_done.pdf']],
+    'underscore' => ['_', ['100%_done.pdf']],
+    'backslash' => ['\\', ['back\\slash.pdf']],
+    'escape character' => ['!', ['bang!mark.pdf']],
+    'plain text' => ['done', ['100%_done.pdf', '100x-done.pdf']],
+]);
+
+it('matches a filename search without regard to letter case on every engine', function (string $search): void {
+    $media = Media::factory()->create(['filename' => 'Annual-Report.PDF', 'extension' => 'pdf', 'mime_type' => 'application/pdf', 'disk' => 'public', 'type' => MediaType::DOCUMENT, 'tags' => []]);
+
+    expect(app(MediaReader::class)->paginate(SystemActor::Background, ['search' => $search])->pluck('id')->all())->toBe([$media->id]);
+})->with(['annual-report', 'ANNUAL-REPORT', 'Report.pdf', 'DOCUMENT']);

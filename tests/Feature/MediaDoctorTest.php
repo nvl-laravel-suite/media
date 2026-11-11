@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Contracts\MediaContentScanner;
 use Nvl\Media\Contracts\MultipartUploadGateway;
 use Nvl\Media\Definitions\Tables\MediaTables;
@@ -20,7 +21,7 @@ use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Providers\MediaServiceProvider;
-use Nvl\Media\Services\MediaDiskGateway;
+use Nvl\Media\Services\DefaultMediaAuthorization;
 use Nvl\Media\Services\MediaDoctor;
 use Nvl\Media\Services\MediaLibrary;
 use Nvl\Media\Services\MediaScannerPolicy;
@@ -48,6 +49,22 @@ it('reports a healthy standalone installation as machine-readable output', funct
     $this->artisan('nvl:media:doctor', ['--strict' => true, '--format' => 'json'])->assertSuccessful();
     $sampleQuery = collect($queries)->first(static fn (string $query): bool => str_contains($query, MediaTables::Media) && str_contains($query, 'deleted_at') && str_contains($query, 'order by'));
     expect($sampleQuery)->not->toBeNull()->and($sampleQuery)->not->toContain('storage_path');
+});
+it('reports enabled image variations that the default authorization would deny to the background actor', function (): void {
+    $check = static fn (bool $production = false): array => collect(app(MediaDoctor::class)->inspect($production))->firstWhere('key', 'images.variations.authorization');
+    config(['nvl-media.auto_generate_variations' => true, 'nvl-media.image_variation_presets' => ['thumb' => ['width' => 150, 'height' => 150, 'enabled' => true]], 'nvl-media.output_conversion.enabled' => false]);
+    expect($check())->toMatchArray(['severity' => 'warning', 'passed' => true]);
+
+    app()->bind(MediaAuthorization::class, DefaultMediaAuthorization::class);
+    expect($check())->toMatchArray(['severity' => 'warning', 'passed' => false])
+        ->and($check()['message'])->toContain(MediaAuthorization::class)->toContain('SystemActor::Background')
+        ->and($check(true))->toMatchArray(['severity' => 'error', 'passed' => false]);
+
+    config(['nvl-media.auto_generate_variations' => false]);
+    expect($check()['passed'])->toBeTrue();
+
+    config(['nvl-media.output_conversion.enabled' => true]);
+    expect($check()['passed'])->toBeFalse();
 });
 describe('persisted storage path diagnostics', function (): void {
     beforeEach(function (): void {
@@ -144,8 +161,8 @@ it('rejects production remote sources without connected-IP attestation', functio
     expect($check)->not->toBeNull()->and($check['passed'])->toBeFalse()->and($check['severity'])->toBe('error');
 });
 it('accepts the supported production multipart safety contract', function () {
-    config(['nvl-media.multipart.enabled' => true, 'nvl-media.multipart.required_scan' => true, 'nvl-media.locks.multipart.store' => 'media-central', 'cache.stores.media-central' => ['driver' => 'redis']]);
-    app()->instance(MultipartUploadGateway::class, new S3MultipartUploadGateway(app(MediaDiskGateway::class), app(PackageLogger::class)));
+    config(['nvl-media.multipart.enabled' => true, 'nvl-media.locks.multipart.store' => 'media-central', 'cache.stores.media-central' => ['driver' => 'redis']]);
+    app()->instance(MultipartUploadGateway::class, new S3MultipartUploadGateway(app(PackageLogger::class)));
     app()->instance(MediaContentScanner::class, new class implements MediaContentScanner
     {
         public function scan(UploadedFile $file): void {}
@@ -234,4 +251,41 @@ it('validates the explicit Spatie permission bridge without activating generic g
     config(['nvl-media.authorization.spatie_permission.global_permission' => 'host.deliberate-media-grant']);
     $check = collect(app(MediaDoctor::class)->inspect())->firstWhere('key', 'adoption.spatie_permission');
     expect($check['severity'])->toBe('info')->and($check['passed'])->toBeTrue()->and($check['message'])->toContain('host.deliberate-media-grant', 'deliberately configured');
+});
+it('does not report or ship configuration that no runtime code reads', function (): void {
+    $defaults = require dirname(__DIR__, 2).'/config/nvl-media.php';
+    $published = require dirname(__DIR__, 2).'/resources/config/nvl-media.php';
+
+    expect($defaults)->not->toHaveKey('integrity')
+        ->and($defaults['multipart'])->not->toHaveKey('required_scan')
+        ->and($published['multipart'])->not->toHaveKey('required_scan')
+        ->and(collect(app(MediaDoctor::class)->inspect(true))->pluck('key'))->not->toContain('integrity.policy');
+});
+it('judges multipart scanner attestation by the bound scanner alone', function (): void {
+    config(['nvl-media.multipart.enabled' => true, 'nvl-media.multipart.required_scan' => false]);
+    app()->instance(MediaContentScanner::class, new class implements MediaContentScanner
+    {
+        public function scan(UploadedFile $file): void {}
+    });
+
+    expect(collect(app(MediaDoctor::class)->inspect(true))->firstWhere('key', 'multipart.scanner.attestation')['passed'] ?? null)->toBeTrue();
+});
+it('inspects the Media schema and persisted paths on the Media connection, not the default one', function (): void {
+    Storage::fake('public');
+    $media = Media::factory()->create(['disk' => 'public']);
+    Storage::disk('public')->put($media->buildPath(), 'stored');
+    $mediaConnection = DB::getDefaultConnection();
+    config(['nvl-media.connection' => $mediaConnection, 'nvl-media.allowed_disks' => ['public'], 'database.connections.doctor_default' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => ''], 'database.default' => 'doctor_default']);
+
+    try {
+        $checks = collect(app(MediaDoctor::class)->inspect());
+    } finally {
+        config(['database.default' => $mediaConnection]);
+        DB::purge('doctor_default');
+    }
+
+    $mediaTable = (new Media)->getTable();
+    expect($checks->firstWhere('key', "schema.table.{$mediaTable}")['passed'] ?? null)->toBeTrue()
+        ->and($checks->firstWhere('key', 'schema.connection'))->toBeNull()
+        ->and($checks->firstWhere('key', 'storage.persisted_paths')['message'] ?? '')->toContain('Representative live media paths exist');
 });

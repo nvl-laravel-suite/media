@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Providers;
 
-use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\Gate;
@@ -36,6 +35,7 @@ use Nvl\Media\Services\DenyMediaCatalogAccess;
 use Nvl\Media\Services\ImageOptimizationService;
 use Nvl\Media\Services\MediaAccessService;
 use Nvl\Media\Services\MediaAssetService;
+use Nvl\Media\Services\MediaDeduplicationLock;
 use Nvl\Media\Services\MediaDeliveryPolicy;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDoctor;
@@ -87,8 +87,6 @@ final class MediaServiceProvider extends ServiceProvider implements OwnershipInt
 {
     use MergesPackageConfiguration;
     use RegistersNamespacedResources;
-
-    private const string OWNER_SLOT_COPY_METADATA_KEYS = 'media.owner_slots.copy.metadata_keys';
 
     /**
      * Boot Media resources and its single transaction rollback listener.
@@ -159,27 +157,11 @@ final class MediaServiceProvider extends ServiceProvider implements OwnershipInt
     }
 
     /**
-     * Merge package defaults while preserving the consumer metadata allowlist.
+     * Merge package defaults; the shared merger keeps host lists such as the copy metadata allowlist whole.
      */
     private function mergeConfiguration(): void
     {
-        /** @var Repository $configuration */
-        $configuration = $this->app->make('config');
-        $hasConsumerMetadataKeys = $configuration->has(
-            self::OWNER_SLOT_COPY_METADATA_KEYS,
-        );
-        $consumerMetadataKeys = $configuration->get(
-            self::OWNER_SLOT_COPY_METADATA_KEYS,
-        );
-
         $this->mergePackageConfiguration(__DIR__.'/../../config/nvl-media.php', 'media');
-
-        if ($hasConsumerMetadataKeys) {
-            $configuration->set(
-                self::OWNER_SLOT_COPY_METADATA_KEYS,
-                $consumerMetadataKeys,
-            );
-        }
     }
 
     /**
@@ -199,6 +181,7 @@ final class MediaServiceProvider extends ServiceProvider implements OwnershipInt
         $this->app->scoped(MediaFileTypePolicy::class);
         $this->app->scoped(MediaLocalFileMaterializer::class);
         $this->app->scoped(MediaMutationLock::class);
+        $this->app->scoped(MediaDeduplicationLock::class);
         $this->app->scoped(MediaMultipartLock::class);
         $this->app->scoped(MediaMultipartSessionMapper::class);
         $this->app->scoped(MediaOwnedSourceLifecycle::class);

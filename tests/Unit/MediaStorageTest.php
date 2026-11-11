@@ -74,6 +74,33 @@ describe('MediaFileOperator', function () {
         mediaFileOperator()->delete('public', 'uploads/file1.txt');
         Storage::disk('public')->assertExists('uploads/file2.txt');
     });
+    it('checks directory emptiness without listing the folder recursively', function () {
+        Storage::fake('public');
+        config(['nvl-media.clean_empty_directories' => true]);
+        $disk = Storage::disk('public');
+        Storage::set('public', new class($disk->getDriver(), $disk->getAdapter(), $disk->getConfig()) extends FilesystemAdapter
+        {
+            public function allFiles($directory = null)
+            {
+                throw new RuntimeException('Recursive listing is not allowed during deletion.');
+            }
+        });
+        Storage::disk('public')->put('shared/first.txt', 'first');
+        Storage::disk('public')->put('shared/second.txt', 'second');
+
+        expect(mediaFileOperator()->delete('public', 'shared/first.txt'))->toBeTrue()
+            ->and(Storage::disk('public')->exists('shared/second.txt'))->toBeTrue()
+            ->and(mediaFileOperator()->delete('public', 'shared/second.txt'))->toBeTrue()
+            ->and(Storage::disk('public')->exists('shared'))->toBeFalse();
+    });
+    it('never removes a directory that still holds a subdirectory', function () {
+        Storage::fake('public');
+        config(['nvl-media.clean_empty_directories' => true]);
+        Storage::disk('public')->put('uploads/file.txt', 'content');
+        Storage::disk('public')->makeDirectory('uploads/conversions');
+        mediaFileOperator()->delete('public', 'uploads/file.txt');
+        expect(Storage::disk('public')->exists('uploads/conversions'))->toBeTrue();
+    });
     it('moves file on same disk', function () {
         Storage::fake('public');
         Storage::disk('public')->put('old/file.txt', 'content');

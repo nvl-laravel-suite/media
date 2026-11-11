@@ -16,6 +16,7 @@ use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
 use Nvl\Media\Services\MediaModelRegistry;
+use Nvl\Media\Support\MediaImageConfiguration;
 use Nvl\Media\Support\MediaQueueConfiguration;
 use Nvl\Media\Support\MediaQueueEnvelope;
 use Nvl\Support\Facades\PackageLog;
@@ -26,9 +27,9 @@ use Throwable;
 /**
  * Batch-regenerates image variations for media records matching the given filter criteria.
  *
- * Queries matching media in chunks and dispatches individual GenerateImageVariationJob
- * instances for each requested preset. Supports filtering by type, disk, date range,
- * and specific preset names.
+ * Each run handles one chunk of matching media, dispatching individual GenerateImageVariationJob
+ * instances for each requested preset, then continues from its last id in a new job.
+ * Supports filtering by type, disk, date range, and specific preset names.
  */
 final class RegenerateMediaVariationsJob implements OwnershipQueuedJob, ShouldQueue
 {
@@ -58,7 +59,8 @@ final class RegenerateMediaVariationsJob implements OwnershipQueuedJob, ShouldQu
      * @param  string|null  $createdAfter  Only process media created after this date (Y-m-d)
      * @param  string|null  $createdBefore  Only process media created before this date (Y-m-d)
      * @param  list<string>|null  $presetNames  Specific preset labels to regenerate (null = all enabled)
-     * @param  int  $chunkSize  Number of records per processing chunk
+     * @param  int  $chunkSize  Number of records one job run processes before continuing in a new job
+     * @param  string|null  $afterId  Continuation cursor: only process media after this id
      */
     public function __construct(
         private readonly ?MediaType $type = null,
@@ -68,6 +70,7 @@ final class RegenerateMediaVariationsJob implements OwnershipQueuedJob, ShouldQu
         private readonly ?array $presetNames = null,
         private readonly int $chunkSize = 500,
         ?OwnershipJobEnvelope $envelope = null,
+        private readonly ?string $afterId = null,
     ) {
         $this->ownershipEnvelope = $envelope ?? MediaQueueEnvelope::ownership();
         $this->tries = MediaQueueConfiguration::jobInteger('regenerate', 'tries', 1);
@@ -102,32 +105,32 @@ final class RegenerateMediaVariationsJob implements OwnershipQueuedJob, ShouldQu
             return;
         }
 
+        $query = $this->buildQuery();
+
+        if ($this->afterId !== null) {
+            $query->where('id', '>', $this->afterId);
+        }
+
+        $mediaChunk = $query->limit($this->chunkSize)->get();
         $processed = 0;
 
-        $this->buildQuery()->chunkById($this->chunkSize, function ($mediaChunk) use ($presets, &$processed): void {
-            if ($this->batch()?->cancelled()) {
-                return;
+        foreach ($mediaChunk as $media) {
+            if (! $media->type->supportsConversions() || ! MediaImageConfiguration::driverDecodes($media->extension)) {
+                continue;
             }
 
-            foreach ($mediaChunk as $media) {
-                /** @var Media $media */
-                if (! $media->type->supportsConversions()) {
-                    continue;
-                }
-
-                foreach ($presets as $name => $preset) {
-                    GenerateImageVariationJob::dispatch(
-                        $media->id,
-                        (string) $name,
-                        $preset,
-                        $media->revision,
-                        $this->ownershipEnvelope,
-                    )->afterCommit();
-                }
-
-                $processed++;
+            foreach ($presets as $name => $preset) {
+                GenerateImageVariationJob::dispatch(
+                    $media->id,
+                    (string) $name,
+                    $preset,
+                    $media->revision,
+                    $this->ownershipEnvelope,
+                )->afterCommit();
             }
-        });
+
+            $processed++;
+        }
 
         PackageLog::log('media', 'info', 'nvl.media.variation_regeneration.dispatched', [
             'processed_count' => $processed,
@@ -137,6 +140,39 @@ final class RegenerateMediaVariationsJob implements OwnershipQueuedJob, ShouldQu
             'created_before' => $this->createdBefore,
             'preset_names' => $this->presetNames,
         ], 'normal');
+
+        $last = $mediaChunk->last();
+
+        if ($last instanceof Media && $mediaChunk->count() === $this->chunkSize) {
+            $this->continueAfter($last->id);
+        }
+    }
+
+    /**
+     * Hand the rest of the catalogue to a new job so one run stays within its timeout and a cancelled batch stops.
+     */
+    private function continueAfter(string $lastId): void
+    {
+        $next = (new self(
+            $this->type,
+            $this->disk,
+            $this->createdAfter,
+            $this->createdBefore,
+            $this->presetNames,
+            $this->chunkSize,
+            $this->ownershipEnvelope,
+            $lastId,
+        ))->onConnection($this->connection)->onQueue($this->queue);
+
+        $batch = $this->batch();
+
+        if ($batch !== null) {
+            $batch->add([$next]);
+
+            return;
+        }
+
+        dispatch($next);
     }
 
     /**

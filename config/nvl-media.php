@@ -178,15 +178,6 @@ return [
         ],
     ],
 
-    'integrity' => [
-        // Every live record must point to an object whose size and SHA-256 were
-        // verified. Provider checksums are preferred only when trustworthy;
-        // streamed readback remains the mandatory portable fallback.
-        'verification' => 'required',
-        'provider_checksum' => 'prefer',
-        'streamed_readback_fallback' => true,
-    ],
-
     /*
     |--------------------------------------------------------------------------
     | Content / Malware Scanner
@@ -202,11 +193,12 @@ return [
     ],
 
     'multipart' => [
-        // Direct uploads are opt-in. Production diagnostics require a
-        // recoverable gateway, scanner attestation, and a central lock store.
+        // Direct uploads are opt-in. Every completed object stays pending_scan
+        // until MediaScan::finalize() accepts a scanner attestation. Production
+        // diagnostics require a recoverable gateway, a real scanner, and a
+        // central lock store.
         'enabled' => env('NVL_MEDIA_MULTIPART_ENABLED', false),
         'gateway' => S3MultipartUploadGateway::class,
-        'required_scan' => true,
         'session_minutes' => 60,
         'minimum_part_size' => 5 * 1024 * 1024,
         'maximum_part_size' => 5 * 1024 * 1024 * 1024,
@@ -384,14 +376,14 @@ return [
 
         // Audio
         'mp3' => 'audio/mpeg',
-        'wav' => 'audio/wav',
+        'wav' => ['audio/wav', 'audio/x-wav'],
         'ogg' => 'audio/ogg',
-        'aac' => 'audio/aac',
+        'aac' => ['audio/aac', 'audio/x-hx-aac-adts'],
         'flac' => 'audio/flac',
 
         // Archives
         'zip' => 'application/zip',
-        'rar' => 'application/vnd.rar',
+        'rar' => ['application/vnd.rar', 'application/x-rar'],
         '7z' => 'application/x-7z-compressed',
         'tar' => 'application/x-tar',
         'gz' => ['application/gzip', 'application/x-gzip'],
@@ -419,6 +411,9 @@ return [
     'image_constraints' => [
         'max_width' => 4096,
         'max_height' => 4096,
+        // Largest width x height the package decodes for variations and slot
+        // conversions; a source declaring more is refused before decoding.
+        'max_pixels' => 64_000_000,
     ],
 
     /*

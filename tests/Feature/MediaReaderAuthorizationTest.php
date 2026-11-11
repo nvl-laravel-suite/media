@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Enums\MediaAbility;
@@ -13,6 +14,7 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Services\MediaReader;
 use Nvl\Media\Tests\Stubs\TestMediaModel;
+use Nvl\Media\Tests\Stubs\TestMediaUser;
 use Nvl\Support\Enums\SystemActor;
 
 /** Bind an explicit host policy without granting background actors implicit authority. */
@@ -110,4 +112,23 @@ it('requires an owner-aware View grant even when unscoped asset View is granted'
 
     expect(fn () => app(MediaReader::class)->slots(SystemActor::Background, $owner, ['gallery']))
         ->toThrow(AuthorizationException::class);
+});
+
+it('hides other uploaders\' public assets that are not available from a non-manager library', function (): void {
+    $actor = TestMediaUser::query()->create(['name' => 'Reader', 'email' => 'reader@library.test', 'password' => 'unused']);
+    $available = Media::factory()->create(['is_public' => true, 'filename' => 'available.txt']);
+    $processing = Media::factory()->create(['is_public' => true, 'filename' => 'processing.txt', 'status' => MediaLifecycleStatus::ProcessingVariations]);
+    $pending = Media::factory()->create(['is_public' => true, 'filename' => 'pending.txt', 'status' => MediaLifecycleStatus::PendingScan]);
+    $quarantined = Media::factory()->create(['is_public' => true, 'filename' => 'quarantined.txt', 'status' => MediaLifecycleStatus::Quarantined]);
+    $ownPending = Media::factory()->create(['is_public' => true, 'filename' => 'own-pending.txt', 'status' => MediaLifecycleStatus::PendingScan, 'uploaded_by' => (string) $actor->getKey(), 'uploaded_by_type' => $actor->getMorphClass()]);
+    mediaReaderAuthorization(static fn (MediaAbility $ability): bool => $ability !== MediaAbility::ListAll);
+
+    $listed = app(MediaReader::class)->paginate($actor)->pluck('id')->sort()->values()->all();
+
+    expect($listed)->toBe(collect([$available->id, $processing->id, $ownPending->id])->sort()->values()->all());
+    expect(fn () => app(MediaReader::class)->get($actor, $pending->id))->toThrow(ModelNotFoundException::class);
+    expect(fn () => app(MediaReader::class)->get($actor, $quarantined->id))->toThrow(ModelNotFoundException::class);
+
+    mediaReaderAuthorization(static fn (): bool => true);
+    expect(app(MediaReader::class)->paginate($actor)->total())->toBe(5);
 });

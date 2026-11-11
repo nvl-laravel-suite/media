@@ -160,13 +160,13 @@ class MediaAssociation extends Model implements Ownable
     }
 
     /**
-     * Scope to order by the order column.
+     * Scope to order by the order column, then by identifier so equal positions keep creation order.
      *
      * @param  Builder<static>  $query
      */
     public function scopeOrdered(Builder $query): void
     {
-        $query->orderBy('order');
+        $query->orderBy('order')->orderBy($this->qualifyColumn('id'));
     }
 
     /** Resolve the configured package storage table. */

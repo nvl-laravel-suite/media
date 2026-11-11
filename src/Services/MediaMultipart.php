@@ -34,7 +34,7 @@ use Throwable;
  */
 final class MediaMultipart
 {
-    public function __construct(private readonly MediaDiskGuard $diskGuard, private readonly MediaDiskGateway $disks, private readonly MediaPathResolver $paths, private readonly MediaAuthorization $authorization, private readonly MultipartUploadGateway $gateway, private readonly MediaFileTypePolicy $fileTypes, private readonly MediaMultipartSessionMapper $sessionMapper, private readonly OwnershipBoundary $tenantBoundary, private readonly PackageLogger $packageLogger, private readonly MediaFileEffectScheduler $fileEffects, private readonly MediaMultipartLock $lock, private readonly OwnershipWriter $ownershipWriter) {}
+    public function __construct(private readonly MediaDiskGuard $diskGuard, private readonly MediaDiskGateway $disks, private readonly MediaPathResolver $paths, private readonly MediaAuthorization $authorization, private readonly MultipartUploadGateway $gateway, private readonly MediaFileTypePolicy $fileTypes, private readonly MediaMultipartSessionMapper $sessionMapper, private readonly OwnershipBoundary $tenantBoundary, private readonly PackageLogger $packageLogger, private readonly MediaFileEffectScheduler $fileEffects, private readonly MediaMultipartLock $lock, private readonly OwnershipWriter $ownershipWriter, private readonly MediaFileOperator $files) {}
 
     /** Begin one verified upload session.
      * @param  array<string, mixed>  $data
@@ -55,7 +55,7 @@ final class MediaMultipart
         }
 
         $actor = MediaActors::assert($actor);
-        $this->initiateAssertEnabled();
+        $this->assertEnabled();
         if (! $this->authorization->allows($actor, MediaAbility::Upload)) {
             throw new MediaUploadException('The actor is not authorized to initiate media uploads.');
         }
@@ -130,7 +130,7 @@ final class MediaMultipart
         }
     }
 
-    private function initiateAssertEnabled(): void
+    private function assertEnabled(): void
     {
         if (! (bool) config('nvl-media.multipart.enabled', false)) {
             throw new MediaUploadException('Multipart uploads are disabled.');
@@ -154,11 +154,11 @@ final class MediaMultipart
         }
 
         $actor = MediaActors::assert($actor);
-        $this->signPartAssertEnabled();
+        $this->assertEnabled();
         $expired = false;
         $session = MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($part, $actor, &$expired): MediaMultipartUpload {
             $session = MediaMultipartUpload::query()->lockForUpdate()->findOrFail($part['uploadId']);
-            $this->signPartAssertActor($session, $actor);
+            $this->assertActor($session, $actor);
             if ($session->status !== MediaMultipartStatus::Initiated) {
                 throw new MediaUploadException("Multipart session is not active; status is [{$session->status->value}].");
             }
@@ -200,13 +200,6 @@ final class MediaMultipart
         return $this->gateway->signPart($this->sessionMapper->toData($session), ['uploadId' => $session->id, 'partNumber' => $part['partNumber'], 'checksum' => $part['checksum'], 'byteLength' => $part['byteLength']]);
     }
 
-    private function signPartAssertEnabled(): void
-    {
-        if (! (bool) config('nvl-media.multipart.enabled', false)) {
-            throw new MediaUploadException('Multipart uploads are disabled.');
-        }
-    }
-
     private function signPartExpectedLength(MediaMultipartUpload $session, int $partNumber): int
     {
         if ($partNumber < $session->expected_parts) {
@@ -216,7 +209,7 @@ final class MediaMultipart
         return $session->expected_size - $session->part_size * ($session->expected_parts - 1);
     }
 
-    private function signPartAssertActor(MediaMultipartUpload $session, Authenticatable|SystemActor $actor): void
+    private function assertActor(MediaMultipartUpload $session, Authenticatable|SystemActor $actor): void
     {
         if ((string) $session->uploader_id !== (string) MediaActors::id($actor) || $session->uploader_type !== MediaActors::type($actor)) {
             throw new MediaUploadException('Multipart session actor mismatch.');
@@ -249,7 +242,7 @@ final class MediaMultipart
         $completion = ['uploadId' => $completion['uploadId'], 'parts' => $parts];
 
         $actor = MediaActors::assert($actor);
-        $this->completeAssertEnabled();
+        $this->assertEnabled();
 
         return $this->lock->execute($completion['uploadId'], fn (): Media => $this->completeCompleteLocked($completion, $actor));
     }
@@ -263,7 +256,7 @@ final class MediaMultipart
         $expired = false;
         $session = MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($completion, $actor, $parts, &$expired): MediaMultipartUpload {
             $session = MediaMultipartUpload::query()->lockForUpdate()->findOrFail($completion['uploadId']);
-            $this->completeAssertActor($session, $actor);
+            $this->assertActor($session, $actor);
             if ($session->status === MediaMultipartStatus::Completed) {
                 return $session;
             }
@@ -368,7 +361,7 @@ final class MediaMultipart
 
     /**
      * @param  array{uploadId: string, disk: string, objectKey: string, filename: string, mimeType: string, size: int, checksum: string, visibility: MediaVisibility, uploaderId: int|string|null, uploaderType: string|null, expiresAt: \DateTimeImmutable, minimumPartSize: int, maximumParts: int}  $session
-     * @return array{path: string, checksum: string, size: int, mimeType: string, objectIdentity: string|null}
+     * @return array{path: string, checksum: string|null, size: int, mimeType: string, objectIdentity: string|null}
      */
     private function completeRecoverCompletedObject(array $session, Throwable $exception): array
     {
@@ -385,7 +378,7 @@ final class MediaMultipart
     }
 
     /**
-     * @param  array{path: string, checksum: string, size: int, mimeType: string, objectIdentity: string|null}  $object
+     * @param  array{path: string, checksum: string|null, size: int, mimeType: string, objectIdentity: string|null}  $object
      */
     private function completeObjectMatches(MediaMultipartUpload $session, array $object): bool
     {
@@ -396,7 +389,10 @@ final class MediaMultipart
             return false;
         }
 
-        return hash_equals($session->object_key, $object['path']) && hash_equals($session->expected_checksum, mb_strtolower($object['checksum'])) && $session->expected_size === $object['size'];
+        // A null checksum means the provider attested none; MediaScan::finalize() hashes the stored bytes before the asset becomes available.
+        return hash_equals($session->object_key, $object['path'])
+            && ($object['checksum'] === null || hash_equals($session->expected_checksum, mb_strtolower($object['checksum'])))
+            && $session->expected_size === $object['size'];
     }
 
     /**
@@ -420,27 +416,13 @@ final class MediaMultipart
         }
     }
 
-    private function completeAssertActor(MediaMultipartUpload $session, Authenticatable|SystemActor $actor): void
-    {
-        if ((string) $session->uploader_id !== (string) MediaActors::id($actor) || $session->uploader_type !== MediaActors::type($actor)) {
-            throw new MediaUploadException('Multipart session actor mismatch.');
-        }
-    }
-
-    private function completeAssertEnabled(): void
-    {
-        if (! (bool) config('nvl-media.multipart.enabled', false)) {
-            throw new MediaUploadException('Multipart uploads are disabled.');
-        }
-    }
-
     public function abort(string $uploadId, Authenticatable|SystemActor $actor): void
     {
         $actor = MediaActors::assert($actor);
-        $this->abortAssertEnabled();
+        $this->assertEnabled();
         $this->lock->execute($uploadId, function () use ($uploadId, $actor): void {
             $persisted = MediaMultipartUpload::query()->findOrFail($uploadId);
-            $this->abortAssertActor($persisted, $actor);
+            $this->assertActor($persisted, $actor);
             if ($persisted->status === MediaMultipartStatus::Aborted) {
                 return;
             }
@@ -448,6 +430,10 @@ final class MediaMultipart
                 throw new MediaUploadException('A completed multipart upload cannot be aborted.');
             }
             $this->gateway->abort($this->sessionMapper->toData($persisted));
+            // Only a session that reached completion can have an assembled object at its server-owned key.
+            if ($persisted->status !== MediaMultipartStatus::Initiated && ! $this->files->delete($persisted->disk, $persisted->object_key)) {
+                throw new MediaUploadException('The assembled multipart object could not be deleted.');
+            }
             MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($persisted): void {
                 $locked = MediaMultipartUpload::query()->lockForUpdate()->findOrFail($persisted->id);
                 if ($locked->status !== MediaMultipartStatus::Completed) {
@@ -455,19 +441,5 @@ final class MediaMultipart
                 }
             });
         });
-    }
-
-    private function abortAssertActor(MediaMultipartUpload $session, Authenticatable|SystemActor $actor): void
-    {
-        if ((string) $session->uploader_id !== (string) MediaActors::id($actor) || $session->uploader_type !== MediaActors::type($actor)) {
-            throw new MediaUploadException('Multipart session actor mismatch.');
-        }
-    }
-
-    private function abortAssertEnabled(): void
-    {
-        if (! (bool) config('nvl-media.multipart.enabled', false)) {
-            throw new MediaUploadException('Multipart uploads are disabled.');
-        }
     }
 }

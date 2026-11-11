@@ -271,3 +271,77 @@ describe('pass-through', function () {
         @unlink($source);
     });
 });
+it('refuses to decode an image whose header declares more pixels than the configured budget', function (): void {
+    config(['nvl-media.image_constraints.max_pixels' => 100 * 100]);
+    $source = createTestImage(101, 100);
+    $output = outputPath('.jpg');
+
+    try {
+        expect(fn () => imageTransformer()->process($source, $output, (new ConversionDefinition('thumb'))->width(10)))
+            ->toThrow(ConversionFailedException::class, 'pixels');
+        expect(file_exists($output))->toBeFalse();
+        config(['nvl-media.image_constraints.max_pixels' => 101 * 100]);
+        expect(imageTransformer()->process($source, $output, (new ConversionDefinition('thumb'))->width(10))['width'])->toBe(10);
+    } finally {
+        @unlink($source);
+        @unlink($output);
+    }
+});
+
+function transformerPixel(string $path, int $x, int $y): array
+{
+    $image = imagecreatefrompng($path);
+    $colour = imagecolorsforindex($image, imagecolorat($image, $x, $y));
+    imagedestroy($image);
+
+    return [$colour['red'], $colour['green'], $colour['blue']];
+}
+function transformerPng(int $width, int $height, array $regions): string
+{
+    $path = tempnam(sys_get_temp_dir(), 'media_test_').'.png';
+    $image = imagecreatetruecolor($width, $height);
+    foreach ($regions as [$x1, $y1, $x2, $y2, $rgb]) {
+        imagefilledrectangle($image, $x1, $y1, $x2, $y2, imagecolorallocate($image, ...$rgb));
+    }
+    imagepng($image, $path);
+    imagedestroy($image);
+
+    return $path;
+}
+
+it('crops at the requested position instead of always at the centre', function (string $position, array $expected): void {
+    $source = transformerPng(200, 100, [[0, 0, 99, 99, [255, 0, 0]], [100, 0, 199, 99, [0, 0, 255]]]);
+    $output = outputPath('.png');
+
+    try {
+        $result = imageTransformer()->process($source, $output, (new ConversionDefinition('crop'))->crop(100, 100, $position)->format('png'));
+
+        expect([$result['width'], $result['height']])->toBe([100, 100])
+            ->and(transformerPixel($output, 10, 50))->toBe($expected[0])
+            ->and(transformerPixel($output, 90, 50))->toBe($expected[1]);
+    } finally {
+        @unlink($source);
+        @unlink($output);
+    }
+})->with([
+    'left' => ['left', [[255, 0, 0], [255, 0, 0]]],
+    'right' => ['right', [[0, 0, 255], [0, 0, 255]]],
+    'centre' => ['center', [[255, 0, 0], [0, 0, 255]]],
+]);
+
+it('applies the watermark opacity', function (int $opacity, int $expectedRed): void {
+    $source = transformerPng(100, 100, [[0, 0, 99, 99, [255, 255, 255]]]);
+    $watermark = transformerPng(40, 40, [[0, 0, 39, 39, [0, 0, 0]]]);
+    $output = outputPath('.png');
+
+    try {
+        imageTransformer()->process($source, $output, (new ConversionDefinition('marked'))->watermark($watermark, 'center', $opacity)->format('png'));
+
+        expect(abs(transformerPixel($output, 50, 50)[0] - $expectedRed))->toBeLessThanOrEqual(8)
+            ->and(transformerPixel($output, 5, 5))->toBe([255, 255, 255]);
+    } finally {
+        @unlink($source);
+        @unlink($watermark);
+        @unlink($output);
+    }
+})->with(['opaque' => [100, 0], 'half' => [50, 127], 'invisible' => [0, 255]]);

@@ -7,6 +7,7 @@ namespace Nvl\Media\Services;
 use Closure;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
@@ -41,6 +42,7 @@ use Nvl\Media\Support\MediaOwnerSlotOperationClaim;
 use Nvl\Media\Support\MediaTemporaryLocalFile;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Events\DomainEventDispatcher;
+use Nvl\Support\Locales\LocaleCode;
 use Nvl\Support\Owners\OwnerBatch;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Support\Ownership\Contracts\OwnershipWriter;
@@ -110,6 +112,7 @@ final class MediaAttachments
         if ($slot !== null && $slot->name !== $collection) {
             throw new InvalidArgumentException('The Media slot must match its collection.');
         }
+        $locale = $locale === null ? null : (new LocaleCode($locale))->value;
 
         return $this->mutationLock->executeForOwnerCollection($model, $collection, function () use ($actor, $media, $model, $collection, $locale, $order, $metadata, $dispatchVariations, $requirePublic, $slot): MediaAssociation {
             return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor, $media, $model, $collection, $locale, $order, $metadata, $dispatchVariations, $requirePublic, $slot): MediaAssociation {
@@ -471,18 +474,19 @@ final class MediaAttachments
         $this->mutationLock->executeMany($mediaIds, function () use ($actor, $model, $items, $collection): void {
             MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor, $model, $items, $collection): void {
                 foreach ($items as $media) {
-                    $resolvedCollection = $collection;
-
-                    if ($resolvedCollection === null) {
-                        $pivotCollection = data_get($media, 'pivot.collection');
-                        $resolvedCollection = is_string($pivotCollection) ? $pivotCollection : null;
-                    }
-
                     $resolvedMedia = MediaModelRegistry::query()
                         ->lockForUpdate()
                         ->findOrFail($media->id);
 
-                    $this->lifecycleserviceRemoveResolvedFromModel($actor, $model, $resolvedMedia, $resolvedCollection);
+                    // Removing every usage names each owner placement, so one asset in two collections is not "reused".
+                    $placements = $collection !== null
+                        ? [$collection]
+                        : $this->ownerPlacements($model, $resolvedMedia)->get()
+                            ->map(static fn (MediaAssociation $placement): string => $placement->collection)->all();
+
+                    foreach ($placements as $placement) {
+                        $this->lifecycleserviceRemoveResolvedFromModel($actor, $model, $resolvedMedia, $placement);
+                    }
                 }
             });
         });
@@ -495,18 +499,7 @@ final class MediaAttachments
      */
     private function lifecycleserviceRemoveResolvedFromModel(Authenticatable|SystemActor $actor, Model&HasNvlMedia $model, Media $media, ?string $collection = null, ?Closure $beforeOrphanDelete = null): void
     {
-        $targetAssociationIds = MediaAssociation::query()
-            ->where('media_id', $media->id);
-        $ownerKey = $model->getKey();
-        if (! is_int($ownerKey) && ! is_string($ownerKey)) {
-            throw new InvalidArgumentException('Media removal requires a scalar owner key.');
-        }
-        MediaBatchOwnerAdmission::exact($targetAssociationIds, 'associable_type', $model->getMorphClass());
-        MediaBatchOwnerAdmission::exact($targetAssociationIds, 'associable_id', (string) $ownerKey);
-        if ($collection !== null) {
-            MediaBatchOwnerAdmission::exact($targetAssociationIds, 'collection', $collection);
-        }
-        $targetAssociationIds = $targetAssociationIds->pluck('id');
+        $targetAssociationIds = $this->ownerPlacements($model, $media, $collection)->pluck('id');
 
         if ($targetAssociationIds->isEmpty()) {
             return;
@@ -538,6 +531,27 @@ final class MediaAttachments
     }
 
     /**
+     * Select one owner's usages of an asset, optionally limited to a collection.
+     *
+     * @return Builder<MediaAssociation>
+     */
+    private function ownerPlacements(Model $model, Media $media, ?string $collection = null): Builder
+    {
+        $ownerKey = $model->getKey();
+        if (! is_int($ownerKey) && ! is_string($ownerKey)) {
+            throw new InvalidArgumentException('Media removal requires a scalar owner key.');
+        }
+        $placements = MediaAssociation::query()->where('media_id', $media->id);
+        MediaBatchOwnerAdmission::exact($placements, 'associable_type', $model->getMorphClass());
+        MediaBatchOwnerAdmission::exact($placements, 'associable_id', (string) $ownerKey);
+        if ($collection !== null) {
+            MediaBatchOwnerAdmission::exact($placements, 'collection', $collection);
+        }
+
+        return $placements;
+    }
+
+    /**
      * Return the authorized model for a registered owner slot.
      */
     public function getSlot(
@@ -549,8 +563,14 @@ final class MediaAttachments
         $slot = $this->resolver->slot($owner, $slot)->name;
         $association = $this->resolver->currentAssociation($owner, $slot);
         $media = $association instanceof MediaAssociation
-            ? $this->ownerslotworkflowAvailableMedia($actor, $association->media_id)
+            ? $this->ownerslotcopyworkflowMedia($actor, $association->media_id)
             : null;
+
+        // A slot whose Media was deleted or quarantined after attachment reads as empty, under the same
+        // check as an empty slot; it can still be cleared or replaced.
+        if ($media instanceof Media && ($media->trashed() || ! $media->isAvailable())) {
+            $media = null;
+        }
 
         $this->ownerslotworkflowAuthorize($actor, MediaAbility::View, $media, $owner);
 
@@ -703,7 +723,7 @@ final class MediaAttachments
         if (! $durableClaim instanceof MediaOwnerSlotOperationClaim) {
             $currentAssociation = $this->resolver->currentAssociation($owner, $slot);
             $current = $currentAssociation instanceof MediaAssociation
-                ? $this->ownerslotworkflowAvailableMedia($actor, $currentAssociation->media_id)
+                ? $this->ownerslotcopyworkflowMedia($actor, $currentAssociation->media_id)
                 : null;
             $this->ownerslotworkflowAuthorize($actor, MediaAbility::Associate, $current, $owner);
         }
@@ -911,6 +931,7 @@ final class MediaAttachments
             $this->detach($actor, $previous, $owner, $slot);
 
             if ($slotDefinition->isExclusive()
+                && ! $previous->trashed()
                 && ! MediaAssociation::query()
                     ->where('media_id', $previous->id)
                     ->exists()) {
@@ -958,6 +979,7 @@ final class MediaAttachments
         $this->detach($actor, $media, $owner, $slot);
 
         if ($slotDefinition->isExclusive()
+            && ! $media->trashed()
             && ! MediaAssociation::query()
                 ->where('media_id', $media->id)
                 ->exists()) {
@@ -1350,10 +1372,10 @@ final class MediaAttachments
         $actor = MediaActors::assert($actor);
         $slotDefinition = $this->resolver->slot($owner, $slot);
         $slot = $slotDefinition->name;
-        $sourceMediaId = $this->ownerslotcopyworkflowMediaId($actor, $sourceMediaId);
+        $sourceMediaId = $this->ownerslotworkflowMediaId($actor, $sourceMediaId, 'copies');
         $source = $this->ownerslotcopyworkflowMedia($actor, $sourceMediaId);
-        $this->ownerslotcopyworkflowAuthorize($actor, MediaAbility::View, $source, $owner);
-        $this->ownerslotcopyworkflowAuthorize($actor, MediaAbility::Associate, $source, $owner);
+        $this->ownerslotworkflowAuthorize($actor, MediaAbility::View, $source, $owner);
+        $this->ownerslotworkflowAuthorize($actor, MediaAbility::Associate, $source, $owner);
         $claim = null;
         $mutationState = new MediaOwnerSlotMutationState;
 
@@ -1388,9 +1410,9 @@ final class MediaAttachments
                 }
             }
 
-            $this->ownerslotcopyworkflowAssertAvailable($actor, $source);
+            $this->ownerslotworkflowAssertAvailable($actor, $source);
             $completeInsideMutation = $claim instanceof MediaOwnerSlotOperationClaim
-                && $this->ownerslotcopyworkflowLedgerSharesMediaConnection($actor);
+                && $this->ownerslotworkflowLedgerSharesMediaConnection($actor);
             $result = $this->mutationLock->executeForOwnerCollection(
                 $owner,
                 $slot,
@@ -1478,7 +1500,7 @@ final class MediaAttachments
             return $result;
         } catch (Throwable $exception) {
             if (! $mutationState->committed()) {
-                $this->ownerslotcopyworkflowRecordFailure($actor, $claim);
+                $this->ownerslotworkflowRecordFailure($actor, $claim, 'copy_failed');
             }
 
             throw $exception;
@@ -1498,7 +1520,7 @@ final class MediaAttachments
         bool $completeInsideMutation,
         MediaOwnerSlotMutationState $mutationState,
     ): Media {
-        $source = $this->ownerslotcopyworkflowAvailableMedia($actor, $sourceMediaId);
+        $source = $this->ownerslotworkflowAvailableMedia($actor, $sourceMediaId);
 
         try {
             $lease = $this->materializer->lease($source->disk, $source->buildPath());
@@ -1548,13 +1570,16 @@ final class MediaAttachments
         ): void {
             $mutationState->markCommitted();
         });
-        $this->ownerslotcopyworkflowLockOwner($actor, $owner);
-        $source = $this->ownerslotcopyworkflowLockedMedia($actor, $sourceMediaId);
-        $this->ownerslotcopyworkflowAssertAvailable($actor, $source);
-        $this->ownerslotcopyworkflowAuthorize($actor, MediaAbility::View, $source, $owner);
-        $this->ownerslotcopyworkflowAuthorize($actor, MediaAbility::Associate, $source, $owner);
+        $this->ownerslotworkflowLockOwner($actor, $owner);
+        $source = $this->ownerslotworkflowLockedMedia($actor, $sourceMediaId);
+        $this->ownerslotworkflowAssertAvailable($actor, $source);
+        $this->ownerslotworkflowAuthorize($actor, MediaAbility::View, $source, $owner);
+        $this->ownerslotworkflowAuthorize($actor, MediaAbility::Associate, $source, $owner);
         $this->ownerslotcopyworkflowVerifyMaterializedSource($actor, $source, $lease->path());
 
+        // A copy keeps the source bytes: the destination slot's original-image conversion applies to uploads only.
+        $storageSlot = clone $slotDefinition;
+        $storageSlot->convertFormat = $storageSlot->convertQuality = $storageSlot->convertMaxSize = null;
         $copy = $this->uploadMedia->upload($actor,
             file: new UploadedFile(
                 $lease->path(),
@@ -1565,7 +1590,7 @@ final class MediaAttachments
             ),
             disk: $slotDefinition->resolveDisk(),
             model: $owner,
-            slot: $slotDefinition,
+            slot: $storageSlot,
             fileName: $source->filename,
             isPublic: $slotDefinition->isPublic,
             tags: $this->ownerslotcopyworkflowCopyTags($actor, $source),
@@ -1574,7 +1599,7 @@ final class MediaAttachments
             deduplicateExisting: false,
             skipAutoVariations: true,
         );
-        $copy = $this->ownerslotcopyworkflowLockedMedia($actor, $copy->id);
+        $copy = $this->ownerslotworkflowLockedMedia($actor, $copy->id);
         $this->ownerslotcopyworkflowAssertCanonicalCopy($actor, $source, $copy, $slotDefinition);
 
         if ($claim instanceof MediaOwnerSlotOperationClaim) {
@@ -1619,7 +1644,7 @@ final class MediaAttachments
         MediaSlot $slotDefinition,
         string $candidateId,
     ): Media {
-        $candidate = $this->ownerslotcopyworkflowLockedMedia($actor, $candidateId);
+        $candidate = $this->ownerslotworkflowLockedMedia($actor, $candidateId);
         $currentAssociation = $this->resolver->currentAssociation(
             $owner,
             $slot,
@@ -1643,9 +1668,9 @@ final class MediaAttachments
             );
         }
 
-        $this->ownerslotcopyworkflowAuthorize($actor, MediaAbility::Associate, $candidate, $owner);
+        $this->ownerslotworkflowAuthorize($actor, MediaAbility::Associate, $candidate, $owner);
         $previous = $currentAssociation instanceof MediaAssociation
-            ? $this->ownerslotcopyworkflowLockedMedia($actor, $currentAssociation->media_id)
+            ? $this->ownerslotworkflowLockedMedia($actor, $currentAssociation->media_id)
             : null;
         $resultAssociation = $this->attach($actor,
             media: $candidate,
@@ -1658,6 +1683,7 @@ final class MediaAttachments
             $this->detach($actor, $previous, $owner, $slot);
 
             if ($slotDefinition->isExclusive()
+                && ! $previous->trashed()
                 && ! MediaAssociation::query()
                     ->where('media_id', $previous->id)
                     ->exists()) {
@@ -1665,7 +1691,7 @@ final class MediaAttachments
             }
         }
 
-        return $this->ownerslotcopyworkflowProject($actor, $candidate, $resultAssociation);
+        return $this->ownerslotworkflowProject($actor, $candidate, $resultAssociation);
     }
 
     /**
@@ -1715,7 +1741,7 @@ final class MediaAttachments
             return null;
         }
 
-        $this->ownerslotcopyworkflowAuthorize($actor, MediaAbility::Associate, $media, $owner);
+        $this->ownerslotworkflowAuthorize($actor, MediaAbility::Associate, $media, $owner);
 
         if ($claim->resultPayload !== null) {
             return $this->restoreSlotResult($claim->resultPayload);
@@ -1734,9 +1760,9 @@ final class MediaAttachments
             );
         }
 
-        $this->ownerslotcopyworkflowAssertAvailable($actor, $media);
+        $this->ownerslotworkflowAssertAvailable($actor, $media);
 
-        return $this->ownerslotcopyworkflowProject($actor, $media, $association);
+        return $this->ownerslotworkflowProject($actor, $media, $association);
     }
 
     /**
@@ -1769,7 +1795,7 @@ final class MediaAttachments
             }
         });
         DB::afterRollBack(function () use ($actor, $claim): void {
-            $this->ownerslotcopyworkflowRecordFailure($actor, $claim);
+            $this->ownerslotworkflowRecordFailure($actor, $claim, 'copy_failed');
         });
     }
 
@@ -1800,22 +1826,10 @@ final class MediaAttachments
             );
         }
 
-        return $this->ownerslotcopyworkflowProject($actor,
-            $this->ownerslotcopyworkflowAvailableMedia($actor, $claim->resultMediaId),
+        return $this->ownerslotworkflowProject($actor,
+            $this->ownerslotworkflowAvailableMedia($actor, $claim->resultMediaId),
             $association,
         );
-    }
-
-    /**
-     * Resolve a non-deleted, usable Media record.
-     */
-    private function ownerslotcopyworkflowAvailableMedia(Authenticatable|SystemActor $actor, string $mediaId): Media
-    {
-        $media = $this->ownerslotcopyworkflowMedia($actor, $mediaId);
-
-        $this->ownerslotcopyworkflowAssertAvailable($actor, $media);
-
-        return $media;
     }
 
     /**
@@ -1830,63 +1844,6 @@ final class MediaAttachments
         }
 
         return $media;
-    }
-
-    /**
-     * Resolve and lock a Media row, including tombstones for explicit rejection.
-     */
-    private function ownerslotcopyworkflowLockedMedia(Authenticatable|SystemActor $actor, string $mediaId): Media
-    {
-        $media = MediaModelRegistry::query()->withTrashed()
-            ->whereKey($mediaId)
-            ->lockForUpdate()
-            ->first();
-
-        if (! $media instanceof Media) {
-            throw new MediaUploadException("Media [{$mediaId}] does not exist.");
-        }
-
-        return $media;
-    }
-
-    /**
-     * Reject a tombstoned or unusable Media record.
-     */
-    private function ownerslotcopyworkflowAssertAvailable(Authenticatable|SystemActor $actor, Media $media): void
-    {
-        if ($media->trashed()) {
-            throw new MediaUploadException(
-                "Media [{$media->id}] is deleted and cannot be associated.",
-            );
-        }
-
-        if (! $media->isAvailable()) {
-            throw new MediaUploadException(
-                "Media [{$media->id}] is not available for association.",
-            );
-        }
-    }
-
-    /**
-     * Serialize an initially empty slot through its durable owner row when possible.
-     */
-    private function ownerslotcopyworkflowLockOwner(Authenticatable|SystemActor $actor, Model&HasNvlMedia $owner): void
-    {
-        if ($owner->getConnection()->getName()
-            !== (new MediaAssociation)->getConnection()->getName()) {
-            return;
-        }
-
-        $locked = $owner->newQuery()
-            ->whereKey($owner->getKey())
-            ->lockForUpdate()
-            ->first();
-
-        if (! $locked instanceof Model) {
-            throw new MediaUploadException(
-                'The persisted Media owner disappeared during its slot transition.',
-            );
-        }
     }
 
     /**
@@ -1972,80 +1929,6 @@ final class MediaAttachments
         ksort($copied, SORT_STRING);
 
         return $copied;
-    }
-
-    /**
-     * Load bounded projection relations and preserve the selected association.
-     */
-    private function ownerslotcopyworkflowProject(Authenticatable|SystemActor $actor,
-        Media $media,
-        MediaAssociation $association,
-    ): Media {
-        $media->loadMissing(['translations', 'imageVariations']);
-        $media->loadCount('associations');
-
-        return $media->setRelation('pivot', $association);
-    }
-
-    /**
-     * Enforce the consumer-owned capability boundary.
-     *
-     * @throws AuthorizationException
-     */
-    private function ownerslotcopyworkflowAuthorize(
-        Authenticatable|SystemActor $actor,
-        MediaAbility $ability,
-        ?Media $media,
-        Model&HasNvlMedia $owner,
-    ): void {
-        if ($this->authorization->allows($actor, $ability, $media, $owner)) {
-            return;
-        }
-
-        throw new AuthorizationException(
-            "The actor is not authorized to {$ability->value} this Media owner slot.",
-        );
-    }
-
-    /**
-     * Normalize one package-owned source Media UUID.
-     */
-    private function ownerslotcopyworkflowMediaId(Authenticatable|SystemActor $actor, string $mediaId): string
-    {
-        $mediaId = Str::lower(trim($mediaId));
-
-        if (! Str::isUuid($mediaId)) {
-            throw new InvalidArgumentException(
-                'Media owner-slot copies require a valid Media UUID.',
-            );
-        }
-
-        return $mediaId;
-    }
-
-    /**
-     * Determine whether ledger completion participates in the Media transaction.
-     */
-    private function ownerslotcopyworkflowLedgerSharesMediaConnection(Authenticatable|SystemActor $actor): bool
-    {
-        return (new MediaOwnerSlotOperation)->getConnection()->getName()
-            === (MediaModelRegistry::newInstance())->getConnection()->getName();
-    }
-
-    /**
-     * Mark an active idempotency claim failed without masking the domain exception.
-     */
-    private function ownerslotcopyworkflowRecordFailure(Authenticatable|SystemActor $actor, ?MediaOwnerSlotOperationClaim $claim): void
-    {
-        if (! $claim instanceof MediaOwnerSlotOperationClaim || $claim->replayed) {
-            return;
-        }
-
-        try {
-            $this->idempotency->fail($claim, 'copy_failed');
-        } catch (Throwable $claimFailure) {
-            report($claimFailure);
-        }
     }
 
     /** @return Collection<int, Media> */

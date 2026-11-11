@@ -9,11 +9,8 @@ use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Cache\Repository;
-use Illuminate\Database\DatabaseTransactionRecord;
-use Illuminate\Database\DatabaseTransactionsManager;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Support\Config\PackageOptions;
@@ -138,42 +135,18 @@ final class MediaMutationLock
             throw $exception;
         }
 
-        $rootTransaction = $this->rootTransaction();
-
-        if ($rootTransaction instanceof DatabaseTransactionRecord) {
-            $rollbackRegistrationId = $this->rollbackCallbacks->register(
-                connection: $rootTransaction->connection,
-                rootLevel: $rootTransaction->level,
-                callback: function () use ($locks, $keys): void {
-                    $this->releaseLocks($locks, $keys);
-                },
-            );
-            $rootTransaction->addCallback(function () use (
-                $rollbackRegistrationId,
-                $locks,
-                $keys,
-            ): bool {
-                $this->rollbackCallbacks->cancel($rollbackRegistrationId);
-
-                return $this->releaseLocks($locks, $keys);
-            });
-        }
+        // Inside a Media transaction the locks outlive this call: they are released when its root commits or rolls back.
+        $releasedByTransaction = $this->rollbackCallbacks->afterRootTransaction(function () use ($locks, $keys): void {
+            $this->releaseLocks($locks, $keys);
+        });
 
         try {
-            $result = $callback();
-        } catch (Throwable $exception) {
-            if (! $rootTransaction instanceof DatabaseTransactionRecord) {
+            return $callback();
+        } finally {
+            if (! $releasedByTransaction) {
                 $this->releaseLocks($locks, $keys);
             }
-
-            throw $exception;
         }
-
-        if (! $rootTransaction instanceof DatabaseTransactionRecord) {
-            $this->releaseLocks($locks, $keys);
-        }
-
-        return $result;
     }
 
     /**
@@ -227,40 +200,12 @@ final class MediaMutationLock
     }
 
     /**
-     * Find the real root transaction record that owns lifecycle callbacks.
-     */
-    private function rootTransaction(): ?DatabaseTransactionRecord
-    {
-        $connection = DB::connection();
-
-        if ($connection->transactionLevel() === 0) {
-            return null;
-        }
-
-        $transactions = DB::getFacadeApplication()?->make('db.transactions');
-
-        if (! $transactions instanceof DatabaseTransactionsManager) {
-            return null;
-        }
-
-        $root = $transactions
-            ->callbackApplicableTransactions()
-            ->filter(
-                static fn (DatabaseTransactionRecord $transaction): bool => $transaction->connection === $connection->getName(),
-            )
-            ->sortBy('level')
-            ->first();
-
-        return $root instanceof DatabaseTransactionRecord ? $root : null;
-    }
-
-    /**
      * Release acquired locks in reverse order.
      *
      * @param  list<Lock>  $locks
      * @param  list<string>  $keys
      */
-    private function releaseLocks(array $locks, array $keys): bool
+    private function releaseLocks(array $locks, array $keys): void
     {
         foreach (array_reverse($locks) as $lock) {
             $lock->release();
@@ -269,7 +214,5 @@ final class MediaMutationLock
         foreach ($keys as $key) {
             unset($this->heldKeys[$key]);
         }
-
-        return true;
     }
 }

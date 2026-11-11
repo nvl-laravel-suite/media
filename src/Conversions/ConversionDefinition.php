@@ -230,6 +230,12 @@ class ConversionDefinition
         return $definition;
     }
 
+    /** @var list<string> Positions crop() accepts. */
+    private const array CROP_POSITIONS = ['top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom', 'bottom-right'];
+
+    /** @var list<string> Positions watermark() accepts. */
+    private const array WATERMARK_POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'];
+
     public ?int $targetWidth = null;
 
     public ?int $targetHeight = null;
@@ -503,6 +509,24 @@ class ConversionDefinition
             throw new InvalidArgumentException(
                 "ConversionDefinition [{$this->name}]: cannot set both fit() and crop(). Choose one sizing strategy.",
             );
+        }
+
+        // The image pipeline has no meaning for other values and would otherwise skip the option silently.
+        foreach ([
+            'flip()' => [$this->flipDirection, [null, 'h', 'v']],
+            'orientation()' => [$this->rotationDegrees, [null, 0, 90, 180, 270, -90]],
+            'crop()' => [$this->cropPosition, self::CROP_POSITIONS],
+            'watermark()' => [$this->watermarkPosition, self::WATERMARK_POSITIONS],
+        ] as $option => [$value, $supported]) {
+            if (! in_array($value, $supported, true)) {
+                throw new InvalidArgumentException(sprintf(
+                    'ConversionDefinition [%s]: %s does not support [%s]. Supported: %s.',
+                    $this->name,
+                    $option,
+                    (string) $value,
+                    implode(', ', array_filter($supported, static fn (mixed $item): bool => $item !== null)),
+                ));
+            }
         }
     }
 

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Contracts\MultipartUploadGateway;
 use Nvl\Media\Contracts\RecoverableMultipartUploadGateway;
@@ -368,3 +369,48 @@ it('rejects further provider writes after an active session visibility is disabl
     expect($persisted->fresh()->status)->toBe(MediaMultipartStatus::Aborted)
         ->and($gateway->abortCount)->toBe(1);
 })->with(['sign', 'complete']);
+it('deletes the assembled object when a session interrupted during completion is aborted', function (): void {
+    [$session, $gateway] = initiateMultipartSession('assembled-then-aborted');
+    MediaMultipartUpload::query()->whereKey($session['uploadId'])->update(['status' => MediaMultipartStatus::Completing->value]);
+    Storage::disk('public')->put($session['objectKey'], 'assembled-then-aborted');
+
+    app(MediaMultipart::class)->abort($session['uploadId'], multipartActor());
+
+    Storage::disk('public')->assertMissing($session['objectKey']);
+    expect($gateway->abortCount)->toBe(1)
+        ->and(MediaMultipartUpload::query()->findOrFail($session['uploadId'])->status)->toBe(MediaMultipartStatus::Aborted);
+});
+it('deletes the assembled object when pruning a session that expired during completion', function (MediaMultipartStatus $status): void {
+    [$session] = initiateMultipartSession('assembled-then-expired');
+    MediaMultipartUpload::query()->whereKey($session['uploadId'])->update(['status' => $status->value, 'expires_at' => now()->subMinute()]);
+    Storage::disk('public')->put($session['objectKey'], 'assembled-then-expired');
+
+    $this->artisan('nvl:media:multipart:prune')->expectsOutputToContain('Cleaned multipart sessions: 1')->assertSuccessful();
+
+    Storage::disk('public')->assertMissing($session['objectKey']);
+    expect(MediaMultipartUpload::query()->findOrFail($session['uploadId'])->status)->toBe(MediaMultipartStatus::Aborted);
+})->with(['completing' => [MediaMultipartStatus::Completing], 'expired' => [MediaMultipartStatus::Expired]]);
+it('keeps a session retryable when its assembled object cannot be deleted', function (): void {
+    [$session] = initiateMultipartSession('assembled-undeletable');
+    MediaMultipartUpload::query()->whereKey($session['uploadId'])->update(['status' => MediaMultipartStatus::Completing->value]);
+    Storage::shouldReceive('disk')->with('public')->andReturn($disk = Mockery::mock(FilesystemAdapter::class));
+    $disk->shouldReceive('delete')->with($session['objectKey'])->andReturnFalse();
+    $disk->shouldIgnoreMissing();
+
+    expect(fn () => app(MediaMultipart::class)->abort($session['uploadId'], multipartActor()))->toThrow(MediaUploadException::class, 'could not be deleted');
+    expect(MediaMultipartUpload::query()->findOrFail($session['uploadId'])->status)->toBe(MediaMultipartStatus::Completing);
+});
+it('accepts a completed object without a provider SHA-256 and verifies its bytes when the scan is finalized', function (string $stored, MediaLifecycleStatus $expected): void {
+    $contents = 'deferred-checksum';
+    $checksum = hash('sha256', $contents);
+    $gateway = multipartGateway(['path' => 'ignored', 'checksum' => null, 'size' => strlen($contents), 'mimeType' => 'text/plain', 'objectIdentity' => null]);
+    app()->instance(MultipartUploadGateway::class, $gateway);
+    $session = app(MediaMultipart::class)->initiate(['disk' => 'public', 'filename' => 'file.txt', 'mimeType' => 'text/plain', 'size' => strlen($contents), 'checksum' => $checksum, 'visibility' => MediaVisibility::Private, 'folder' => null], multipartActor());
+    app(MediaMultipart::class)->signPart(['uploadId' => $session['uploadId'], 'partNumber' => 1, 'checksum' => $checksum, 'byteLength' => strlen($contents)], multipartActor());
+    $media = app(MediaMultipart::class)->complete(['uploadId' => $session['uploadId'], 'parts' => [['partNumber' => 1, 'etag' => 'etag', 'checksum' => null]]], multipartActor());
+    expect($media->status)->toBe(MediaLifecycleStatus::PendingScan)->and($media->digest)->toBe($checksum);
+
+    Storage::disk('public')->put($session['objectKey'], $stored);
+    $finalized = app(MediaScan::class)->finalize(SystemActor::Background, $media, ['clean' => true, 'mimeType' => 'text/plain', 'extension' => 'txt', 'size' => strlen($contents), 'checksum' => $checksum, 'diagnostics' => []]);
+    expect($finalized->status)->toBe($expected);
+})->with(['matching bytes' => ['deferred-checksum', MediaLifecycleStatus::Available], 'different bytes' => ['deferred-CHECKSUM', MediaLifecycleStatus::Quarantined]]);

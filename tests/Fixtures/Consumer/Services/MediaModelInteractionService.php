@@ -12,7 +12,6 @@ use Nvl\Media\Contracts\HasNvlMedia;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Ownership\MediaOwnershipParentResolver;
-use Nvl\Media\Services\ImageOptimizationService;
 use Nvl\Media\Services\MediaAttachments;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaOwnedSourceLifecycle;
@@ -33,7 +32,6 @@ final readonly class MediaModelInteractionService
         private Request $request,
         private MediaSourceResolver $sourceResolver,
         private MediaLifecycleService $lifecycleService,
-        private ImageOptimizationService $imageOptimizationService,
         private MediaUploader $uploadMediaAction,
         private MediaAttachments $attachMediaAction,
         private MediaAttachments $detachMediaAction,
@@ -62,7 +60,6 @@ final readonly class MediaModelInteractionService
         return new MediaAdder(
             model: $model,
             file: $file,
-            imageOptimizationService: $this->imageOptimizationService,
             uploadMediaAction: $this->uploadMediaAction,
             attachMediaAction: $this->attachMediaAction,
             lifecycleService: $this->lifecycleService,

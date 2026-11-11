@@ -58,8 +58,8 @@ final readonly class MediaDoctor
             $this->storageConfigurationCheck(),
             $this->deliveryConfigurationCheck(),
             $this->representativeStoragePathCheck($production),
-            ...$this->integrityChecks($production),
             ...$this->imageChecks(),
+            $this->variationAuthorizationCheck($production),
             ...$this->queueChecks($production),
             ...$this->sourceChecks($production),
             ...$this->lockChecks($production),
@@ -178,7 +178,7 @@ final readonly class MediaDoctor
         return ['key' => 'migrations.ownership', 'severity' => 'warning', 'passed' => $duplicates === [], 'message' => $duplicates === []
                 ? 'Automatic vendor migration loading does not overlap a published host copy.'
                 : sprintf(
-                    'Automatic vendor migration loading overlaps published host migration(s): %s. Disable media.migrations.enabled before running host-owned copies.',
+                    'Automatic vendor migration loading overlaps published host migration(s): %s. Disable nvl-media.migrations.enabled before running host-owned copies.',
                     implode(', ', $duplicates),
                 )];
     }
@@ -218,23 +218,6 @@ final readonly class MediaDoctor
             '',
             pathinfo($path, PATHINFO_FILENAME),
         );
-    }
-
-    /**
-     * @return list<array{key: string, severity: string, passed: bool, message: string}>
-     */
-    private function integrityChecks(bool $production): array
-    {
-        $verification = config('nvl-media.integrity.verification');
-        $providerChecksum = config('nvl-media.integrity.provider_checksum');
-        $readback = config('nvl-media.integrity.streamed_readback_fallback');
-        $safe = $verification === 'required'
-            && in_array($providerChecksum, ['prefer', 'ignore'], true)
-            && $readback === true;
-
-        return [['key' => 'integrity.policy', 'severity' => $production ? 'error' : 'warning', 'passed' => $safe, 'message' => $safe
-                ? 'Stored objects require size/checksum verification with streamed fallback.'
-                : 'Media integrity must remain required with streamed readback fallback enabled.']];
     }
 
     /**
@@ -396,12 +379,14 @@ final readonly class MediaDoctor
                     'updated_at',
                 ],
             ];
+            // Media tables live on the Media connection, which need not be the application default.
+            $mediaConnection = MediaModelRegistry::newInstance()->getConnectionName();
             $connections = [
-                $ownerSlotOperationsTable => MediaConfiguration::ownerSlotOperationConnection(),
+                $ownerSlotOperationsTable => MediaConfiguration::ownerSlotOperationConnection() ?? $mediaConnection,
             ];
 
             foreach ($requirements as $table => $columns) {
-                $schema = Schema::connection($connections[$table] ?? null);
+                $schema = Schema::connection($connections[$table] ?? $mediaConnection);
                 $exists = $schema->hasTable($table);
                 $checks[] = ['key' => "schema.table.{$table}", 'severity' => 'error', 'passed' => $exists, 'message' => $exists ? "Table [{$table}] is available." : "Table [{$table}] is missing."];
 
@@ -487,14 +472,16 @@ final readonly class MediaDoctor
      */
     private function representativeStoragePathCheck(bool $production): array
     {
-        if (! Schema::hasTable(MediaTables::get(MediaTables::Media))) {
+        $schema = MediaModelRegistry::newInstance()->getConnection()->getSchemaBuilder();
+
+        if (! $schema->hasTable(MediaTables::get(MediaTables::Media))) {
             return ['key' => 'storage.persisted_paths', 'severity' => $production ? 'error' : 'warning', 'passed' => true, 'message' => 'Persisted media paths are unavailable until the media table exists.'];
         }
 
         $limit = MediaConfiguration::integer('nvl-media.adoption.path_sample_size', 25, 1);
         $columns = ['id', 'disk', 'folder', 'hash'];
 
-        if (Schema::hasColumn(MediaTables::get(MediaTables::Media), 'storage_path')) {
+        if ($schema->hasColumn(MediaTables::get(MediaTables::Media), 'storage_path')) {
             $columns[] = 'storage_path';
         }
 
@@ -540,7 +527,7 @@ final readonly class MediaDoctor
         return ['key' => 'storage.persisted_paths', 'severity' => $production ? 'error' : 'warning', 'passed' => $passed, 'message' => $passed
                 ? "Representative live media paths exist with root_folder [{$rootLabel}]."
                 : sprintf(
-                    'Representative live persisted paths are missing with root_folder [%s]: %s. Existing complete folders require an empty media.root_folder, or move the objects through nvl:media:migrate-disk before cutover.',
+                    'Representative live persisted paths are missing with root_folder [%s]: %s. Existing complete folders require an empty nvl-media.root_folder, or move the objects through nvl:media:migrate-disk before cutover.',
                     $rootLabel,
                     implode(', ', array_slice($missing, 0, 5)),
                 )];
@@ -768,9 +755,32 @@ final readonly class MediaDoctor
             ['key' => 'multipart.lock.central', 'severity' => $production ? 'error' : 'warning', 'passed' => $centralLock, 'message' => $centralLock
                     ? 'Multipart transitions use a central lock store.'
                     : 'Enabled multipart uploads require a central lock store.'],
-            ['key' => 'multipart.scanner.attestation', 'severity' => $production ? 'error' : 'warning', 'passed' => ! $scanner instanceof NullMediaContentScanner
-                    && (bool) config('nvl-media.multipart.required_scan', true), 'message' => 'Enabled multipart uploads require scanner attestation.'],
+            ['key' => 'multipart.scanner.attestation', 'severity' => $production ? 'error' : 'warning', 'passed' => ! $scanner instanceof NullMediaContentScanner, 'message' => 'Enabled multipart uploads require scanner attestation.'],
         ];
+    }
+
+    /**
+     * Variation jobs run as SystemActor::Background, which the standalone default authorization always denies.
+     *
+     * @return array{key: string, severity: string, passed: bool, message: string}
+     */
+    private function variationAuthorizationCheck(bool $production): array
+    {
+        try {
+            $enabled = ((bool) config('nvl-media.auto_generate_variations', true) && MediaImageConfiguration::presets() !== [])
+                || MediaImageConfiguration::outputConversion('jpg') !== null;
+        } catch (Throwable) {
+            // images.configuration already reports presets that cannot be read.
+            $enabled = false;
+        }
+
+        $passed = ! $enabled || ! $this->resolve(MediaAuthorization::class) instanceof DefaultMediaAuthorization;
+
+        return ['key' => 'images.variations.authorization', 'severity' => $production ? 'error' : 'warning', 'passed' => $passed, 'message' => $passed
+                ? 'Image variation jobs are not denied by the standalone default authorization.'
+                : 'Image variations are enabled, but the default MediaAuthorization denies every SystemActor, so each variation job fails. '
+                    .'Bind '.MediaAuthorization::class.' to a host policy that allows SystemActor::Background the MediaAbility::Mutate ability, '
+                    .'or disable nvl-media.auto_generate_variations and nvl-media.output_conversion.enabled.'];
     }
 
     private function encoderAvailable(

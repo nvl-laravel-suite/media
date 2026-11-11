@@ -20,10 +20,12 @@ final class PortableMediaSearchDriver implements MediaSearchDriver
      */
     public function apply(Builder $query, string $search): void
     {
-        $escaped = str_replace(['%', '_'], ['\\%', '\\_'], $search);
-        $query->where(function (Builder $builder) use ($escaped, $search): void {
-            $builder->where('filename', 'like', "%{$escaped}%")
-                ->orWhere('type', 'like', "%{$escaped}%")
+        // An explicit escape character and lower() give the same literal, case-insensitive match on
+        // SQLite, MySQL, MariaDB and PostgreSQL, whose LIKE defaults differ on both points.
+        $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)).'%';
+        $query->where(function (Builder $builder) use ($pattern, $search): void {
+            $builder->whereRaw("lower(filename) like ? escape '!'", [$pattern])
+                ->orWhereRaw("lower(type) like ? escape '!'", [$pattern])
                 ->orWhereJsonContains('tags', $search);
         });
     }

@@ -39,6 +39,48 @@ describe('RegenerateMediaVariationsJob', function () {
         app()->call([$job, 'handle']);
         Bus::assertNotDispatched(GenerateImageVariationJob::class);
     });
+    it('processes one chunk per run and continues from its last id in a new job', function () {
+        Bus::fake([GenerateImageVariationJob::class, RegenerateMediaVariationsJob::class]);
+        config(['nvl-media.image_variation_presets' => ['thumb' => ['width' => 150, 'height' => 150, 'quality' => 80, 'format' => 'webp', 'enabled' => true]]]);
+        foreach (range(1, 3) as $index) {
+            Media::create(['filename' => "chunk-{$index}.jpg", 'hash' => "chunk-{$index}-".uniqid().'.jpg', 'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'size' => 1024, 'disk' => 'public', 'folder' => 'test', 'is_public' => true, 'type' => MediaType::IMAGE, 'digest' => md5(uniqid())]);
+        }
+        $job = new RegenerateMediaVariationsJob(chunkSize: 2);
+
+        app()->call([$job, 'handle']);
+        Bus::assertDispatched(GenerateImageVariationJob::class, 2);
+        $continuations = Bus::dispatched(RegenerateMediaVariationsJob::class);
+        expect($continuations)->toHaveCount(1);
+
+        app()->call([$continuations->first(), 'handle']);
+        Bus::assertDispatched(GenerateImageVariationJob::class, 3);
+        Bus::assertDispatched(RegenerateMediaVariationsJob::class, 1);
+        expect(Bus::dispatched(GenerateImageVariationJob::class)->pluck('mediaId')->all())->toEqualCanonicalizing(Media::query()->pluck('id')->all());
+    });
+    it('keeps its continuation inside the batch and stops once the batch is cancelled', function () {
+        Bus::fake([GenerateImageVariationJob::class, RegenerateMediaVariationsJob::class]);
+        config(['nvl-media.image_variation_presets' => ['thumb' => ['width' => 150, 'height' => 150, 'quality' => 80, 'format' => 'webp', 'enabled' => true]]]);
+        foreach (range(1, 2) as $index) {
+            Media::create(['filename' => "batch-{$index}.jpg", 'hash' => "batch-{$index}-".uniqid().'.jpg', 'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'size' => 1024, 'disk' => 'public', 'folder' => 'test', 'is_public' => true, 'type' => MediaType::IMAGE, 'digest' => md5(uniqid())]);
+        }
+        [$job, $batch] = (new RegenerateMediaVariationsJob(chunkSize: 1))->withFakeBatch();
+
+        app()->call([$job, 'handle']);
+        Bus::assertDispatched(GenerateImageVariationJob::class, 1);
+        Bus::assertNotDispatched(RegenerateMediaVariationsJob::class);
+        expect($batch->added)->toHaveCount(1)->and($batch->added[0])->toBeInstanceOf(RegenerateMediaVariationsJob::class);
+
+        [$continuation] = $batch->added[0]->withFakeBatch(cancelledAt: now()->toImmutable());
+        app()->call([$continuation, 'handle']);
+        Bus::assertDispatched(GenerateImageVariationJob::class, 1);
+    });
+    it('skips sources the GD driver can never decode', function () {
+        Bus::fake([GenerateImageVariationJob::class]);
+        config(['nvl-media.image_driver' => 'gd', 'nvl-media.image_variation_presets' => ['thumb' => ['width' => 150, 'height' => 150, 'quality' => 80, 'format' => 'webp', 'enabled' => true]]]);
+        Media::create(['filename' => 'logo.svg', 'hash' => 'logo-'.uniqid().'.svg', 'extension' => 'svg', 'mime_type' => 'image/svg+xml', 'size' => 1024, 'disk' => 'public', 'folder' => 'test', 'is_public' => true, 'type' => MediaType::IMAGE, 'digest' => md5(uniqid())]);
+        app()->call([new RegenerateMediaVariationsJob, 'handle']);
+        Bus::assertNotDispatched(GenerateImageVariationJob::class);
+    });
     it('does not dispatch work for media that has not passed the scanner boundary', function () {
         Bus::fake([GenerateImageVariationJob::class]);
         config(['nvl-media.image_variation_presets' => ['thumb' => ['width' => 150, 'height' => 150, 'quality' => 80, 'format' => 'webp', 'enabled' => true]]]);

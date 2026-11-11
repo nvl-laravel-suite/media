@@ -8,14 +8,16 @@ use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Nvl\Media\Contracts\MultipartUploadGateway;
 use Nvl\Media\Enums\MediaMultipartStatus;
+use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\MediaMultipartUpload;
+use Nvl\Media\Services\MediaFileOperator;
 use Nvl\Media\Services\MediaMultipartLock;
 use Nvl\Media\Services\MediaMultipartSessionMapper;
 use Nvl\Support\Facades\PackageLog;
 use Throwable;
 
 /**
- * Aborts expired provider uploads and records their terminal session state.
+ * Aborts expired provider uploads, deletes an object their completion may have assembled and records their terminal session state.
  */
 final class PruneExpiredMultipartUploadsCommand extends Command
 {
@@ -28,6 +30,7 @@ final class PruneExpiredMultipartUploadsCommand extends Command
         private readonly MultipartUploadGateway $gateway,
         private readonly MediaMultipartLock $lock,
         private readonly MediaMultipartSessionMapper $sessionMapper,
+        private readonly MediaFileOperator $files,
     ) {
         parent::__construct();
     }
@@ -73,6 +76,12 @@ final class PruneExpiredMultipartUploadsCommand extends Command
                     }
 
                     $this->gateway->abort($this->sessionMapper->toData($session));
+
+                    // Only a session that reached completion can have an assembled object at its server-owned key.
+                    if ($session->status !== MediaMultipartStatus::Initiated && ! $this->files->delete($session->disk, $session->object_key)) {
+                        throw new MediaUploadException('The assembled multipart object could not be deleted.');
+                    }
+
                     $failureCode = $session->status === MediaMultipartStatus::Failed
                         ? 'provider_initiation_failed'
                         : 'session_expired';

@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Nvl\Media\Builders;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Str;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
+use Nvl\Support\Ownership\Traits\ScopesOwnedBuilderWrites;
 
 /**
  * MediaBuilder centralizes reusable media query constraints.
@@ -15,6 +17,20 @@ use Nvl\Media\Models\Media;
  */
 final class MediaBuilder extends Builder
 {
+    use ScopesOwnedBuilderWrites;
+
+    /**
+     * Treat a malformed identifier as absent; PostgreSQL rejects a non-UUID value compared with the key.
+     *
+     * @param  mixed  $id
+     */
+    public function whereKey($id): static
+    {
+        is_string($id) && ! Str::isUuid($id) ? $this->whereRaw('1 = 0') : parent::whereKey($id);
+
+        return $this;
+    }
+
     /**
      * Restrict the query to public media.
      */

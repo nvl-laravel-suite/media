@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace Nvl\Media\Services;
 
 use Illuminate\Contracts\Auth\Authenticatable;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Schema\Builder as SchemaBuilder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use LogicException;
@@ -27,6 +28,9 @@ use Throwable;
  */
 final class MediaImport
 {
+    /** Rows read, verified, inserted and reconciled per query during an adoption. */
+    private const int ADOPTION_CHUNK = 250;
+
     public function __construct(
         private readonly MediaAccessService $access,
         private readonly MediaDiskGateway $disks,
@@ -34,11 +38,9 @@ final class MediaImport
     ) {}
 
     /**
-     * Create the adoption action.
-     */
-
-    /**
-     * Plan or apply a non-destructive import from staged legacy tables.
+     * Plan or apply a non-destructive import from legacy tables staged on the Media connection.
+     *
+     * Rows are read, checked against storage and written in chunks, so memory does not grow with the table.
      *
      * @return array{mode: string, ready: bool, sourceMedia: int, sourceAssociations: int, sourceTranslations: int, sourceVariations: int, matchedMedia: int, matchedAssociations: int, matchedTranslations: int, matchedVariations: int, missingPaths: list<string>, errors: list<string>}
      *
@@ -58,114 +60,132 @@ final class MediaImport
         $this->adoptAssertTableName($actor, $sourceTable);
         $this->adoptAssertOptionalTableName($actor, $translationTable);
         $this->adoptAssertOptionalTableName($actor, $variationTable);
-        $this->adoptAssertSchema($actor, $sourceTable, $translationTable, $variationTable);
+        $connection = MediaModelRegistry::newInstance()->getConnection();
+        $this->adoptAssertSchema($connection->getSchemaBuilder(), $sourceTable, $translationTable, $variationTable);
 
-        $sourceRows = DB::table($sourceTable)->orderBy('id')->get();
-        $mediaRows = [];
-        $associationRows = [];
-        $translationRows = [];
-        $variationRows = [];
-        $missingPaths = [];
-        $errors = [];
-        $mediaDisks = [];
+        $scan = function () use ($actor, $connection, $sourceTable, $translationTable, $variationTable, $uploaderType, $defaultLocale, $apply): array {
+            $source = ['Media' => 0, 'Associations' => 0, 'Translations' => 0, 'Variations' => 0];
+            $matched = $source;
+            /** @var list<string> $missingPaths */
+            $missingPaths = [];
+            /** @var list<string> $errors */
+            $errors = [];
+            $store = function (string $resource, string $table, array $rows) use ($connection, $apply, &$source, &$matched, &$missingPaths, &$errors): void {
+                /** @var list<array<string, mixed>> $rows */
+                $source[$resource] += count($rows);
+                $matched[$resource] += $this->adoptStoreChunk(
+                    $connection,
+                    MediaTables::get($table),
+                    $rows,
+                    $apply && $errors === [] && $missingPaths === [],
+                );
+            };
 
-        foreach ($sourceRows as $row) {
-            try {
-                $mapped = $this->adoptMapMedia($actor, $sourceTable, $row, $uploaderType);
-                $mediaRows[] = $mapped['media'];
-                $mediaDisks[$mapped['media']['id']] = $mapped['media']['disk'];
+            $connection->table($sourceTable)->chunkById(self::ADOPTION_CHUNK, function (Collection $rows) use ($actor, $sourceTable, $uploaderType, $store, &$missingPaths, &$errors): void {
+                $media = [];
+                $associations = [];
 
-                if ($mapped['association'] !== null) {
-                    $associationRows[] = $mapped['association'];
-                }
+                foreach ($rows as $row) {
+                    try {
+                        $mapped = $this->adoptMapMedia($actor, $sourceTable, $row, $uploaderType);
+                        $media[] = $mapped['media'];
 
-                $path = $mapped['path'];
+                        if ($mapped['association'] !== null) {
+                            $associations[] = $mapped['association'];
+                        }
 
-                if (! $this->existence->existsFresh($mapped['media']['disk'], $path)) {
-                    $missingPaths[] = $mapped['media']['disk'].':'.$path;
-                }
-            } catch (Throwable $exception) {
-                $errors[] = $this->adoptRowError($actor, 'media', $row, $exception);
-            }
-        }
-
-        if ($translationTable !== null) {
-            foreach (DB::table($translationTable)->orderBy('id')->get() as $row) {
-                try {
-                    $mapped = $this->adoptMapTranslation($actor,
-                        $sourceTable,
-                        $translationTable,
-                        $row,
-                        $defaultLocale,
-                    );
-
-                    if (! isset($mediaDisks[$mapped['media_id']])) {
-                        throw new LogicException('The referenced legacy media row was not mapped.');
+                        if (! $mapped['exists']) {
+                            $missingPaths[] = $mapped['media']['disk'].':'.$mapped['path'];
+                        }
+                    } catch (Throwable $exception) {
+                        $errors[] = $this->adoptRowError($actor, 'media', $row, $exception);
                     }
-
-                    $translationRows[] = $mapped;
-                } catch (Throwable $exception) {
-                    $errors[] = $this->adoptRowError($actor, 'translation', $row, $exception);
                 }
-            }
-        }
 
-        if ($variationTable !== null) {
-            foreach (DB::table($variationTable)->orderBy('id')->get() as $row) {
-                try {
-                    $mapped = $this->adoptMapVariation($actor, $sourceTable, $variationTable, $row);
-                    $disk = $mediaDisks[$mapped['media_id']] ?? null;
-                    $path = $mapped['storage_path'];
-
-                    if (! is_string($disk)) {
-                        throw new LogicException('The referenced legacy media row was not mapped.');
-                    }
-
-                    $variationRows[] = $mapped;
-
-                    if (! $this->existence->existsFresh($disk, $path)) {
-                        $missingPaths[] = $disk.':'.$path;
-                    }
-                } catch (Throwable $exception) {
-                    $errors[] = $this->adoptRowError($actor, 'variation', $row, $exception);
-                }
-            }
-        }
-
-        $missingPaths = array_values(array_unique($missingPaths));
-        $ready = $errors === [] && $missingPaths === [];
-
-        if ($apply && ! $ready) {
-            throw new LogicException(
-                'Spatie media adoption cannot apply until every mapping error and missing backing path is resolved.',
-            );
-        }
-
-        if ($apply) {
-            MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor,
-                $mediaRows,
-                $associationRows,
-                $translationRows,
-                $variationRows,
-            ): void {
-                $this->adoptInsertRows($actor, MediaTables::get(MediaTables::Media), $mediaRows);
-                $this->adoptInsertRows($actor, MediaTables::get(MediaTables::Associations), $associationRows);
-                $this->adoptInsertRows($actor, MediaTables::get(MediaTables::I18n), $translationRows);
-                $this->adoptInsertRows($actor, MediaTables::get(MediaTables::ImageVariations), $variationRows);
-                $this->adoptAssertReconciled($actor, MediaTables::get(MediaTables::Media), $mediaRows);
-                $this->adoptAssertReconciled($actor, MediaTables::get(MediaTables::Associations), $associationRows);
-                $this->adoptAssertReconciled($actor, MediaTables::get(MediaTables::I18n), $translationRows);
-                $this->adoptAssertReconciled($actor, MediaTables::get(MediaTables::ImageVariations), $variationRows);
+                $store('Media', MediaTables::Media, $media);
+                $store('Associations', MediaTables::Associations, $associations);
             });
-        }
 
-        return ['mode' => $apply ? 'apply' : 'dry-run', 'ready' => $ready, 'sourceMedia' => count($mediaRows), 'sourceAssociations' => count($associationRows), 'sourceTranslations' => count($translationRows), 'sourceVariations' => count($variationRows), 'matchedMedia' => $this->adoptMatchedCount($actor, MediaTables::get(MediaTables::Media), $mediaRows), 'matchedAssociations' => $this->adoptMatchedCount($actor, MediaTables::get(MediaTables::Associations), $associationRows), 'matchedTranslations' => $this->adoptMatchedCount($actor, MediaTables::get(MediaTables::I18n), $translationRows), 'matchedVariations' => $this->adoptMatchedCount($actor, MediaTables::get(MediaTables::ImageVariations), $variationRows), 'missingPaths' => $missingPaths, 'errors' => $errors];
+            if ($translationTable !== null) {
+                $connection->table($translationTable)->chunkById(self::ADOPTION_CHUNK, function (Collection $rows) use ($actor, $connection, $sourceTable, $translationTable, $defaultLocale, $store, &$errors): void {
+                    $disks = $this->adoptReferencedDisks($actor, $connection, $sourceTable, $rows);
+                    $translations = [];
+
+                    foreach ($rows as $row) {
+                        try {
+                            $mapped = $this->adoptMapTranslation($actor, $sourceTable, $translationTable, $row, $defaultLocale);
+
+                            if (! isset($disks[$mapped['media_id']])) {
+                                throw new LogicException('The referenced legacy media row was not mapped.');
+                            }
+
+                            $translations[] = $mapped;
+                        } catch (Throwable $exception) {
+                            $errors[] = $this->adoptRowError($actor, 'translation', $row, $exception);
+                        }
+                    }
+
+                    $store('Translations', MediaTables::I18n, $translations);
+                });
+            }
+
+            if ($variationTable !== null) {
+                $connection->table($variationTable)->chunkById(self::ADOPTION_CHUNK, function (Collection $rows) use ($actor, $connection, $sourceTable, $variationTable, $store, &$missingPaths, &$errors): void {
+                    $disks = $this->adoptReferencedDisks($actor, $connection, $sourceTable, $rows);
+                    $variations = [];
+
+                    foreach ($rows as $row) {
+                        try {
+                            $mapped = $this->adoptMapVariation($actor, $sourceTable, $variationTable, $row);
+                            $disk = $disks[$mapped['media_id']] ?? null;
+
+                            if ($disk === null) {
+                                throw new LogicException('The referenced legacy media row was not mapped.');
+                            }
+
+                            $variations[] = $mapped;
+
+                            if (! $this->existence->existsFresh($disk, $mapped['storage_path'])) {
+                                $missingPaths[] = $disk.':'.$mapped['storage_path'];
+                            }
+                        } catch (Throwable $exception) {
+                            $errors[] = $this->adoptRowError($actor, 'variation', $row, $exception);
+                        }
+                    }
+
+                    $store('Variations', MediaTables::ImageVariations, $variations);
+                });
+            }
+
+            $missingPaths = array_values(array_unique($missingPaths));
+            $ready = $errors === [] && $missingPaths === [];
+
+            if ($apply && ! $ready) {
+                throw new LogicException(
+                    'Spatie media adoption cannot apply until every mapping error and missing backing path is resolved.',
+                );
+            }
+
+            if ($apply) {
+                foreach (['Media' => MediaTables::Media, 'Associations' => MediaTables::Associations, 'Translations' => MediaTables::I18n, 'Variations' => MediaTables::ImageVariations] as $resource => $table) {
+                    if ($source[$resource] !== $matched[$resource]) {
+                        throw new LogicException(sprintf('Media adoption reconciled %d of %d rows in [%s].', $matched[$resource], $source[$resource], MediaTables::get($table)));
+                    }
+                }
+            }
+
+            return ['mode' => $apply ? 'apply' : 'dry-run', 'ready' => $ready, 'sourceMedia' => $source['Media'], 'sourceAssociations' => $source['Associations'], 'sourceTranslations' => $source['Translations'], 'sourceVariations' => $source['Variations'], 'matchedMedia' => $matched['Media'], 'matchedAssociations' => $matched['Associations'], 'matchedTranslations' => $matched['Translations'], 'matchedVariations' => $matched['Variations'], 'missingPaths' => $missingPaths, 'errors' => $errors];
+        };
+
+        // An apply maps and inserts chunk by chunk inside one transaction: a blocker found in a later chunk rolls every insert back.
+        return $apply ? $connection->transaction($scan) : $scan();
     }
 
     /**
      * Validate the staged source and canonical target table topology.
      */
-    private function adoptAssertSchema(Authenticatable|SystemActor $actor,
+    private function adoptAssertSchema(
+        SchemaBuilder $schema,
         string $sourceTable,
         ?string $translationTable,
         ?string $variationTable,
@@ -183,21 +203,21 @@ final class MediaImport
             MediaTables::get(MediaTables::I18n),
             MediaTables::get(MediaTables::ImageVariations),
         ] as $table) {
-            if (! Schema::hasTable($table)) {
+            if (! $schema->hasTable($table)) {
                 throw new LogicException("Required media adoption table [{$table}] is missing.");
             }
         }
 
-        if (! Schema::hasColumn($sourceTable, 'id')) {
+        if (! $schema->hasColumn($sourceTable, 'id')) {
             throw new LogicException("Legacy media table [{$sourceTable}] requires an id column.");
         }
 
         foreach (array_filter([$translationTable, $variationTable]) as $table) {
-            if (! Schema::hasTable($table)) {
+            if (! $schema->hasTable($table)) {
                 throw new LogicException("Configured legacy media table [{$table}] is missing.");
             }
 
-            if (! Schema::hasColumns($table, ['id', 'media_id'])) {
+            if (! $schema->hasColumns($table, ['id', 'media_id'])) {
                 throw new LogicException(
                     "Configured legacy media table [{$table}] requires id and media_id columns.",
                 );
@@ -211,7 +231,8 @@ final class MediaImport
      * @return array{
      *     media: array{id: string, disk: string, ...},
      *     association: array<string, mixed>|null,
-     *     path: string
+     *     path: string,
+     *     exists: bool
      * }
      */
     private function adoptMapMedia(Authenticatable|SystemActor $actor, string $sourceTable, stdClass $row, ?string $uploaderType): array
@@ -232,6 +253,7 @@ final class MediaImport
         $this->adoptAssertLength($actor, $hash, 255, 'hash');
         $this->adoptAssertLength($actor, $folder, 255, 'folder');
         $this->adoptAssertLength($actor, $disk, 25, 'disk');
+        $this->adoptAssertLength($actor, $mimeType, 255, 'MIME type');
         $path = implode('/', array_filter([MediaPathResolver::storagePath($folder, $disk), $hash], static fn (string $part): bool => $part !== ''));
         MediaPathResolver::assertSafe($path);
         $exists = $this->existence->existsFresh($disk, $path);
@@ -243,6 +265,12 @@ final class MediaImport
 
         $visibility = $this->adoptVisibility($actor, $row);
         $uploadedBy = $this->adoptFirstString($actor, $row, ['uploaded_by']);
+        $uploadedByType = $this->adoptFirstString($actor, $row, ['uploaded_by_type']) ?? $uploaderType;
+        $failureCode = $this->adoptFirstString($actor, $row, ['failure_code']);
+        $this->adoptAssertLength($actor, $digest, 255, 'digest');
+        $this->adoptAssertLength($actor, $uploadedBy, 255, 'uploader id');
+        $this->adoptAssertLength($actor, $uploadedByType, 255, 'uploader type');
+        $this->adoptAssertLength($actor, $failureCode, 80, 'failure code');
         $createdAt = $this->adoptProperty($actor, $row, 'created_at') ?? now();
         $updatedAt = $this->adoptProperty($actor, $row, 'updated_at') ?? $createdAt;
         $metadata = $this->adoptMergedJson($actor, $row, ['metadata', 'custom_properties']);
@@ -265,7 +293,7 @@ final class MediaImport
             'revision' => max(1, $this->adoptInteger($actor, $row, 'revision', 1)),
             'available_at' => $this->adoptProperty($actor, $row, 'available_at') ?? $createdAt,
             'quarantined_at' => $this->adoptProperty($actor, $row, 'quarantined_at'),
-            'failure_code' => $this->adoptFirstString($actor, $row, ['failure_code']),
+            'failure_code' => $failureCode,
             'failure_context' => $this->adoptJson($actor, $this->adoptProperty($actor, $row, 'failure_context')),
             'type' => $this->adoptType($actor, $row, $mimeType)->value,
             'digest' => $digest ?? hash('sha256', "{$sourceTable}:{$legacyId}"),
@@ -273,9 +301,7 @@ final class MediaImport
             'metadata' => $metadata,
             'variation_definitions' => $this->adoptJson($actor, $this->adoptProperty($actor, $row, 'variation_definitions')),
             'uploaded_by' => $uploadedBy,
-            'uploaded_by_type' => $uploadedBy === null
-                ? null
-                : ($this->adoptFirstString($actor, $row, ['uploaded_by_type']) ?? $uploaderType),
+            'uploaded_by_type' => $uploadedBy === null ? null : $uploadedByType,
             'upload_session_id' => null,
             'created_at' => $createdAt,
             'updated_at' => $updatedAt,
@@ -288,7 +314,7 @@ final class MediaImport
         $this->adoptAssertLength($actor, $collection, 50, 'collection');
         $this->adoptAssertLength($actor, $ownerType, 255, 'owner type');
         $this->adoptAssertLength($actor, $ownerId, 255, 'owner id');
-        $this->adoptAssertLength($actor, $associationLocale, 5, 'association locale');
+        $this->adoptAssertLength($actor, $associationLocale, 35, 'association locale');
         $association = $ownerType === null || $ownerId === null ? null : [
             'id' => $this->adoptStableUuid($actor, "{$sourceTable}:association", implode(':', [
                 $legacyId,
@@ -309,7 +335,7 @@ final class MediaImport
             'updated_at' => $updatedAt,
         ];
 
-        return ['media' => $media, 'association' => $association, 'path' => $path];
+        return ['media' => $media, 'association' => $association, 'path' => $path, 'exists' => $exists];
     }
 
     /**
@@ -326,14 +352,18 @@ final class MediaImport
         $legacyId = $this->adoptRequiredScalar($actor, $row, 'id');
         $legacyMediaId = $this->adoptRequiredScalar($actor, $row, 'media_id');
         $locale = $this->adoptFirstString($actor, $row, ['locale']) ?? $defaultLocale;
+        $title = $this->adoptFirstString($actor, $row, ['title', 'name']);
+        $alt = $this->adoptFirstString($actor, $row, ['alt', 'alt_text']);
         $this->adoptAssertLength($actor, $locale, 35, 'translation locale');
+        $this->adoptAssertLength($actor, $title, 255, 'translation title');
+        $this->adoptAssertLength($actor, $alt, 255, 'translation alt text');
 
         return [
             'id' => $this->adoptStableUuid($actor, "{$translationTable}:translation", $legacyId),
             'media_id' => $this->adoptStableUuid($actor, "{$sourceTable}:media", $legacyMediaId),
             'locale' => $locale,
-            'title' => $this->adoptFirstString($actor, $row, ['title', 'name']),
-            'alt' => $this->adoptFirstString($actor, $row, ['alt', 'alt_text']),
+            'title' => $title,
+            'alt' => $alt,
             'caption' => $this->adoptFirstString($actor, $row, ['caption']),
             'description' => $this->adoptFirstString($actor, $row, ['description']),
             'created_at' => $this->adoptProperty($actor, $row, 'created_at') ?? now(),
@@ -361,22 +391,26 @@ final class MediaImport
             throw new LogicException('A variation storage_path or path is required.');
         }
 
+        $status = $this->adoptFirstString($actor, $row, ['status']) ?? 'available';
+        $format = $this->adoptFirstString($actor, $row, ['format'])
+            ?? mb_strtolower((string) pathinfo($storagePath, PATHINFO_EXTENSION))
+            ?: 'webp';
         MediaPathResolver::assertSafe($storagePath);
         $this->adoptAssertLength($actor, $label, 30, 'variation label');
         $this->adoptAssertLength($actor, $storagePath, 1024, 'variation storage path');
+        $this->adoptAssertLength($actor, $status, 32, 'variation status');
+        $this->adoptAssertLength($actor, $format, 10, 'variation format');
 
         return [
             'id' => $this->adoptStableUuid($actor, "{$variationTable}:variation", $legacyId),
             'media_id' => $this->adoptStableUuid($actor, "{$sourceTable}:media", $legacyMediaId),
             'label' => $label,
             'storage_path' => $storagePath,
-            'status' => $this->adoptFirstString($actor, $row, ['status']) ?? 'available',
+            'status' => $status,
             'width' => max(0, $this->adoptInteger($actor, $row, 'width', 0)),
             'height' => max(0, $this->adoptInteger($actor, $row, 'height', 0)),
             'size' => max(0, $this->adoptInteger($actor, $row, 'size', 0)),
-            'format' => $this->adoptFirstString($actor, $row, ['format'])
-                ?? mb_strtolower((string) pathinfo($storagePath, PATHINFO_EXTENSION))
-                ?: 'webp',
+            'format' => $format,
             'quality' => min(100, max(0, $this->adoptInteger($actor, $row, 'quality', 80))),
             'source_revision' => max(1, $this->adoptInteger($actor, $row, 'source_revision', 1)),
             'attempts' => max(0, $this->adoptInteger($actor, $row, 'attempts', 0)),
@@ -387,48 +421,44 @@ final class MediaImport
     }
 
     /**
-     * Insert mapped rows idempotently without deleting or mutating the source.
+     * Insert one chunk of mapped rows idempotently when asked, then count how many of its identifiers the target holds.
      *
      * @param  list<array<string, mixed>>  $rows
      */
-    private function adoptInsertRows(Authenticatable|SystemActor $actor, string $table, array $rows): void
-    {
-        foreach (array_chunk($rows, 250) as $chunk) {
-            DB::table($table)->insertOrIgnore($chunk);
-        }
-    }
-
-    /**
-     * Count deterministic mapped identifiers already present in a target table.
-     *
-     * @param  list<array<string, mixed>>  $rows
-     */
-    private function adoptMatchedCount(Authenticatable|SystemActor $actor, string $table, array $rows): int
+    private function adoptStoreChunk(ConnectionInterface $connection, string $table, array $rows, bool $insert): int
     {
         if ($rows === []) {
             return 0;
         }
 
-        return DB::table($table)
-            ->whereIn('id', array_column($rows, 'id'))
-            ->count();
+        if ($insert) {
+            $connection->table($table)->insertOrIgnore($rows);
+        }
+
+        return $connection->table($table)->whereIn('id', array_column($rows, 'id'))->count();
     }
 
     /**
-     * Fail the transaction when deterministic source and target counts diverge.
+     * Resolve the disk of every legacy media row that one chunk of companion rows references.
      *
-     * @param  list<array<string, mixed>>  $rows
+     * @param  Collection<int, stdClass>  $rows
+     * @return array<string, string> Canonical media identifier => disk
      */
-    private function adoptAssertReconciled(Authenticatable|SystemActor $actor, string $table, array $rows): void
+    private function adoptReferencedDisks(Authenticatable|SystemActor $actor, ConnectionInterface $connection, string $sourceTable, Collection $rows): array
     {
-        $source = count($rows);
-        $matched = $this->adoptMatchedCount($actor, $table, $rows);
+        $legacyIds = $rows->pluck('media_id')
+            ->filter(static fn (mixed $id): bool => is_int($id) || is_string($id))
+            ->unique()
+            ->values()
+            ->all();
+        $disks = [];
 
-        if ($source !== $matched) {
-            throw new LogicException(
-                "Media adoption reconciled {$matched} of {$source} rows in [{$table}].",
-            );
+        foreach ($connection->table($sourceTable)->whereIn('id', $legacyIds)->get() as $media) {
+            $disks[$this->adoptStableUuid($actor, "{$sourceTable}:media", $this->adoptRequiredScalar($actor, $media, 'id'))]
+                = $this->adoptFirstString($actor, $media, ['disk']) ?? $this->adoptConfiguredDisk($actor);
         }
+
+        return $disks;
     }
 
     /**

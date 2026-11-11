@@ -128,6 +128,8 @@ Pass `variationDefinitions` to `MediaUploader::upload()` as a label-keyed map of
 ],
 ```
 
+Variation jobs and `nvl:media:regenerate` act as `SystemActor::Background` and require `MediaAbility::Mutate`. The default `DefaultMediaAuthorization` denies every system actor, so they fail until the host binds a `MediaAuthorization` that grants `Mutate` to `SystemActor::Background`.
+
 When disabled or when the connection is `sync`, normal variation generation runs inline. In production, use Redis, SQS, database, or another durable queue:
 
 ```bash

@@ -384,3 +384,31 @@ describe('fluent chaining', function () {
         expect($def->enabled)->toBeFalse();
     });
 });
+
+it('rejects option values the image pipeline would silently ignore', function (Closure $configure, string $message): void {
+    $definition = new ConversionDefinition('strict');
+    $configure($definition);
+
+    expect(fn () => $definition->validate())->toThrow(InvalidArgumentException::class, $message);
+})->with([
+    'flip direction' => [static fn (ConversionDefinition $definition) => $definition->flip('horizontal'), 'flip()'],
+    'rotation' => [static fn (ConversionDefinition $definition) => $definition->orientation(45), 'orientation()'],
+    'crop position' => [static fn (ConversionDefinition $definition) => $definition->crop(10, 10, 'middle'), 'crop()'],
+    'watermark position' => [static fn (ConversionDefinition $definition) => $definition->watermark('/tmp/logo.png', 'top'), 'watermark()'],
+]);
+
+it('accepts every supported flip, rotation and position value', function (): void {
+    foreach (['h', 'v'] as $direction) {
+        (new ConversionDefinition('ok'))->flip($direction)->validate();
+    }
+    foreach ([0, 90, 180, 270, -90] as $degrees) {
+        (new ConversionDefinition('ok'))->orientation($degrees)->validate();
+    }
+    foreach (['top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom', 'bottom-right'] as $position) {
+        (new ConversionDefinition('ok'))->crop(10, 10, $position)->validate();
+    }
+    foreach (['top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'] as $position) {
+        (new ConversionDefinition('ok'))->watermark('/tmp/logo.png', $position)->validate();
+    }
+    expect(true)->toBeTrue();
+});

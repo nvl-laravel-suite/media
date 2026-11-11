@@ -243,3 +243,21 @@ describe('isUsed', function () {
         expect($media->isUsed())->toBeTrue();
     });
 });
+it('asks storage about a variation once, not on every rendered URL', function (): void {
+    Storage::fake('public');
+    $media = createUrlMedia(['disk' => 'public', 'folder' => 'uploads', 'hash' => 'cached.jpg']);
+    $variation = MediaImageVariation::create(['media_id' => $media->id, 'label' => 'thumb', 'width' => 150, 'height' => 150, 'size' => 512, 'format' => 'webp', 'quality' => 80]);
+    $media->load('imageVariations');
+    Storage::disk('public')->put($variation->getPath(), 'variation data');
+    $first = $media->getUrl('thumb');
+
+    // Removing the object behind the package's back shows whether a second call reads storage again.
+    Storage::disk('public')->delete($variation->getPath());
+
+    expect($first)->toContain(basename($variation->getPath()))
+        ->and($media->getUrl('thumb'))->toBe($first)
+        ->and($variation->refresh()->getUrl())->toBe($first);
+
+    config(['nvl-media.cache_file_existence' => false]);
+    expect($media->getUrl('thumb'))->not->toContain(basename($variation->getPath()));
+});

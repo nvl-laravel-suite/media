@@ -41,7 +41,7 @@ trait InteractsWithNvlMedia
             $related->qualifyColumn('associable_type'),
             $related->qualifyColumn('associable_id'),
             $this->getKeyName(),
-        ))->with('media')->orderBy('order');
+        ))->with('media')->orderBy('order')->orderBy($related->qualifyColumn('id'));
     }
 
     /** Restrict host owners through explicit SQL View authorization without changing selections.

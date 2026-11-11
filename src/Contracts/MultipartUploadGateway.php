@@ -35,9 +35,12 @@ interface MultipartUploadGateway
     /**
      * Complete and server-verify an uploaded object.
      *
+     * `checksum` is the provider-attested lowercase SHA-256 of the whole object, or null when the provider
+     * cannot attest one without reading the object; scan finalisation then verifies the stored bytes.
+     *
      * @param  array{uploadId: string, disk: string, objectKey: string, filename: string, mimeType: string, size: int, checksum: string, visibility: MediaVisibility, uploaderId: int|string|null, uploaderType: string|null, expiresAt: \DateTimeImmutable, minimumPartSize: int, maximumParts: int}  $session
      * @param  array{uploadId: string, parts: list<array{partNumber: int, etag: string, checksum?: string|null}>}  $completion
-     * @return array{path: string, checksum: string, size: int, mimeType: string, objectIdentity: string|null}
+     * @return array{path: string, checksum: string|null, size: int, mimeType: string, objectIdentity: string|null}
      */
     public function complete(
         array $session,

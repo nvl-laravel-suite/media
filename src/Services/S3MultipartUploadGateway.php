@@ -23,10 +23,7 @@ use Throwable;
  */
 final readonly class S3MultipartUploadGateway implements RecoverableMultipartUploadGateway
 {
-    public function __construct(
-        private MediaDiskGateway $disks,
-        private PackageLogger $packageLogger,
-    ) {}
+    public function __construct(private PackageLogger $packageLogger) {}
 
     public function initiate(array $session): void
     {
@@ -227,7 +224,7 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
 
     /**
      * @param  array{uploadId: string, disk: string, objectKey: string, filename: string, mimeType: string, size: int, checksum: string, visibility: MediaVisibility, uploaderId: int|string|null, uploaderType: string|null, expiresAt: DateTimeImmutable, minimumPartSize: int, maximumParts: int}  $session
-     * @return array{path: string, checksum: string, size: int, mimeType: string, objectIdentity: string|null}
+     * @return array{path: string, checksum: string|null, size: int, mimeType: string, objectIdentity: string|null}
      */
     private function inspectObject(
         array $session,
@@ -243,42 +240,31 @@ final readonly class S3MultipartUploadGateway implements RecoverableMultipartUpl
         ]);
         $size = $head->get('ContentLength');
         $mimeType = $head->get('ContentType');
-        $providerChecksum = $head->get('ChecksumSHA256');
-        $checksum = $this->fullObjectChecksum(
-            $session,
-            $providerChecksum,
-            $head->get('ChecksumType'),
-        );
 
         if ((! is_int($size) && ! is_numeric($size))
             || ! is_string($mimeType)
-            || $mimeType === ''
-            || $checksum === '') {
+            || $mimeType === '') {
             throw new MediaUploadException('S3 returned incomplete metadata for a completed multipart object.');
         }
 
-        return ['path' => $session['objectKey'], 'checksum' => mb_strtolower($checksum), 'size' => (int) $size, 'mimeType' => $mimeType, 'objectIdentity' => $identity ?? $this->identity($head->get('ETag'), $head->get('VersionId'))];
+        return ['path' => $session['objectKey'], 'checksum' => $this->fullObjectChecksum($head->get('ChecksumSHA256'), $head->get('ChecksumType')), 'size' => (int) $size, 'mimeType' => $mimeType, 'objectIdentity' => $identity ?? $this->identity($head->get('ETag'), $head->get('VersionId'))];
     }
 
     /**
-     * @param  array{uploadId: string, disk: string, objectKey: string, filename: string, mimeType: string, size: int, checksum: string, visibility: MediaVisibility, uploaderId: int|string|null, uploaderType: string|null, expiresAt: DateTimeImmutable, minimumPartSize: int, maximumParts: int}  $session
+     * The provider's SHA-256 of the whole object, or null when it only holds a composite of part checksums.
+     *
+     * A multipart upload signed with per-part SHA-256 normally yields a composite checksum. The object is
+     * not read back here: the asset stays pending until scan finalisation hashes the stored bytes.
      */
-    private function fullObjectChecksum(
-        array $session,
-        mixed $providerChecksum,
-        mixed $checksumType,
-    ): string {
-        if ($checksumType === 'FULL_OBJECT'
-            && is_string($providerChecksum)
-            && $providerChecksum !== '') {
-            $binary = base64_decode($providerChecksum, true);
-
-            if (is_string($binary) && strlen($binary) === 32) {
-                return bin2hex($binary);
-            }
+    private function fullObjectChecksum(mixed $providerChecksum, mixed $checksumType): ?string
+    {
+        if ($checksumType !== 'FULL_OBJECT' || ! is_string($providerChecksum)) {
+            return null;
         }
 
-        return $this->disks->checksum($session['disk'], $session['objectKey']);
+        $binary = base64_decode($providerChecksum, true);
+
+        return is_string($binary) && strlen($binary) === 32 ? bin2hex($binary) : null;
     }
 
     /**

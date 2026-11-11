@@ -15,6 +15,7 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Ownership\MediaOwnership;
 use Nvl\Media\Services\MediaDeliveryPolicy;
+use Nvl\Media\Services\MediaFileExistence;
 use RuntimeException;
 use Throwable;
 
@@ -382,7 +383,9 @@ final class MediaAssetUrl
             return (bool) $exists($disk, $path);
         }
 
-        return Storage::disk($disk)->exists($path);
+        // The model helpers reach this without a resolver; they share its cached existence lookup
+        // so rendering a variation URL does not ask the disk on every call.
+        return app(MediaFileExistence::class)->exists($disk, $path);
     }
 
     /**

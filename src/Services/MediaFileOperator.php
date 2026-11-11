@@ -208,18 +208,6 @@ final class MediaFileOperator
     }
 
     /**
-     * Delete a directory on disks that support the operation.
-     *
-     * @param  string  $disk  Disk name
-     * @param  string  $directory  Relative directory path
-     * @return bool True when deletion succeeded
-     */
-    public function deleteDirectory(string $disk, string $directory): bool
-    {
-        return $this->disk($disk)->deleteDirectory($directory);
-    }
-
-    /**
      * Create a directory when the target disk needs explicit directories.
      *
      * @param  string  $disk  Disk name
@@ -359,9 +347,18 @@ final class MediaFileOperator
             return;
         }
 
-        if ($this->disk($disk)->exists($directory) && empty($this->disk($disk)->allFiles($directory))) {
-            $this->disk($disk)->deleteDirectory($directory);
+        $filesystem = $this->disk($disk);
+
+        if (! $filesystem->exists($directory)) {
+            return;
         }
+
+        // The shallow listing is lazy: one entry of any kind proves the directory is still in use.
+        foreach ($filesystem->listContents($directory, false) as $entry) {
+            return;
+        }
+
+        $filesystem->deleteDirectory($directory);
     }
 
     /**

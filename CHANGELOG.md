@@ -5,6 +5,41 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Return a model's media associations in a stable order when several share the same `order` value (the default is 0). The `nvlMediaAssociations()` relation and the `ordered()` scope sorted by `order` alone, so PostgreSQL and MySQL could return two files of one slot in either order; they now break ties by identifier, as the paginated readers already did.
+- Keep builder-level `forceDelete()`, `updateOrInsert()` and `updateFrom()` on Media inside the ownership boundary by adopting Core's owned write trait on the Media builder. Require Core 7.0.6.
+- `MediaAttachments::deleteAll()` no longer throws `MediaInUseException` when one public asset fills two collections of the owner being cleaned up; each placement is removed in turn. Removing such an asset through `remove()` or `removeFromModel()` without naming a collection is still refused.
+- Accept WAV, RAR and ADTS AAC uploads with the default allowlist by adding the MIME names libmagic reports (`audio/x-wav`, `application/x-rar`, `audio/x-hx-aac-adts`).
+- Association locales accept the family's locale codes up to 35 characters (`zh-Hans`, `sr-Latn-RS`): a new migration widens `locale` from 5, `attach()` validates and canonicalises the code and rejects malformed values, and the library locale filter and Spatie adoption accept the same length.
+- Stop queueing image variations for SVG and ICO sources when the image driver is GD, which cannot decode them; Imagick and Vips are unchanged.
+- Deleting a file on a local disk checks its folder with one shallow, lazy listing instead of listing the folder recursively, and leaves a folder that still holds a subdirectory in place.
+- `RegenerateMediaVariationsJob` handles one chunk per run and continues from its last id in a new job (inside the same batch when batched), so a large catalogue no longer has to fit one timeout and a cancelled batch stops.
+- The media mutation lock is held until the Media connection's transaction ends when Media uses a connection other than the default.
+- Resolving an association owner type no longer constructs every registered ownership resource model.
+- `nvl:media:doctor` reports `images.variations.authorization` when image variations are enabled while the default `MediaAuthorization`, which denies the background actor, is still bound.
+- Configuration errors and command output name the real `nvl-media.*` keys; removed a config-merge step that read a non-existent key and never ran.
+- Treat a malformed media identifier as absent in every lookup. On PostgreSQL a non-UUID identifier raised a database error where a not-found result was expected.
+- Aborting or pruning a multipart session that reached completion deletes the object the provider may already have assembled; the session stays retryable when that delete fails.
+- S3 multipart completion no longer downloads the whole object inside the request to hash it. S3 validates each part against its signed SHA-256; the asset stays `pending_scan` and `MediaScan::finalize()` hashes the stored bytes before it becomes available. `MultipartUploadGateway::complete()` and `RecoverableMultipartUploadGateway::inspect()` may return `checksum: null` when the provider attests no full-object SHA-256.
+- `MediaSlot::convertTo()`, `withQuality()` and `maxSize()` now convert the original inside `MediaUploader::upload()`, and `withTags()` adds its tags to every upload into the slot. Slot rules apply to the submitted file; `copySlot()` keeps the source bytes.
+- `nvl:media:adopt-spatie` reads legacy tables from the Media connection in chunks of 250, checks storage once per original, inserts and reconciles per chunk inside one transaction, and reports over-long legacy values in the dry run.
+- `nvl:media:reconcile` uses `nvl-media.reconciliation.orphan_age_minutes` when `--older-than` is not passed, and no longer copies its referenced-path set once per row.
+- Remove configuration nothing read: `nvl-media.integrity.*` and `nvl-media.multipart.required_scan`, with their doctor checks. Integrity verification and the multipart scan requirement are unconditional.
+- Hold the deduplication lock until the host transaction ends, so two identical uploads inside open transactions no longer both insert.
+- Library search treats `%`, `_` and `\` as literal text and ignores letter case on SQLite, MySQL, MariaDB and PostgreSQL alike.
+- `Media::getUrl('thumb')` and `MediaImageVariation::getUrl()` use the cached existence lookup instead of asking the disk on every call.
+- Refuse to decode an image whose header declares more than `nvl-media.image_constraints.max_pixels` (64,000,000) pixels.
+- Integer settings supplied as numeric strings by environment variables are honoured instead of falling back to the default.
+- A non-manager library no longer lists another uploader's public asset that is pending scan, quarantined or failed.
+- A failed regeneration keeps a variation that is still valid for the current source revision deliverable; it records the failure and attempt only.
+- `MediaAttachments::getSlot()` returns null and `clearSlot()` / `replaceSlot()` succeed when the slot's Media record was deleted or quarantined after attachment.
+- The SVG scanner rejects external references on every element except `<a>` (for example `feImage`, `pattern`, gradients, `textPath`), CSS `image-set()`, and elements in the XHTML namespace.
+- `nvl:media:migrate-disk` loads, locks and updates its selection in chunks of 1,000 identifiers, and a folder migration rewrites only the exact prefix: `_` and `%` are literal and letter case must match.
+- `nvl:media:doctor` inspects Media tables and persisted paths on the Media connection.
+- `ConversionDefinition::crop()` honours its position, `watermark()` honours its opacity, and `validate()` rejects flip, orientation and position values the image pipeline would ignore.
+- Remove unused `MediaHashGenerator::generate()`, `MediaFileOperator::deleteDirectory()` and the `MediaTables::MEDIA*` aliases.
+
 ## [7.0.3] - 2026-11-10
 
 ### Changed

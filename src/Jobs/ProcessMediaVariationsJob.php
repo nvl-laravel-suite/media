@@ -13,6 +13,7 @@ use Illuminate\Queue\SerializesModels;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaConfiguredVariationService;
 use Nvl\Media\Services\MediaModelRegistry;
+use Nvl\Media\Support\MediaImageConfiguration;
 use Nvl\Media\Support\MediaQueueConfiguration;
 use Nvl\Media\Support\MediaQueueEnvelope;
 use Nvl\Support\Facades\PackageLog;
@@ -71,7 +72,7 @@ final class ProcessMediaVariationsJob implements OwnershipQueuedJob, ShouldBeUni
             return;
         }
 
-        if (! $media->type->supportsConversions()) {
+        if (! $media->type->supportsConversions() || ! MediaImageConfiguration::driverDecodes($media->extension)) {
             return;
         }
 

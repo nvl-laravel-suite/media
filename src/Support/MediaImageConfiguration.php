@@ -8,6 +8,7 @@ use BackedEnum;
 use Nvl\Media\Enums\ImageCompression;
 use Nvl\Media\Enums\ImageFit;
 use Nvl\Media\Enums\ImageFormat;
+use Nvl\Media\Enums\MediaImageDriver;
 
 /**
  * Normalizes typed image-format, preset, and output-conversion configuration.
@@ -70,6 +71,17 @@ final class MediaImageConfiguration
         }
 
         return $normalized;
+    }
+
+    /**
+     * Whether the configured driver can decode a source format at all.
+     *
+     * GD reads raster formats only, so queued SVG or ICO variations would fail on every attempt.
+     */
+    public static function driverDecodes(string $sourceExtension): bool
+    {
+        return MediaImageDriver::resolve(config('nvl-media.image_driver', MediaImageDriver::Gd)) !== MediaImageDriver::Gd
+            || ! in_array(mb_strtolower($sourceExtension), ['svg', 'ico'], true);
     }
 
     /**

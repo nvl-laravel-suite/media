@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Filesystem\FilesystemAdapter as LaravelFilesystemAdapter;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -403,3 +404,38 @@ it('rejects the entire migration snapshot when a destination visibility is forbi
         ->and(Storage::disk('cdn')->allFiles())->toBe([]);
     Storage::disk('public')->assertExists([$public->buildPath(), $private->buildPath()]);
 })->with(['copy files' => false, 'records only' => true]);
+
+it('rewrites only the exact folder prefix, not folders that merely match it as a LIKE pattern', function (): void {
+    $exact = createMigratableMedia(['folder' => 'team_a']);
+    $nested = createMigratableMedia(['folder' => 'team_a/reports']);
+    $wildcardLookalike = createMigratableMedia(['folder' => 'teamXa/reports']);
+    $caseLookalike = createMigratableMedia(['folder' => 'Team_A/reports']);
+    $prefixLookalike = createMigratableMedia(['folder' => 'team_a2/reports']);
+
+    $this->artisan('nvl:media:migrate-disk', ['--column' => 'folder', '--from' => 'team_a', '--to' => 'archive', '--no-interaction' => true])
+        ->expectsOutputToContain('Updated 2 records')
+        ->assertExitCode(0);
+
+    expect($exact->fresh()->folder)->toBe('archive')
+        ->and($nested->fresh()->folder)->toBe('archive/reports')
+        ->and($wildcardLookalike->fresh()->folder)->toBe('teamXa/reports')
+        ->and($caseLookalike->fresh()->folder)->toBe('Team_A/reports')
+        ->and($prefixLookalike->fresh()->folder)->toBe('team_a2/reports');
+});
+
+it('migrates a large selection without putting every identifier into one query', function (): void {
+    $now = now();
+    foreach (array_chunk(range(1, 1100), 550) as $chunk) {
+        DB::table((new Media)->getTable())->insert(array_map(static fn (int $index): array => ['id' => (string) Str::uuid(), 'filename' => "bulk-{$index}.jpg", 'hash' => "bulk-{$index}.jpg", 'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'size' => 1, 'disk' => 'bulk-legacy', 'folder' => 'bulk', 'is_public' => true, 'visibility' => 'public', 'status' => 'available', 'revision' => 1, 'type' => 'image', 'digest' => md5((string) $index), 'created_at' => $now, 'updated_at' => $now], $chunk));
+    }
+    config(['nvl-media.mutation_lock.enabled' => false]);
+    $largestBindingCount = 0;
+    DB::listen(static function (QueryExecuted $query) use (&$largestBindingCount): void {
+        $largestBindingCount = max($largestBindingCount, count($query->bindings));
+    });
+
+    $this->artisan('nvl:media:migrate-disk', ['--from' => 'bulk-legacy', '--to' => 'public', '--records-only' => true, '--no-interaction' => true])->assertExitCode(0);
+
+    expect(Media::query()->where('disk', 'public')->where('folder', 'bulk')->count())->toBe(1100)
+        ->and($largestBindingCount)->toBeLessThanOrEqual(1005);
+});

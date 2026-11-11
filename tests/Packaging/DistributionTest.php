@@ -71,6 +71,6 @@ it('boots the extracted package and publishes its skills without optional integr
         ->and($result['media_source'])->toBe(realpath($this->distributionRoot.'/dist/src/Providers/MediaServiceProvider.php'))
         ->and($result['skill_published'])->toBeTrue()
         ->and($result['config_published'])->toBeTrue()
-        ->and($result['migrations_published'])->toBe(6)
+        ->and($result['migrations_published'])->toBe(7)
         ->and($result['delivery_default'])->toBe('application');
 });

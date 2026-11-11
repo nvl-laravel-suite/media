@@ -56,6 +56,8 @@ final class MediaUploader
         private readonly ConnectionCommitCallbacks $eventCommits,
         private readonly PackageLogger $packageLogger,
         private readonly MediaReplacementStager $stager,
+        private readonly ImageOptimizationService $originalImages,
+        private readonly MediaTemporaryFileRegistry $temporaryFiles,
     ) {}
 
     /**
@@ -96,11 +98,71 @@ final class MediaUploader
         $this->disks->ensureDefined($disk);
         $validatedFile = $this->ingestion->inspect($file, [$slot], $fileName);
         $normalizedVariationDefinitions = $this->definitionNormalizer->normalize($variationDefinitions);
-        $uploaderId = MediaActors::id($actor);
-        $uploaderType = MediaActors::type($actor);
         if (! array_is_list($tags) || array_filter($tags, static fn (mixed $tag): bool => ! is_string($tag) || strlen($tag) > 50) !== []) {
             throw new \InvalidArgumentException('Media tags must be a list of bounded strings.');
         }
+        $tags = array_values(array_unique([...$slot->defaultTags, ...array_filter($tags, is_string(...))]));
+        $converted = $this->convertOriginal($validatedFile, $slot);
+
+        try {
+            if ($converted instanceof UploadedFile) {
+                // The submitted file already passed the slot rules; the package-produced output only needs trusted metadata.
+                $file = $converted;
+                $validatedFile = $this->ingestion->inspect($file, [new MediaSlot($slot->name)], $file->getClientOriginalName());
+            }
+
+            return $this->uploadValidated($actor, $file, $disk, $model, $slot, $isPublic, $tags, $metadata, $folderOverride, $allowDuplicates, $deduplicateExisting, $skipAutoVariations, $normalizedVariationDefinitions, $validatedFile);
+        } finally {
+            if ($converted instanceof UploadedFile) {
+                $this->temporaryFiles->release($converted->getPathname());
+            }
+        }
+    }
+
+    /**
+     * Apply the slot's original-image options (`convertTo()`, `withQuality()`, `maxSize()`) to a validated upload.
+     *
+     * @param  array{displayFilename: string, extension: string, mimeType: string, size: int, digest: string, type: MediaType, realPath: string}  $validatedFile
+     * @return UploadedFile|null The converted temporary file, or null when the slot or file type asks for none
+     */
+    private function convertOriginal(array $validatedFile, MediaSlot $slot): ?UploadedFile
+    {
+        if (! $slot->shouldConvertOriginal()) {
+            return null;
+        }
+
+        $source = new UploadedFile($validatedFile['realPath'], $validatedFile['displayFilename'], $validatedFile['mimeType'], null, true);
+        $converted = $this->originalImages->optimize($source, $slot);
+
+        return $converted === $source ? null : $converted;
+    }
+
+    /**
+     * Deduplicate or store an upload whose bytes and metadata are final.
+     *
+     * @param  list<string>  $tags
+     * @param  array<string, mixed>  $metadata
+     * @param  array<string, array<string, mixed>>  $normalizedVariationDefinitions
+     * @param  array{displayFilename: string, extension: string, mimeType: string, size: int, digest: string, type: MediaType, realPath: string}  $validatedFile
+     */
+    private function uploadValidated(
+        Authenticatable|SystemActor $actor,
+        UploadedFile $file,
+        string $disk,
+        Model $model,
+        MediaSlot $slot,
+        bool $isPublic,
+        array $tags,
+        array $metadata,
+        ?string $folderOverride,
+        ?bool $allowDuplicates,
+        ?bool $deduplicateExisting,
+        bool $skipAutoVariations,
+        array $normalizedVariationDefinitions,
+        array $validatedFile,
+    ): Media {
+        $uploaderId = MediaActors::id($actor);
+        $uploaderType = MediaActors::type($actor);
 
         $folder = $folderOverride !== null
             ? $this->pathResolver->normalizeFolder($folderOverride)

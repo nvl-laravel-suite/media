@@ -1079,3 +1079,47 @@ it('binds retention cutoffs in UTC when the application clock crosses a local ca
         date_default_timezone_set($timezone);
     }
 });
+
+it('reads and clears a slot whose Media record is no longer usable', function (Closure $makeUnusable): void {
+    Storage::fake('public');
+    $actor = ownerSlotWorkflowActor();
+    $owner = ownerSlotWorkflowOwner('Owner with unusable slot media');
+    $media = ownerSlotStoredMedia('%PDF-1.4 unusable', ['uploaded_by' => (string) $actor->getKey(), 'uploaded_by_type' => $actor->getMorphClass()]);
+    attachOwnerSlotMedia($media, $owner, 'document');
+    $makeUnusable($media);
+    $viewedSubjects = [];
+    useOwnerSlotAuthorization(static function (Authenticatable|SystemActor $actor, MediaAbility $ability, ?Media $subject) use (&$viewedSubjects): bool {
+        if ($ability === MediaAbility::View) {
+            $viewedSubjects[] = $subject?->id;
+        }
+
+        return true;
+    });
+
+    expect(app(MediaAttachments::class)->getSlot($actor, $owner, 'document'))->toBeNull();
+
+    app(MediaAttachments::class)->clearSlot($actor, $owner, 'document');
+
+    expect(MediaAssociation::query()->where('media_id', $media->id)->exists())->toBeFalse()
+        ->and(app(MediaAttachments::class)->getSlot($actor, $owner, 'document'))->toBeNull()
+        ->and($viewedSubjects)->toBe([null, null]);
+})->with([
+    'soft-deleted through the library' => [static fn (Media $media) => $media->delete()],
+    'quarantined after attachment' => [static fn (Media $media) => $media->forceFill(['status' => MediaLifecycleStatus::Quarantined])->save()],
+]);
+
+it('replaces an exclusive slot whose current Media record was already deleted', function (): void {
+    Storage::fake('public');
+    $actor = ownerSlotWorkflowActor();
+    $owner = ownerSlotWorkflowOwner('Owner with deleted slot media');
+    $deleted = ownerSlotStoredMedia('%PDF-1.4 deleted', ['uploaded_by' => (string) $actor->getKey(), 'uploaded_by_type' => $actor->getMorphClass()]);
+    attachOwnerSlotMedia($deleted, $owner, 'document');
+    $deleted->delete();
+    $replacement = ownerSlotStoredMedia('%PDF-1.4 replacement', ['uploaded_by' => (string) $actor->getKey(), 'uploaded_by_type' => $actor->getMorphClass()]);
+
+    $result = app(MediaAttachments::class)->replaceSlot($actor, $owner, 'document', $replacement->id);
+
+    expect($result->id)->toBe($replacement->id)
+        ->and(MediaAssociation::query()->where('media_id', $deleted->id)->exists())->toBeFalse()
+        ->and(Media::withTrashed()->findOrFail($deleted->id)->trashed())->toBeTrue();
+});

@@ -27,18 +27,6 @@ final class MediaTables
 
     public const string OwnerGrantLocks = 'nvl_media_owner_grant_locks';
 
-    public const string MEDIA = self::Media;
-
-    public const string MEDIA_ASSOCIATIONS = self::Associations;
-
-    public const string MEDIA_IMAGE_VARIATIONS = self::ImageVariations;
-
-    public const string MEDIA_I18N = self::I18n;
-
-    public const string MEDIA_MULTIPART_UPLOADS = self::MultipartUploads;
-
-    public const string MEDIA_OWNER_SLOT_OPERATIONS = self::OwnerSlotOperations;
-
     /** Return one configured logical or historical package table. */
     public static function get(string $key): string
     {

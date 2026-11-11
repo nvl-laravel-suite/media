@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Media\Services;
 
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Nvl\Media\Conversions\ConversionDefinition;
@@ -317,14 +318,20 @@ final class MediaVariations
                     'failure_context' => json_encode($context, JSON_THROW_ON_ERROR),
                 ]);
 
-            MediaImageVariation::query()
+            $variations = MediaImageVariation::query()
                 ->where('media_id', $media->id)
-                ->where('label', $definition->name)
-                ->update([
-                    'status' => MediaLifecycleStatus::Failed->value,
-                    'failure_context' => json_encode($context, JSON_THROW_ON_ERROR),
-                    'attempts' => DB::raw('attempts + 1'),
-                ]);
+                ->where('label', $definition->name);
+            (clone $variations)->update([
+                'failure_context' => json_encode($context, JSON_THROW_ON_ERROR),
+                'attempts' => DB::raw('attempts + 1'),
+            ]);
+            // A variation already generated from this source revision still has its object: it stays deliverable.
+            $variations
+                ->where(function (Builder $stale) use ($media): void {
+                    $stale->where('status', '!=', MediaLifecycleStatus::Available->value)
+                        ->orWhere('source_revision', '!=', $media->revision);
+                })
+                ->update(['status' => MediaLifecycleStatus::Failed->value]);
         });
     }
 

@@ -295,6 +295,8 @@ Namespace: `Nvl\Media\Slots\MediaSlot`.
 - `shouldConvertOriginal(): bool`
 - `getConversionDefinitions(): array`
 
+`convertTo()`, `withQuality()` and `maxSize()` re-encode the original image inside `MediaUploader::upload()`, after the submitted file has passed the slot's MIME, size and acceptor rules. Non-images and the formats in `nvl-media.optimization.skip_formats` (SVG, GIF) are stored unchanged, a failed conversion stores the submitted file unless it exceeds `maxSize()`, and `MediaAttachments::copySlot()` always keeps the source bytes. `withTags()` adds its tags to every upload into the slot. `useFallbackUrl()` and `useFallbackPath()` only declare values: the package has no owner-slot URL method, so the host reads them with `getFallbackUrl()` / `getFallbackPath()` when it projects an empty slot.
+
 ## `ConversionDefinition`
 
 Namespace: `Nvl\Media\Conversions\ConversionDefinition`.

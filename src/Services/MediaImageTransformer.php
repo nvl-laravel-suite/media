@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Illuminate\Support\Str;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Enums\MediaImageDriver;
 use Nvl\Media\Exceptions\ConversionFailedException;
+use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Support\Logging\PackageLogger;
 use Spatie\Image\Enums\AlignPosition;
 use Spatie\Image\Enums\Constraint;
+use Spatie\Image\Enums\CropPosition;
 use Spatie\Image\Enums\Fit;
 use Spatie\Image\Enums\FlipDirection;
 use Spatie\Image\Enums\Orientation;
@@ -46,6 +49,7 @@ class MediaImageTransformer
             $this->ensureOutputDirectory($outputPath);
             $startTime = microtime(true);
 
+            $this->assertWithinPixelBudget($sourcePath);
             $driver = MediaImageDriver::resolve(config('nvl-media.image_driver', MediaImageDriver::Gd));
             $image = Image::useImageDriver($driver->spatieDriver())->loadFile($sourcePath);
             $image = $this->applyManipulations($image, $definition);
@@ -90,6 +94,31 @@ class MediaImageTransformer
             throw new ConversionFailedException(
                 "Image processing failed: {$e->getMessage()}",
                 previous: $e,
+            );
+        }
+    }
+
+    /**
+     * Refuse a source whose header declares more pixels than the worker may decode.
+     *
+     * Only the header is read, so a small file that expands to a huge bitmap is rejected before the driver allocates it.
+     *
+     * @throws ConversionFailedException When the declared pixel count exceeds `nvl-media.image_constraints.max_pixels`
+     */
+    private function assertWithinPixelBudget(string $sourcePath): void
+    {
+        $dimensions = @getimagesize($sourcePath);
+
+        if ($dimensions === false) {
+            return;
+        }
+
+        $pixels = $dimensions[0] * $dimensions[1];
+        $budget = MediaConfiguration::integer('nvl-media.image_constraints.max_pixels', 64_000_000, 1);
+
+        if ($pixels > $budget) {
+            throw new ConversionFailedException(
+                "Image declares {$pixels} pixels ({$dimensions[0]}x{$dimensions[1]}); the decode budget is {$budget} pixels.",
             );
         }
     }
@@ -166,7 +195,7 @@ class MediaImageTransformer
     private function applyResize(Image $image, ConversionDefinition $definition): void
     {
         if ($definition->cropWidth !== null && $definition->cropHeight !== null) {
-            $image->fit(Fit::Crop, $definition->cropWidth, $definition->cropHeight);
+            $this->applyCrop($image, $definition->cropWidth, $definition->cropHeight, $definition->cropPosition);
         } elseif ($definition->fitMethod !== null && $definition->fitWidth !== null && $definition->fitHeight !== null) {
             $this->applyFit($image, $definition);
         } elseif ($definition->targetWidth !== null && $definition->targetHeight !== null) {
@@ -180,6 +209,22 @@ class MediaImageTransformer
         } elseif ($definition->targetHeight !== null) {
             $image->height($definition->targetHeight, [Constraint::PreserveAspectRatio, Constraint::DoNotUpsize]);
         }
+    }
+
+    /**
+     * Scale the image to cover the target box, then cut the box out at the requested position.
+     */
+    private function applyCrop(Image $image, int $width, int $height, string $position): void
+    {
+        if ($position === 'center') {
+            $image->fit(Fit::Crop, $width, $height);
+
+            return;
+        }
+
+        $scale = max($width / $image->getWidth(), $height / $image->getHeight());
+        $image->resize((int) ceil($image->getWidth() * $scale), (int) ceil($image->getHeight() * $scale));
+        $image->crop($width, $height, CropPosition::from(Str::camel($position)));
     }
 
     /**
@@ -255,6 +300,7 @@ class MediaImageTransformer
             position: $position,
             paddingX: 10,
             paddingY: 10,
+            alpha: max(0, min(100, $definition->watermarkOpacity)),
         );
     }
 

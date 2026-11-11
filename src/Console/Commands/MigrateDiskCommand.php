@@ -47,6 +47,9 @@ class MigrateDiskCommand extends Command
     /** @var string */
     protected $description = 'Migrate media disk or folder records, optionally moving backing files between disks';
 
+    /** Identifiers per query, well below every supported engine's bound-parameter limit. */
+    private const int KEY_CHUNK = 1000;
+
     public function __construct(
         private readonly MediaDiskGateway $disks,
         private readonly MediaDiskGuard $diskGuard,
@@ -116,7 +119,10 @@ class MigrateDiskCommand extends Command
             return self::SUCCESS;
         }
 
-        $records = (clone $query)->with('imageVariations')->orderBy('id')->get();
+        $records = $query->getModel()->newCollection();
+        (clone $query)->with('imageVariations')->chunkById(self::KEY_CHUNK, function (Collection $chunk) use (&$records): void {
+            $records = $records->merge($chunk);
+        });
         try {
             $this->assertDestinationVisibility($records, $to);
         } catch (Throwable $error) {
@@ -140,8 +146,7 @@ class MigrateDiskCommand extends Command
                     $this->mutationLock->executeMany(
                         array_values($records->map(static fn (Media $media): string => $media->id)->all()),
                         fn () => $records->firstOrFail()->getConnection()->transaction(function () use ($records, $from, $to): void {
-                            $locked = $this->lockVerifiedSnapshot($records, $to);
-                            $this->updateDiskColumn($locked->firstOrFail()->newQuery()->withTrashed()->whereKey($locked->modelKeys()), $from, $to);
+                            $this->updateDiskColumn($this->lockVerifiedSnapshot($records, $to), $from, $to);
                         }),
                     );
                 } catch (Throwable $error) {
@@ -238,9 +243,7 @@ class MigrateDiskCommand extends Command
         if (! $dryRun) {
             try {
                 $records->firstOrFail()->getConnection()->transaction(function () use ($records, $from, $to, $completedMoves): void {
-                    $locked = $this->lockVerifiedSnapshot($records, $to);
-                    $query = $locked->firstOrFail()->newQuery()->withTrashed()->whereKey($locked->modelKeys());
-                    $this->updateDiskColumn($query, $from, $to);
+                    $this->updateDiskColumn($this->lockVerifiedSnapshot($records, $to), $from, $to);
 
                     foreach ($completedMoves as $move) {
                         if (! $this->files->delete($from, $move['old'])) {
@@ -274,8 +277,13 @@ class MigrateDiskCommand extends Command
      */
     private function lockVerifiedSnapshot(Collection $records, string $to): Collection
     {
-        $locked = $records->firstOrFail()->newQuery()->withTrashed()
-            ->whereKey($records->modelKeys())->with('imageVariations')->orderBy('id')->lockForUpdate()->get();
+        $locked = $records->toBase()->chunk(self::KEY_CHUNK)->reduce(
+            static fn (Collection $locked, $chunk): Collection => $locked->merge(
+                $records->firstOrFail()->newQuery()->withTrashed()
+                    ->whereKey($chunk->pluck('id')->all())->with('imageVariations')->orderBy('id')->lockForUpdate()->get(),
+            ),
+            $records->make(),
+        );
         $byId = $locked->keyBy('id');
 
         foreach ($records as $snapshot) {
@@ -328,17 +336,36 @@ class MigrateDiskCommand extends Command
         $normalizedFrom = trim($from, '/');
         $normalizedTo = trim($to, '/');
 
+        // SQL narrows the candidates; LIKE and equality are case-insensitive on some engines, so the exact
+        // prefix is confirmed in PHP before a row is counted, previewed or rewritten.
+        $hasPrefix = static fn (string $folder): bool => $folder === $normalizedFrom
+            || str_starts_with($folder, $normalizedFrom.'/');
+        $pattern = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $normalizedFrom).'/%';
         $query = MediaModelRegistry::query()->withTrashed()
             ->when(is_string($onDisk) && $onDisk !== '', function (Builder $builder) use ($onDisk): void {
                 $builder->where('disk', $onDisk);
             })
-            ->where(function (Builder $builder) use ($normalizedFrom): void {
+            ->where(function (Builder $builder) use ($normalizedFrom, $pattern): void {
                 $builder->where('folder', $normalizedFrom)
-                    ->orWhere('folder', 'like', $normalizedFrom.'/%');
+                    ->orWhereRaw("folder like ? escape '!'", [$pattern]);
             });
         $this->applyAssociationFilters($query, $associableTypes, $collections);
 
-        $total = (clone $query)->count();
+        $total = 0;
+        $samples = [];
+        (clone $query)->select(['id', 'folder'])->chunkById(1000, function ($records) use ($hasPrefix, &$total, &$samples): void {
+            foreach ($records as $media) {
+                if (! $hasPrefix((string) $media->folder)) {
+                    continue;
+                }
+
+                $total++;
+
+                if (count($samples) < 10) {
+                    $samples[] = (string) $media->folder;
+                }
+            }
+        });
 
         if ($total === 0) {
             $this->info("No media records with folder prefix '{$normalizedFrom}'. Nothing to migrate.");
@@ -358,16 +385,12 @@ class MigrateDiskCommand extends Command
         $this->displayAssociationFilters($associableTypes, $collections);
         $this->warnSharedMediaScope($associableTypes, $collections);
 
-        $samples = (clone $query)->orderBy('id')->limit(10)->get(['id', 'folder']);
-
-        foreach ($samples as $media) {
-            $currentFolder = (string) $media->folder;
-            $nextFolder = $this->replaceFolderPrefix($currentFolder, $normalizedFrom, $normalizedTo);
-            $this->line(sprintf('  %s → %s', $currentFolder, $nextFolder));
+        foreach ($samples as $currentFolder) {
+            $this->line(sprintf('  %s → %s', $currentFolder, $this->replaceFolderPrefix($currentFolder, $normalizedFrom, $normalizedTo)));
         }
 
-        if ($total > $samples->count()) {
-            $this->line(sprintf('  ... and %d more', $total - $samples->count()));
+        if ($total > count($samples)) {
+            $this->line(sprintf('  ... and %d more', $total - count($samples)));
         }
 
         if ($dryRun) {
@@ -383,9 +406,14 @@ class MigrateDiskCommand extends Command
 
         $updated = 0;
 
-        $query->chunkById(500, function ($records) use ($normalizedFrom, $normalizedTo, &$updated): void {
+        $query->chunkById(500, function ($records) use ($hasPrefix, $normalizedFrom, $normalizedTo, &$updated): void {
             foreach ($records as $media) {
                 $folder = (string) $media->folder;
+
+                if (! $hasPrefix($folder)) {
+                    continue;
+                }
+
                 $nextFolder = $this->replaceFolderPrefix($folder, $normalizedFrom, $normalizedTo);
 
                 (MediaModelRegistry::newInstance())->getConnection()->table((MediaModelRegistry::newInstance())->getTable())
@@ -405,23 +433,23 @@ class MigrateDiskCommand extends Command
     }
 
     /**
-     * Update the disk column for the selected media rows.
+     * Update the disk column, and the stored paths when the disk roots differ, for the locked media rows.
      *
-     * @param  Builder<Media>  $query  Selected media query
+     * @param  Collection<int, Media>  $locked  Rows locked and verified by lockVerifiedSnapshot()
      * @param  string  $from  Source disk name
      * @param  string  $to  Destination disk name
      */
-    private function updateDiskColumn(Builder $query, string $from, string $to): void
+    private function updateDiskColumn(Collection $locked, string $from, string $to): void
     {
         $this->info('Updating database records...');
+        $model = $locked->firstOrFail();
 
-        $updated = $query->getModel()->getConnection()->transaction(function () use ($query, $from, $to): int {
-            $rewritePaths = MediaPathResolver::rootFolder($from) !== MediaPathResolver::rootFolder($to);
-            if ($rewritePaths) {
-                foreach ((clone $query)->with('imageVariations')->get() as $media) {
+        $updated = $model->getConnection()->transaction(function () use ($locked, $model, $from, $to): int {
+            if (MediaPathResolver::rootFolder($from) !== MediaPathResolver::rootFolder($to)) {
+                foreach ($locked as $media) {
                     $paths = $this->pathsForMedia($media, $to);
                     if (MediaOwnership::active()) {
-                        (clone $query)->whereKey($media->id)->update(['storage_path' => $paths[$media->buildPath()]]);
+                        $model->newQuery()->withTrashed()->whereKey($media->id)->update(['storage_path' => $paths[$media->buildPath()]]);
                     }
                     foreach ($media->imageVariations as $variation) {
                         $media->imageVariations()->whereKey($variation->id)->update([
@@ -431,7 +459,13 @@ class MigrateDiskCommand extends Command
                 }
             }
 
-            return (clone $query)->update(['disk' => $to]);
+            $updated = 0;
+
+            foreach (array_chunk($locked->modelKeys(), self::KEY_CHUNK) as $keys) {
+                $updated += $model->newQuery()->withTrashed()->whereKey($keys)->update(['disk' => $to]);
+            }
+
+            return $updated;
         });
 
         $this->info("Updated {$updated} records: disk '{$from}' → '{$to}'");
@@ -500,7 +534,7 @@ class MigrateDiskCommand extends Command
         }
 
         if (! $this->diskGuard->isAllowed($to)) {
-            $this->error("Destination disk '{$to}' is not in media.allowed_disks.");
+            $this->error("Destination disk '{$to}' is not in nvl-media.allowed_disks.");
 
             return false;
         }

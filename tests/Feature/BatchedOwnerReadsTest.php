@@ -843,7 +843,7 @@ it('keeps total queries dependent on concrete class groups rather than owner cou
     DB::enableQueryLog();
     DB::flushQueryLog();
     $result = app(MediaOwnerBatchReader::class)->read($owners, ['document'], SystemActor::Background);
-    expect(batchMediaStorageQueries())->toHaveCount(3)->and(DB::getQueryLog())->toHaveCount($count === 1 ? 14 : 15)->and($result['order'])->toHaveCount($count);
+    expect(batchMediaStorageQueries())->toHaveCount(3)->and(DB::getQueryLog())->toHaveCount($count === 1 ? 4 : 5)->and($result['order'])->toHaveCount($count);
     foreach ($owners as $owner) {
         expect(batchMediaItems($result, $owner))->toHaveCount(1);
     }

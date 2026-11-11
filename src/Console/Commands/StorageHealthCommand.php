@@ -38,14 +38,14 @@ final class StorageHealthCommand extends Command
 {
     /** @var string */
     protected $signature = 'nvl:media:reconcile
-        {--disk= : Storage disk to inspect; defaults to media.disk}
+        {--disk= : Storage disk to inspect; defaults to nvl-media.disk}
         {--sample=50 : Maximum number of media records to inspect}
         {--public-private-routes : Verify public/private route-backed URL contracts}
         {--routes : Alias for --public-private-routes}
         {--include-trashed : Include soft-deleted media records}
         {--orphans : Inventory unreferenced objects beneath the selected disk media root}
         {--cleanup-orphans : Delete eligible orphan objects after inventory}
-        {--older-than=1440 : Minimum orphan age in minutes}
+        {--older-than= : Minimum orphan age in minutes; defaults to nvl-media.reconciliation.orphan_age_minutes (1440)}
         {--force : Required with --cleanup-orphans in production}
         {--require-records : Fail when the selected disk has no media records}
         {--production : Verifies route contracts, requires records, prohibits live-write, and requires force for orphan cleanup}
@@ -85,7 +85,9 @@ final class StorageHealthCommand extends Command
         $noWrite = (bool) ($production || $this->option('no-write'));
         $inventoryOrphans = (bool) ($this->option('orphans') || $this->option('cleanup-orphans'));
         $cleanupOrphans = (bool) $this->option('cleanup-orphans');
-        $olderThan = max(0, (int) $this->option('older-than'));
+        $olderThan = $this->option('older-than') === null
+            ? MediaConfiguration::integer('nvl-media.reconciliation.orphan_age_minutes', 1440)
+            : max(0, (int) $this->option('older-than'));
 
         if ($sample < 1) {
             $this->error('--sample must be at least 1.');
@@ -257,7 +259,7 @@ final class StorageHealthCommand extends Command
         }
 
         if (! $this->diskGuard->isAllowed($disk)) {
-            $warnings[] = "Disk [{$disk}] is configured but is not present in media.allowed_disks.";
+            $warnings[] = "Disk [{$disk}] is configured but is not present in nvl-media.allowed_disks.";
         }
 
         return true;
@@ -607,11 +609,13 @@ final class StorageHealthCommand extends Command
             foreach ($this->disks->objects($disk, $root) as $object) {
                 $path = $object['path'];
 
-                if (isset($livePaths[$path])) {
+                $key = self::pathKey($path);
+
+                if (isset($livePaths[$key])) {
                     continue;
                 }
 
-                $reason = isset($tombstonePaths[$path])
+                $reason = isset($tombstonePaths[$key])
                     ? 'soft-deleted media'
                     : 'unreferenced';
                 $lastModified = $object['last_modified'];
@@ -676,7 +680,12 @@ final class StorageHealthCommand extends Command
     }
 
     /**
-     * @return array{array<string, true>, array<string, true>}
+     * Collect the object paths the selected disk's live and soft-deleted Media rows reference.
+     *
+     * Paths are kept as 16-byte digests: variation paths can be derived from a naming pattern, so a listed
+     * object cannot be looked up in the database and every referenced path has to be held for the inventory.
+     *
+     * @return array{array<string, true>, array<string, true>} Live and tombstone sets keyed by self::pathKey()
      */
     private function referencedObjectPaths(string $disk): array
     {
@@ -690,23 +699,29 @@ final class StorageHealthCommand extends Command
             ->chunkById(500, function ($mediaItems) use (&$live, &$tombstones): void {
                 foreach ($mediaItems as $media) {
                     /** @var Media $media */
-                    $target = $media->trashed() ? $tombstones : $live;
-                    $target[$media->buildPath()] = true;
+                    $paths = [$media->buildPath()];
 
                     foreach ($media->imageVariations as $variation) {
                         /** @var MediaImageVariation $variation */
-                        $target[$variation->getPath()] = true;
+                        $paths[] = $variation->getPath();
                     }
 
-                    if ($media->trashed()) {
-                        $tombstones = $target;
-                    } else {
-                        $live = $target;
+                    foreach ($paths as $path) {
+                        if ($media->trashed()) {
+                            $tombstones[self::pathKey($path)] = true;
+                        } else {
+                            $live[self::pathKey($path)] = true;
+                        }
                     }
                 }
             });
 
         return [$live, $tombstones];
+    }
+
+    private static function pathKey(string $path): string
+    {
+        return hash('xxh128', $path, true);
     }
 
     /**

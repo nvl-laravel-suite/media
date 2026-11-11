@@ -232,13 +232,7 @@ The connected-IP check may be disabled only for deterministic test transports or
 
 ## Integrity
 
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `nvl-media.integrity.verification` | `required` | Stored size and SHA-256 verification policy |
-| `nvl-media.integrity.provider_checksum` | `prefer` | Prefer trustworthy provider checksum metadata |
-| `nvl-media.integrity.streamed_readback_fallback` | `true` | Stream-read the object when provider attestation is unavailable |
-
-The production invariant is that every live row references a verified object. Do not disable streamed fallback unless the selected gateway provides equivalent trustworthy SHA-256 and size attestation and the application has validated that behavior.
+Integrity verification is not configurable. Every upload, replacement, copy and relocation re-reads the stored object and compares its size and SHA-256 before the database row changes, and a direct multipart upload stays `pending_scan` until `MediaScan::finalize()` has hashed the stored bytes. The production invariant is that every available row references a verified object.
 
 ## Scanner
 
@@ -268,7 +262,6 @@ Direct multipart uploads are disabled by default.
 | --- | --- | --- |
 | `nvl-media.multipart.enabled` | `false` | Enable persisted provider sessions |
 | `nvl-media.multipart.gateway` | `S3MultipartUploadGateway::class` | Provider implementation |
-| `nvl-media.multipart.required_scan` | `true` | Require post-upload scanner attestation |
 | `nvl-media.multipart.session_minutes` | `60` | Session lifetime |
 | `nvl-media.multipart.minimum_part_size` | `5 MiB` | Non-final minimum part size |
 | `nvl-media.multipart.maximum_part_size` | `5 GiB` | Maximum part size |
@@ -302,7 +295,7 @@ The portable driver performs moderate-dataset substring and JSON search. Bind or
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `nvl-media.reconciliation.orphan_age_minutes` | `1440` | Minimum orphan age |
+| `nvl-media.reconciliation.orphan_age_minutes` | `1440` | Minimum orphan age used by `nvl:media:reconcile` when `--older-than=<minutes>` is not passed |
 | `nvl-media.reconciliation.restrict_to_root` | `true` | Require a selected disk/owner prefix for orphan inventory; whole-disk orphan deletion is always refused |
 | `nvl-media.reconciliation.page_size` | `500` | Object inventory page size |
 
@@ -357,6 +350,7 @@ See [Image variations and queues](images-and-queues.md).
 | `nvl-media.image_driver` | resolved from `NVL_MEDIA_IMAGE_DRIVER`, default `gd` | `gd`, `imagick`, or `vips` |
 | `nvl-media.image_constraints.max_width` | `4096` | Suggested host upload dimension maximum |
 | `nvl-media.image_constraints.max_height` | `4096` | Suggested host upload dimension maximum |
+| `nvl-media.image_constraints.max_pixels` | `64,000,000` | Largest declared width × height the package decodes for variations and slot conversions |
 | `nvl-media.optimization.skip_formats` | `['svg', 'gif']` | Original formats not optimized |
 
 Environment:
@@ -365,7 +359,7 @@ Environment:
 NVL_MEDIA_IMAGE_DRIVER=gd
 ```
 
-The runtime must provide the selected driver and every encoder required by enabled output formats. Doctor checks the configured driver and encoders. Consumers must apply input dimension limits in their own request/slot validation; `image_constraints` is not an automatic pixel-limit check in the native uploader.
+The runtime must provide the selected driver and every encoder required by enabled output formats. Doctor checks the configured driver and encoders. Consumers must apply input dimension limits in their own request/slot validation: `max_width` and `max_height` are suggested bounds the native uploader does not enforce. `max_pixels` is enforced where the package decodes an image: a source whose header declares more pixels is refused before the driver allocates it, so its variation fails and a slot conversion keeps or rejects the submitted file. Size it to the worker memory limit (GD needs roughly 5 bytes per pixel).
 
 ## Image format profiles
 

@@ -59,6 +59,39 @@ final class MediaTransactionRollbackRegistry
     }
 
     /**
+     * Run a callback once when the Media connection's open root transaction commits or rolls back.
+     *
+     * @param  Closure(): void  $callback
+     * @return bool False when no such transaction is open, so the caller runs the work itself
+     */
+    public function afterRootTransaction(Closure $callback): bool
+    {
+        $connection = MediaModelRegistry::newInstance()->getConnection();
+
+        if ($connection->transactionLevel() === 0) {
+            return false;
+        }
+
+        $root = $this->container->make('db.transactions')
+            ->callbackApplicableTransactions()
+            ->filter(static fn (DatabaseTransactionRecord $transaction): bool => $transaction->connection === $connection->getName())
+            ->sortBy('level')
+            ->first();
+
+        if (! $root instanceof DatabaseTransactionRecord) {
+            return false;
+        }
+
+        $registrationId = $this->register($root->connection, $root->level, $callback);
+        $root->addCallback(function () use ($registrationId, $callback): void {
+            $this->cancel($registrationId);
+            $callback();
+        });
+
+        return true;
+    }
+
+    /**
      * Cancel a callback whose root transaction committed.
      */
     public function cancel(int $registrationId): void

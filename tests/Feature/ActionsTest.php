@@ -149,6 +149,20 @@ describe('UploadMediaAction', function () {
     it('rejects traversal in caller-provided upload folders before storage', function () {
         app(MediaUploader::class)->upload(auth()->user() ?? SystemActor::Background, file: UploadedFile::fake()->image('photo.jpg', 100, 100), disk: 'public', model: createTestUser(), slot: new MediaSlot('gallery'), fileName: 'photo.jpg', folderOverride: '..\outside');
     })->throws(MediaUploadException::class, 'Path traversal detected');
+    it('accepts default-allowlisted audio and archive files under their libmagic MIME names', function (string $name, string $bytes, MediaType $type) {
+        $shipped = require __DIR__.'/../../config/nvl-media.php';
+        config(['nvl-media.file_types' => $shipped['file_types'], 'nvl-media.group_types' => $shipped['group_types']]);
+        $file = UploadedFile::fake()->createWithContent($name, $bytes);
+        $media = app(MediaUploader::class)->upload(SystemActor::Background, file: $file, disk: 'public', model: createTestUser(), slot: new MediaSlot('files'), fileName: $name);
+
+        expect($media->type)->toBe($type)
+            ->and($media->mime_type)->toBe((new finfo(FILEINFO_MIME_TYPE))->buffer($bytes));
+    })->with([
+        'wav' => ['sound.wav', 'RIFF'.pack('V', 44).'WAVEfmt '.pack('VvvVVvv', 16, 1, 1, 8000, 8000, 1, 8).'data'.pack('V', 8).str_repeat("\x80", 8), MediaType::AUDIO],
+        'aac (ADTS)' => ['sound.aac', "\xFF\xF1\x50\x80\x01\x7F\xFC".str_repeat("\x00", 16), MediaType::AUDIO],
+        'rar 4' => ['bundle.rar', "Rar!\x1A\x07\x00\xCF\x90\x73\x00\x00\x0D\x00\x00\x00\x00\x00\x00\x00", MediaType::ARCHIVE],
+        'rar 5' => ['bundle.rar', "Rar!\x1A\x07\x01\x00".str_repeat("\x00", 16), MediaType::ARCHIVE],
+    ]);
     it('rejects caller-provided display extensions that disagree with detected content', function () {
         app(MediaUploader::class)->upload(auth()->user() ?? SystemActor::Background, file: UploadedFile::fake()->image('photo.jpg', 100, 100), disk: 'public', model: createTestUser(), slot: new MediaSlot('gallery'), fileName: 'unsafe/name.png');
     })->throws(FileUnacceptableForCollection::class, 'Detected MIME type [image/jpeg] does not match file extension [png].');
@@ -263,6 +277,38 @@ describe('AttachMediaAction', function () {
         $action = app(MediaAttachments::class);
         $association = $action->attach(auth()->user() ?? SystemActor::Background, media: $media, model: $user, collection: 'gallery', locale: 'en', order: 5);
         expect($association->locale)->toBe('en')->and($association->order)->toBe(5);
+    });
+    it('stores family locale codes longer than five characters in canonical form', function () {
+        $association = app(MediaAttachments::class)->attach(SystemActor::Background, media: createMediaRecord(), model: createTestUser(), collection: 'gallery', locale: 'sr_latn_rs');
+
+        expect($association->fresh()->locale)->toBe('sr-Latn-RS');
+    });
+    it('rejects a malformed association locale before writing', function (string $locale) {
+        $media = createMediaRecord();
+
+        expect(fn () => app(MediaAttachments::class)->attach(SystemActor::Background, media: $media, model: createTestUser(), collection: 'gallery', locale: $locale))
+            ->toThrow(InvalidArgumentException::class, 'not a valid locale code')
+            ->and(MediaAssociation::query()->where('media_id', $media->id)->exists())->toBeFalse();
+    })->with(['english words', 'en-'.str_repeat('abcdefgh-', 4).'x', '']);
+    it('widens the association locale column reversibly and refuses to truncate stored locales', function () {
+        $migration = require __DIR__.'/../../database/migrations/2026_11_11_000000_nvl_media_widen_media_associations_locale.php';
+        $association = app(MediaAttachments::class)->attach(SystemActor::Background, media: createMediaRecord(), model: createTestUser(), locale: 'en');
+
+        $migration->down();
+        $migration->up();
+        expect($association->fresh()->locale)->toBe('en');
+
+        $association->forceFill(['locale' => 'zh-Hans'])->save();
+        expect(fn () => $migration->down())->toThrow(LogicException::class, 'longer than five characters');
+        expect($association->fresh()->locale)->toBe('zh-Hans');
+    });
+    it('filters the library by a translation locale longer than five characters', function () {
+        config(['nvl-translatable.locales' => ['en', 'zh-Hans']]);
+        $media = createMediaRecord();
+        $media->translations()->create(['locale' => 'zh-Hans', 'title' => 'Title']);
+        createMediaRecord();
+
+        expect(app(MediaReader::class)->paginate(SystemActor::Background, ['locale' => 'zh-Hans'])->pluck('id')->all())->toBe([$media->id]);
     });
     it('stores metadata on the association', function () {
         $media = createMediaRecord();
@@ -457,6 +503,39 @@ describe('DeleteMediaAction', function () {
             ->and(MediaAssociation::query()->where('media_id', $media->id)->where('is_active', true)->pluck('id')->all())
             ->toEqualCanonicalizing($associationIds);
         Storage::disk('public')->assertExists($media->buildPath());
+    });
+
+    it('deletes all owner media when one public asset fills two of its collections', function (): void {
+        Storage::fake('public');
+        config(['nvl-media.prevent_deleting_reused_public_media' => true]);
+        $media = createMediaRecord(['is_public' => true]);
+        $owner = TestMediaModel::query()->create(['name' => 'Consumer']);
+        $attachments = app(MediaAttachments::class);
+        $attachments->attach(SystemActor::Background, $media, $owner, 'cover', dispatchVariations: false);
+        $attachments->attach(SystemActor::Background, $media, $owner, 'gallery', dispatchVariations: false);
+        Storage::disk('public')->put($media->buildPath(), 'original binary');
+
+        $attachments->deleteAll(SystemActor::Background, $owner);
+
+        expect(Media::query()->whereKey($media->id)->exists())->toBeFalse()
+            ->and(Media::query()->withTrashed()->findOrFail($media->id)->trashed())->toBeTrue();
+    });
+
+    it('keeps a public asset another owner still uses when deleting all owner media', function (): void {
+        Storage::fake('public');
+        config(['nvl-media.prevent_deleting_reused_public_media' => true]);
+        $media = createMediaRecord(['is_public' => true]);
+        $owner = TestMediaModel::query()->create(['name' => 'Consumer']);
+        $other = TestMediaModel::query()->create(['name' => 'Retained owner']);
+        $attachments = app(MediaAttachments::class);
+        $attachments->attach(SystemActor::Background, $media, $owner, 'cover', dispatchVariations: false);
+        $attachments->attach(SystemActor::Background, $media, $owner, 'gallery', dispatchVariations: false);
+        $retained = $attachments->attach(SystemActor::Background, $media, $other, 'cover', dispatchVariations: false);
+
+        $attachments->deleteAll(SystemActor::Background, $owner);
+
+        expect(MediaAssociation::query()->where('media_id', $media->id)->pluck('id')->all())->toBe([$retained->id])
+            ->and(Media::query()->whereKey($media->id)->exists())->toBeTrue();
     });
 
     it('detaches selected public usages when another inactive placement retains the asset', function (): void {

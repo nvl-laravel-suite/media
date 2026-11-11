@@ -11,7 +11,6 @@ use Nvl\Media\Enums\MediaMultipartStatus;
 use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Exceptions\MediaUploadException;
 use Nvl\Media\Models\MediaMultipartUpload;
-use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaMutationLock;
 use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Services\S3MultipartUploadGateway;
@@ -61,7 +60,7 @@ it('proves PostgreSQL, Redis locking, and S3-compatible multipart recovery toget
     $expiresAt = new DateTimeImmutable('+10 minutes');
     $session = ['uploadId' => $uploadId, 'disk' => $disk, 'objectKey' => $objectKey, 'filename' => 'production-stack.txt', 'mimeType' => 'text/plain', 'size' => strlen($contents), 'checksum' => $checksum, 'visibility' => MediaVisibility::Private, 'uploaderId' => 'integration', 'uploaderType' => 'integration', 'expiresAt' => $expiresAt, 'minimumPartSize' => 1, 'maximumParts' => 1];
     $persisted = $run(fn (): MediaMultipartUpload => MediaMultipartUpload::forceCreate([...app(OwnershipBoundary::class)->attributes('media.multipart'), 'id' => $uploadId, 'disk' => $disk, 'object_key' => $objectKey, 'object_key_hash' => hash('sha256', $objectKey), 'display_filename' => 'production-stack.txt', 'canonical_extension' => 'txt', 'declared_mime' => 'text/plain', 'expected_size' => strlen($contents), 'expected_checksum' => $checksum, 'visibility' => MediaVisibility::Private, 'uploader_id' => 'integration', 'uploader_type' => 'integration', 'expires_at' => $expiresAt, 'part_size' => strlen($contents), 'expected_parts' => 1, 'minimum_part_size' => 1, 'maximum_part_size' => strlen($contents), 'maximum_parts' => 1, 'status' => MediaMultipartStatus::Initiated]));
-    $gateway = new S3MultipartUploadGateway(app(MediaDiskGateway::class), app(PackageLogger::class));
+    $gateway = new S3MultipartUploadGateway(app(PackageLogger::class));
     $completed = false;
     try {
         $run(function () use ($gateway, $session, $contents, $persisted, &$completed, $objectKey, $checksum): void {
@@ -74,7 +73,7 @@ it('proves PostgreSQL, Redis locking, and S3-compatible multipart recovery toget
             $persisted->forceFill(['signed_parts' => [1 => ['length' => strlen($contents), 'checksum' => $checksum]]])->save();
             $object = $gateway->complete($session, ['uploadId' => $session['uploadId'], 'parts' => [['partNumber' => 1, 'etag' => $etag, 'checksum' => null]]]);
             $completed = true;
-            expect($object['path'])->toBe($objectKey)->and($objectKey)->toStartWith('media/owners/')->not->toContain('/owners/owners/')->and($object['size'])->toBe(strlen($contents))->and($object['checksum'])->toBe($checksum)->and($gateway->inspect($session)['checksum'])->toBe($checksum);
+            expect($object['path'])->toBe($objectKey)->and($objectKey)->toStartWith('media/owners/')->not->toContain('/owners/owners/')->and($object['size'])->toBe(strlen($contents))->and($object['checksum'] ?? $checksum)->toBe($checksum)->and($gateway->inspect($session)['checksum'] ?? $checksum)->toBe($checksum)->and(hash('sha256', (string) Storage::disk($session['disk'])->get($objectKey)))->toBe($checksum);
         });
     } finally {
         if (! $completed) {

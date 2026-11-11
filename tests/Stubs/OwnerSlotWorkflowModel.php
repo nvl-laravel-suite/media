@@ -20,5 +20,6 @@ final class OwnerSlotWorkflowModel extends TestMediaModel implements \Illuminate
         $this->addMediaSlot('document')->oneToOne()->acceptsMimeTypes(['application/pdf'])->maxFileSize(2048);
         $this->addMediaSlot('library')->publicReusable()->singleFile()->acceptsMimeTypes(['application/pdf'])->maxFileSize(2048);
         $this->addMediaSlot('custom')->oneToOne()->acceptsFile(static fn (): bool => true);
+        $this->addMediaSlot('converted')->oneToOne()->convertTo('webp')->maxSize(16);
     }
 }

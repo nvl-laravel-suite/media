@@ -22,7 +22,13 @@ use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
  */
 final class MediaDeduplicationLock
 {
-    public function __construct(private readonly OwnershipBoundary $tenantBoundary) {}
+    /** @var array<string, true> Keys this request already holds until its open transaction ends */
+    private array $heldByTransaction = [];
+
+    public function __construct(
+        private readonly OwnershipBoundary $tenantBoundary,
+        private readonly MediaTransactionRollbackRegistry $transactions,
+    ) {}
 
     /**
      * Execute a deduplicated upload workflow inside a scoped cache lock.
@@ -49,15 +55,37 @@ final class MediaDeduplicationLock
             return $callback();
         }
 
-        try {
-            /** @var Media $media */
-            $media = $this->lockProvider()
-                ->lock($this->lockKey($digest, $disk, $isPublic, $uploadedBy, $uploadedByType), $this->seconds())
-                ->block($this->waitSeconds(), $callback);
+        $key = $this->lockKey($digest, $disk, $isPublic, $uploadedBy, $uploadedByType);
 
-            return $media;
+        if (isset($this->heldByTransaction[$key])) {
+            return $callback();
+        }
+
+        $lock = $this->lockProvider()->lock($key, $this->seconds());
+
+        try {
+            $lock->block($this->waitSeconds());
         } catch (LockTimeoutException $exception) {
             throw new MediaUploadException('Timed out while waiting for a media deduplication lock.', previous: $exception);
+        }
+
+        // Inside a host transaction the new row stays invisible to other connections until the commit,
+        // so the lock is held until that transaction ends; otherwise an identical upload would insert a second row.
+        $releasedByTransaction = $this->transactions->afterRootTransaction(function () use ($lock, $key): void {
+            unset($this->heldByTransaction[$key]);
+            $lock->release();
+        });
+
+        if ($releasedByTransaction) {
+            $this->heldByTransaction[$key] = true;
+        }
+
+        try {
+            return $callback();
+        } finally {
+            if (! $releasedByTransaction) {
+                $lock->release();
+            }
         }
     }
 
