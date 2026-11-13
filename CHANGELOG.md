@@ -5,10 +5,18 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [7.0.6] - 2026-11-13
+
 ### Fixed
 
 - Keep split owner-slot claims retryable when their savepoint rolls back, even if the surrounding transaction commits.
 - Match mixed-case Unicode filenames on SQLite while treating search wildcards as literal characters.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- correct permission caches, transaction outcomes and migration diagnostics
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.0.5] - 2026-11-13
 
