@@ -5,9 +5,17 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [7.0.5] - 2026-11-13
+
 ### Fixed
 
 - Key transaction rollback staging by connection name and transaction depth, match Unicode filenames case-insensitively across SQLite and PostgreSQL (`COLLATE pg_c_utf8`), and harden attachment and variation CLI lifecycles.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- harden package runtime safety, PostgreSQL portability and test performance
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.0.4] - 2026-11-11
 
