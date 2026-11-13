@@ -6,12 +6,12 @@ namespace Nvl\Media\Services;
 
 use Closure;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use LogicException;
@@ -663,11 +663,26 @@ final class MediaAttachments
             );
 
             if ($claim instanceof MediaOwnerSlotOperationClaim) {
-                $this->idempotency->complete(
-                    $claim,
-                    $result->id,
-                    $this->slotSnapshot($result),
-                );
+                if ($this->ownerslotworkflowLedgerSharesMediaConnection($actor)) {
+                    $this->idempotency->complete(
+                        $claim,
+                        $result->id,
+                        $this->slotSnapshot($result),
+                    );
+                } else {
+                    $this->ownerslotworkflowDeferSplitClaimOutcome(
+                        $actor,
+                        $claim,
+                        'replace_failed',
+                        function () use ($claim, $result): void {
+                            $this->idempotency->complete(
+                                $claim,
+                                $result->id,
+                                $this->slotSnapshot($result),
+                            );
+                        },
+                    );
+                }
             }
 
             return $result;
@@ -1278,16 +1293,44 @@ final class MediaAttachments
             return;
         }
 
-        MediaModelRegistry::newInstance()->getConnection()->afterCommit(function () use ($claim, $resultPayload): void {
-            try {
+        $this->ownerslotworkflowDeferSplitClaimOutcome(
+            $actor,
+            $claim,
+            'clear_failed',
+            function () use ($claim, $resultPayload): void {
                 $this->idempotency->complete($claim, null, $resultPayload);
-            } catch (Throwable $claimFailure) {
-                report($claimFailure);
-            }
-        });
-        DB::afterRollBack(function () use ($actor, $claim): void {
-            $this->ownerslotworkflowRecordFailure($actor, $claim, 'clear_failed');
-        });
+            },
+        );
+    }
+
+    /**
+     * Complete or fail a split-ledger claim on the exact Media root transaction boundary.
+     *
+     * @param  Closure(): void  $onCommit
+     */
+    private function ownerslotworkflowDeferSplitClaimOutcome(
+        Authenticatable|SystemActor $actor,
+        MediaOwnerSlotOperationClaim $claim,
+        string $failureCode,
+        Closure $onCommit,
+    ): void {
+        $rollbacks = Container::getInstance()->make(MediaTransactionRollbackRegistry::class);
+        $deferred = $rollbacks->afterRootTransactionOutcome(
+            static function () use ($onCommit): void {
+                try {
+                    $onCommit();
+                } catch (Throwable $claimFailure) {
+                    report($claimFailure);
+                }
+            },
+            function () use ($actor, $claim, $failureCode): void {
+                $this->ownerslotworkflowRecordFailure($actor, $claim, $failureCode);
+            },
+        );
+
+        if (! $deferred) {
+            $onCommit();
+        }
     }
 
     /**
@@ -1783,20 +1826,18 @@ final class MediaAttachments
             return;
         }
 
-        MediaModelRegistry::newInstance()->getConnection()->afterCommit(function () use ($claim, $result): void {
-            try {
+        $this->ownerslotworkflowDeferSplitClaimOutcome(
+            $actor,
+            $claim,
+            'copy_failed',
+            function () use ($claim, $result): void {
                 $this->idempotency->complete(
                     $claim,
                     $result->id,
                     $this->slotSnapshot($result),
                 );
-            } catch (Throwable $claimFailure) {
-                report($claimFailure);
-            }
-        });
-        DB::afterRollBack(function () use ($actor, $claim): void {
-            $this->ownerslotworkflowRecordFailure($actor, $claim, 'copy_failed');
-        });
+            },
+        );
     }
 
     /**

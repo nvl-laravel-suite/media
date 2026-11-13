@@ -14,10 +14,11 @@ use Nvl\Media\Tests\Fixtures\OwnershipMediaScenario;
 use Nvl\Media\Tests\OwnershipTestCase;
 use Nvl\Media\Tests\Stubs\BatchMediaAuthorization;
 use Nvl\Ownership\Services\OwnershipRunner;
+use Nvl\Ownership\Tests\Fixtures\OptsIntoAdoptedSchemaReuse;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 
-uses(OwnershipTestCase::class);
+uses(OwnershipTestCase::class, OptsIntoAdoptedSchemaReuse::class);
 it('keeps complete owner media pages and removal inside the admitted native owner', function (): void {
     app()->instance(MediaBatchAuthorization::class, new BatchMediaAuthorization);
     $runner = app(OwnershipRunner::class);
@@ -41,14 +42,34 @@ it('keeps complete owner media pages and removal inside the admitted native owne
 });
 it('holds owned public batch delivery queries fixed for one twenty five and one hundred owners', function (): void {
     app()->instance(MediaBatchAuthorization::class, new BatchMediaAuthorization);
-    app(OwnershipRunner::class)->run(OwnershipCompany::query()->findOrFail(7), OwnershipActor::query()->firstOrFail(), function (): void {
-        $owners = [];
-        for ($index = 0; $index < 100; $index++) {
-            $owner = OwnershipMediaScenario::owner();
-            $asset = MediaModelRegistry::create(['filename' => 'public.txt', 'hash' => $owner->id.'.txt', 'extension' => 'txt', 'mime_type' => 'text/plain', 'size' => 5, 'disk' => 'public', 'folder' => '', 'storage_path' => 'media/public/'.$owner->id.'.txt', 'type' => MediaType::DOCUMENT, 'digest' => hash('sha256', 'bytes'), 'is_public' => true, 'visibility' => 'public', 'revision' => 1, 'uploaded_by' => '1', 'uploaded_by_type' => OwnershipActor::class]);
-            app(MediaAttachments::class)->attach(OwnershipActor::query()->firstOrFail(), $asset, $owner, 'documents', dispatchVariations: false);
-            $owners[] = $owner;
+    $actor = OwnershipActor::query()->firstOrFail();
+    app(OwnershipRunner::class)->run(OwnershipCompany::query()->findOrFail(7), $actor, function () use ($actor): void {
+        $owner = OwnershipMediaScenario::owner();
+        $asset = MediaModelRegistry::create(['filename' => 'public.txt', 'hash' => $owner->id.'.txt', 'extension' => 'txt', 'mime_type' => 'text/plain', 'size' => 5, 'disk' => 'public', 'folder' => '', 'storage_path' => 'media/public/'.$owner->id.'.txt', 'type' => MediaType::DOCUMENT, 'digest' => hash('sha256', 'bytes'), 'is_public' => true, 'visibility' => 'public', 'revision' => 1, 'uploaded_by' => '1', 'uploaded_by_type' => OwnershipActor::class]);
+        $association = app(MediaAttachments::class)->attach($actor, $asset, $owner, 'documents', dispatchVariations: false);
+        $ownerIds = [$owner->getKey()];
+        $ownerRows = $assetRows = $associationRows = [];
+        for ($index = 1; $index < 100; $index++) {
+            $ownerId = $owner->newUniqueId();
+            $assetId = $asset->newUniqueId();
+            $ownerIds[] = $ownerId;
+            $ownerRows[] = [...$owner->getRawOriginal(), 'id' => $ownerId];
+            $assetRows[] = [...$asset->getRawOriginal(), 'id' => $assetId, 'hash' => $ownerId.'.txt', 'storage_path' => 'media/public/'.$ownerId.'.txt'];
+            $associationRows[] = [...$association->getRawOriginal(), 'id' => $association->newUniqueId(), 'media_id' => $assetId, 'associable_id' => $ownerId];
         }
+        $connection = $owner->getConnection();
+        $connection->transaction(static function () use ($connection, $owner, $asset, $association, $ownerRows, $assetRows, $associationRows): void {
+            $connection->table($owner->getTable())->insert($ownerRows);
+            foreach (array_chunk($assetRows, 25) as $chunk) {
+                $connection->table($asset->getTable())->insert($chunk);
+            }
+            foreach (array_chunk($associationRows, 25) as $chunk) {
+                $connection->table($association->getTable())->insert($chunk);
+            }
+        });
+        $ownersById = $owner->newQuery()->findMany($ownerIds)->keyBy('id');
+        $owners = array_map(static fn (string $id) => $ownersById->get($id), $ownerIds);
+
         $counts = [];
         foreach ([1, 25, 100] as $count) {
             DB::enableQueryLog();

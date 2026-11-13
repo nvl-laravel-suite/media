@@ -17,10 +17,11 @@ use Nvl\Media\Tests\Fixtures\OwnershipMediaScenario;
 use Nvl\Media\Tests\OwnershipTestCase;
 use Nvl\Ownership\Services\OwnershipRunner;
 use Nvl\Ownership\Services\OwnershipWriter;
+use Nvl\Ownership\Tests\Fixtures\OptsIntoAdoptedSchemaReuse;
 use Nvl\Ownership\ValueObjects\OwnershipAssignment;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 
-uses(OwnershipTestCase::class);
+uses(OwnershipTestCase::class, OptsIntoAdoptedSchemaReuse::class);
 it('separates identical private uploads and rejects foreign attachment and delivery', function (): void {
     Storage::fake('public');
     $runner = app(OwnershipRunner::class);

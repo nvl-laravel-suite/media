@@ -15,8 +15,9 @@ use Nvl\Media\Tests\Fixtures\OwnershipMedia;
 use Nvl\Media\Tests\Fixtures\OwnershipMultipartGateway;
 use Nvl\Media\Tests\OwnershipTestCase;
 use Nvl\Ownership\Services\OwnershipRunner;
+use Nvl\Ownership\Tests\Fixtures\OptsIntoAdoptedSchemaReuse;
 
-uses(OwnershipTestCase::class);
+uses(OwnershipTestCase::class, OptsIntoAdoptedSchemaReuse::class);
 it('keeps multipart receipts completion and scanning in the captured native company', function (): void {
     Storage::fake('public');
     config(['nvl-media.multipart.enabled' => true]);

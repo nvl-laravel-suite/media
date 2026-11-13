@@ -8,6 +8,7 @@ use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Schema\Builder as SchemaBuilder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
@@ -30,6 +31,12 @@ use Nvl\Media\Support\MediaDiskResolver;
 use Nvl\Media\Support\MediaImageConfiguration;
 use Nvl\Media\Support\MediaQueueConfiguration;
 use Nvl\Support\Config\PackageOptions;
+use Nvl\Support\Ownership\Contracts\OwnershipContext;
+use Nvl\Support\Ownership\Contracts\OwnershipReadiness;
+use Nvl\Support\Ownership\Enums\OwnershipContextMode;
+use Nvl\Support\Ownership\Exceptions\OwnershipSchemaNotReady;
+use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
+use Nvl\Support\Ownership\Services\OwnershipConstraintInspector;
 use Throwable;
 
 /**
@@ -42,6 +49,7 @@ final readonly class MediaDoctor
     public function __construct(
         private Container $container,
         private MediaFileExistence $existence,
+        private OwnershipConstraintInspector $constraints,
     ) {}
 
     /**
@@ -296,6 +304,10 @@ final readonly class MediaDoctor
                     ? 'Observed owner-slot registrations resolve to single-file model slots.'
                     : 'Invalid observed owner-slot registrations: '.implode(', ', $invalid)];
         } catch (Throwable $exception) {
+            if ($this->shouldDeferOwnershipSample('media.slot-operations', $exception)) {
+                return ['key' => 'owner_slots.registrations', 'severity' => 'info', 'passed' => true, 'message' => 'Owner-slot registration sampling is deferred until a Media ownership context is admitted.'];
+            }
+
             return ['key' => 'owner_slots.registrations', 'severity' => 'error', 'passed' => false, 'message' => 'Owner-slot registration inspection failed: '.mb_substr(
                 $exception->getMessage(),
                 0,
@@ -381,12 +393,10 @@ final readonly class MediaDoctor
             ];
             // Media tables live on the Media connection, which need not be the application default.
             $mediaConnection = MediaModelRegistry::newInstance()->getConnectionName();
-            $connections = [
-                $ownerSlotOperationsTable => MediaConfiguration::ownerSlotOperationConnection() ?? $mediaConnection,
-            ];
+            $ledgerConnection = (new MediaOwnerSlotOperation)->getConnectionName();
 
             foreach ($requirements as $table => $columns) {
-                $schema = Schema::connection($connections[$table] ?? $mediaConnection);
+                $schema = Schema::connection($table === $ownerSlotOperationsTable ? $ledgerConnection : $mediaConnection);
                 $exists = $schema->hasTable($table);
                 $checks[] = ['key' => "schema.table.{$table}", 'severity' => 'error', 'passed' => $exists, 'message' => $exists ? "Table [{$table}] is available." : "Table [{$table}] is missing."];
 
@@ -402,6 +412,9 @@ final readonly class MediaDoctor
                 }
 
                 $indexes = $schema->getIndexes($table);
+                if ($table === $ownerSlotOperationsTable) {
+                    $checks[] = $this->ownerSlotIdempotencyIndexCheck($schema, $table, $indexes);
+                }
 
                 foreach ($this->requiredIndexes($table) as $index) {
                     $present = collect($indexes)->contains(
@@ -417,6 +430,31 @@ final readonly class MediaDoctor
         }
 
         return $checks;
+    }
+
+    /**
+     * @param  list<array{name: string, columns: list<string>, type: string, unique: bool, primary: bool}>  $indexes
+     * @return array{key: string, severity: string, passed: bool, message: string}
+     */
+    private function ownerSlotIdempotencyIndexCheck(SchemaBuilder $schema, string $table, array $indexes): array
+    {
+        $key = "schema.index.{$table}.media_owner_slot_idempotency_unique";
+        $owned = $schema->hasColumn($table, 'owner_scope_key');
+        $globalColumns = ['idempotency_key'];
+        $requiredColumns = $owned ? ['owner_scope_key', 'idempotency_key'] : $globalColumns;
+
+        if ($owned && array_any($indexes, static fn (array $index): bool => $index['unique'] && $index['columns'] === $globalColumns)) {
+            return ['key' => $key, 'severity' => 'error', 'passed' => false, 'message' => "Table [{$table}] retains a global unique index on [idempotency_key] that prevents reuse across owners."];
+        }
+
+        $columns = implode(', ', $requiredColumns);
+        try {
+            $this->constraints->assertUniqueIndexes($schema->getConnection(), $table, [$requiredColumns]);
+        } catch (OwnershipSchemaNotReady) {
+            return ['key' => $key, 'severity' => 'error', 'passed' => false, 'message' => "Table [{$table}] requires a complete unique index on [{$columns}]."];
+        }
+
+        return ['key' => $key, 'severity' => 'error', 'passed' => true, 'message' => "Table [{$table}] has a complete unique index on [{$columns}]."];
     }
 
     /**
@@ -491,6 +529,10 @@ final readonly class MediaDoctor
                 ->limit($limit)
                 ->get($columns);
         } catch (Throwable $exception) {
+            if ($this->shouldDeferOwnershipSample('media.assets', $exception)) {
+                return ['key' => 'storage.persisted_paths', 'severity' => 'info', 'passed' => true, 'message' => 'Persisted media path sampling is deferred until a Media ownership context is admitted.'];
+            }
+
             return ['key' => 'storage.persisted_paths', 'severity' => $production ? 'error' : 'warning', 'passed' => false, 'message' => 'Persisted media paths cannot be inspected: '.mb_substr($exception->getMessage(), 0, 500)];
         }
 
@@ -531,6 +573,26 @@ final readonly class MediaDoctor
                     $rootLabel,
                     implode(', ', array_slice($missing, 0, 5)),
                 )];
+    }
+
+    /** Defer row sampling only when active storage is waiting for an admitted execution context. */
+    private function shouldDeferOwnershipSample(string $resource, Throwable $exception): bool
+    {
+        if (! $exception instanceof OwnershipViolation) {
+            return false;
+        }
+
+        try {
+            if ($this->container->make(OwnershipContext::class)->snapshot()->mode !== OwnershipContextMode::Unresolved) {
+                return false;
+            }
+
+            $this->container->make(OwnershipReadiness::class)->assertActive($resource);
+
+            return true;
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**
@@ -814,7 +876,6 @@ final readonly class MediaDoctor
     {
         if ($table === MediaConfiguration::ownerSlotOperationTable()) {
             return [
-                'media_owner_slot_idempotency_unique',
                 'media_owner_slot_owner_slot_idx',
                 'media_owner_slot_created_idx',
             ];

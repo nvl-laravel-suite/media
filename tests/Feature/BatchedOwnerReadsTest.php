@@ -575,23 +575,46 @@ it('preserves imperative policy bindings before and after package registration',
     expect(app(MediaBatchAuthorization::class))->toBe($batch);
 });
 it('holds the absolute twenty thousand slot transfer ceiling before hydration', function (): void {
-    $owners = [];
-    for ($index = 0; $index < 100; $index++) {
-        $owners[] = BatchMediaOwner::query()->create(['name' => 'Owner']);
+    $now = now();
+    $ownerRows = [];
+    for ($index = 1; $index <= 100; $index++) {
+        $ownerRows[] = [
+            'id' => sprintf('00000000-0000-4000-8000-%012d', $index),
+            'name' => 'Owner',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
     }
+    DB::table((new BatchMediaOwner)->getTable())->insert($ownerRows);
+    $owners = BatchMediaOwner::query()->orderBy('id')->get()->all();
     $assets = Media::factory()->count(11)->create(['is_public' => false]);
+    $assetIds = $assets->pluck('id')->all();
+    $morphClass = $owners[0]->getMorphClass();
     $slots = array_map(static fn (int $i): string => 'slot'.$i, range(0, 19));
     $rows = [];
+    $sequence = 0;
     foreach ($owners as $owner) {
+        $ownerId = $owner->id;
         foreach ($slots as $slot) {
-            foreach ($assets as $index => $asset) {
-                $rows[] = ['id' => (string) Str::uuid(), 'media_id' => $asset->id, 'associable_type' => $owner->getMorphClass(), 'associable_id' => $owner->id, 'collection' => $slot, 'order' => $index, 'is_active' => true];
+            foreach ($assetIds as $index => $assetId) {
+                $rows[] = [
+                    'id' => sprintf('10000000-0000-4000-8000-%012d', ++$sequence),
+                    'media_id' => $assetId,
+                    'associable_type' => $morphClass,
+                    'associable_id' => $ownerId,
+                    'collection' => $slot,
+                    'order' => $index,
+                    'is_active' => true,
+                ];
             }
         }
     }
-    foreach (array_chunk($rows, 250) as $chunk) {
-        DB::table((new MediaAssociation)->getTable())->insert($chunk);
-    }
+    $associationTable = (new MediaAssociation)->getTable();
+    DB::transaction(static function () use ($associationTable, $rows): void {
+        foreach (array_chunk($rows, 500) as $chunk) {
+            DB::table($associationTable)->insert($chunk);
+        }
+    });
     app(OwnershipBoundary::class)->query(Media::query(), 'media.assets');
     DB::enableQueryLog();
     DB::flushQueryLog();
@@ -600,12 +623,15 @@ it('holds the absolute twenty thousand slot transfer ceiling before hydration', 
     expect($queries)->toHaveCount(3);
     DB::disableQueryLog();
     $ranked = $queries[0];
-    expect(DB::select($ranked['query'], $ranked['bindings']))->toHaveCount(20000);
+    expect((int) DB::scalar('select count(*) from ('.$ranked['query'].') as nvl_ranked_count', $ranked['bindings']))->toBe(20000);
+    $counts = [];
     foreach ($owners as $owner) {
         foreach ($slots as $slot) {
-            expect(batchMediaItems($result, $owner, $slot))->toHaveCount(10);
+            $counts[] = count(batchMediaItems($result, $owner, $slot));
         }
     }
+    expect($counts)->toHaveCount(2000)
+        ->and(array_values(array_unique($counts)))->toBe([10]);
 });
 it('rejects oversized locale fallback before any SQL', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
@@ -718,10 +744,7 @@ it('contains broad policy OR clauses within mandatory ownership active lifecycle
 });
 it('uses byte exact morph and string keys without Cartesian or collation leakage', function (): void {
     Schema::create('batch_string_media_owners', function (Blueprint $table): void {
-        $id = $table->string('id')->primary();
-        if (in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
-            $id->collation('utf8mb4_bin');
-        }
+        $table->string('id')->primary();
         $table->string('name');
         $table->timestamps();
         $table->softDeletes();
@@ -805,13 +828,12 @@ it('compiles exact canonical keys window partitions and host correlation for sup
         $host = BatchMediaOwner::query()->select('id')->hasNvlMedia('document', SystemActor::Background, $policy)->toSql();
         match ($driver) {
             'pgsql' => expect($host)->toContain('AS TEXT)', 'COLLATE "C"', 'OCTET_LENGTH'),
-            'mysql', 'mariadb' => expect($host)->toContain('AS CHAR)', 'BINARY', 'OCTET_LENGTH'),
             'sqlite' => expect($host)->toContain('AS TEXT)', 'COLLATE BINARY', 'AS BLOB'),
         };
     } finally {
         DB::setDefaultConnection($prior);
     }
-})->with(['sqlite', 'pgsql', 'mysql', 'mariadb']);
+})->with(['sqlite', 'pgsql']);
 it('breaks equal order ties deterministically by association id', function (): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);
     $expected = [];

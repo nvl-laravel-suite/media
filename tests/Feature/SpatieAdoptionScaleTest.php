@@ -49,11 +49,6 @@ function stageLegacySpatieMedia(int $count): void
         }
     }
 
-    // MySQL ends the test's wrapping transaction on DDL. Realign Laravel's transaction level with the server so the
-    // adoption under test opens a real transaction instead of a savepoint that has no transaction to belong to.
-    if (in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)) {
-        DB::rollBack();
-    }
 }
 
 it('adopts a legacy table in bounded chunks instead of one query over every row', function (): void {

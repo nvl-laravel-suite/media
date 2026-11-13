@@ -66,6 +66,18 @@ final class MediaTransactionRollbackRegistry
      */
     public function afterRootTransaction(Closure $callback): bool
     {
+        return $this->afterRootTransactionOutcome($callback, $callback);
+    }
+
+    /**
+     * Run distinct commit or rollback callbacks when the Media connection's open root transaction finishes.
+     *
+     * @param  Closure(): void  $onCommit
+     * @param  Closure(): void  $onRollback
+     * @return bool False when no callback-applicable transaction is open on the Media connection
+     */
+    public function afterRootTransactionOutcome(Closure $onCommit, Closure $onRollback): bool
+    {
         $connection = MediaModelRegistry::newInstance()->getConnection();
 
         if ($connection->transactionLevel() === 0) {
@@ -82,10 +94,10 @@ final class MediaTransactionRollbackRegistry
             return false;
         }
 
-        $registrationId = $this->register($root->connection, $root->level, $callback);
-        $root->addCallback(function () use ($registrationId, $callback): void {
+        $registrationId = $this->register($root->connection, $root->level, $onRollback);
+        $root->addCallback(function () use ($registrationId, $onCommit): void {
             $this->cancel($registrationId);
-            $callback();
+            $onCommit();
         });
 
         return true;

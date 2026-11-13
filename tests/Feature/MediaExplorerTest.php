@@ -96,6 +96,15 @@ describe('New index filters', function () {
         $ids = collect($items)->pluck('id')->toArray();
         expect($ids)->toContain($media_avatar->id)->not->toContain($media_gallery->id);
     });
+    it('matches Unicode Cyrillic filenames case-insensitively during search', function () {
+        $user = explorerUser();
+        $matching = explorerMedia(['is_public' => true, 'filename' => 'Съобщение-клиент.jpg']);
+        $other = explorerMedia(['is_public' => true, 'filename' => 'Друг-документ.jpg']);
+        $response = $this->actingAs($user)->getJson('/nvl/api/v1/media?search='.urlencode('съобщение'));
+        $response->assertStatus(200);
+        $ids = collect(extractMediaItems($response))->pluck('id')->toArray();
+        expect($ids)->toContain($matching->id)->not->toContain($other->id);
+    });
 });
 /* =================================================================
  * Rename

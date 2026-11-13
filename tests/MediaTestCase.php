@@ -23,7 +23,9 @@ use Orchestra\Testbench\TestCase as Orchestra;
  */
 abstract class MediaTestCase extends Orchestra
 {
-    use RefreshDatabase;
+    use RefreshDatabase {
+        migrateDatabases as baseMigrateDatabases;
+    }
 
     /**
      * @return list<class-string>
@@ -33,8 +35,10 @@ abstract class MediaTestCase extends Orchestra
         return [LocaleServiceProvider::class, FilterableServiceProvider::class, SupportServiceProvider::class, TranslatableServiceProvider::class, MediaServiceProvider::class, ConsumerMediaProvider::class];
     }
 
-    protected function defineDatabaseMigrationsAfterDatabaseRefreshed(): void
+    protected function migrateDatabases(): void
     {
+        $this->baseMigrateDatabases();
+
         Schema::create('users', function (Blueprint $table): void {
             $table->id();
             $table->string('name');
@@ -55,6 +59,6 @@ abstract class MediaTestCase extends Orchestra
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set(['nvl-translatable.locales' => ['en', 'bg'], 'nvl-translatable.default_locale' => 'en', 'nvl-translatable.fallback_locales' => ['en'], 'filesystems.default' => 'public', 'cache.default' => 'array', 'nvl-media.disk' => 'public', 'nvl-media.delivery.disks.public.public.mode' => 'direct', 'nvl-media.routes.api_enabled' => true, 'nvl-media.routes.management_middleware' => ['auth'], 'nvl-media.default_path' => '{model_type}/{model_id}', 'nvl-media.conversions_folder' => 'conversions', 'nvl-media.deduplication_lock.enabled' => true, 'nvl-media.locks.deduplication.store' => 'array', 'nvl-media.deduplication_lock.seconds' => 10, 'nvl-media.deduplication_lock.wait_seconds' => 1, 'nvl-media.delete_files_on_media_delete' => true, 'nvl-media.clean_empty_directories' => true, 'nvl-media.max_file_size' => 10 * 1024 * 1024, 'nvl-media.file_types' => ['svg' => 'image/svg+xml', 'bmp' => 'image/bmp', 'gif' => 'image/gif', 'png' => 'image/png', 'ico' => 'image/vnd.microsoft.icon', 'jpeg' => 'image/jpeg', 'jpg' => 'image/jpeg', 'webp' => 'image/webp', 'avif' => 'image/avif', 'csv' => 'text/csv', 'doc' => 'application/msword', 'pdf' => 'application/pdf', 'txt' => 'text/plain', 'json' => 'application/json', 'xml' => 'application/xml', 'mp4' => 'video/mp4', 'mp3' => 'audio/mpeg', 'zip' => 'application/zip'], 'nvl-media.group_types' => ['image' => ['svg', 'bmp', 'gif', 'png', 'ico', 'jpeg', 'jpg', 'webp', 'avif'], 'document' => ['doc', 'docx', 'pdf', 'ppt', 'pptx', 'xls', 'xlsx', 'csv', 'txt'], 'video' => ['mp4', 'mpeg', 'webm', 'mov'], 'audio' => ['mp3', 'wav', 'ogg', 'aac', 'flac'], 'archive' => ['zip', 'rar', '7z', 'tar', 'gz'], 'code' => ['json', 'xml']]]);
+        $app['config']->set(['hashing.bcrypt.rounds' => 4, 'nvl-translatable.locales' => ['en', 'bg'], 'nvl-translatable.default_locale' => 'en', 'nvl-translatable.fallback_locales' => ['en'], 'filesystems.default' => 'public', 'cache.default' => 'array', 'nvl-media.disk' => 'public', 'nvl-media.delivery.disks.public.public.mode' => 'direct', 'nvl-media.routes.api_enabled' => true, 'nvl-media.routes.management_middleware' => ['auth'], 'nvl-media.default_path' => '{model_type}/{model_id}', 'nvl-media.conversions_folder' => 'conversions', 'nvl-media.deduplication_lock.enabled' => true, 'nvl-media.locks.deduplication.store' => 'array', 'nvl-media.deduplication_lock.seconds' => 10, 'nvl-media.deduplication_lock.wait_seconds' => 1, 'nvl-media.delete_files_on_media_delete' => true, 'nvl-media.clean_empty_directories' => true, 'nvl-media.max_file_size' => 10 * 1024 * 1024, 'nvl-media.file_types' => ['svg' => 'image/svg+xml', 'bmp' => 'image/bmp', 'gif' => 'image/gif', 'png' => 'image/png', 'ico' => 'image/vnd.microsoft.icon', 'jpeg' => 'image/jpeg', 'jpg' => 'image/jpeg', 'webp' => 'image/webp', 'avif' => 'image/avif', 'csv' => 'text/csv', 'doc' => 'application/msword', 'pdf' => 'application/pdf', 'txt' => 'text/plain', 'json' => 'application/json', 'xml' => 'application/xml', 'mp4' => 'video/mp4', 'mp3' => 'audio/mpeg', 'zip' => 'application/zip'], 'nvl-media.group_types' => ['image' => ['svg', 'bmp', 'gif', 'png', 'ico', 'jpeg', 'jpg', 'webp', 'avif'], 'document' => ['doc', 'docx', 'pdf', 'ppt', 'pptx', 'xls', 'xlsx', 'csv', 'txt'], 'video' => ['mp4', 'mpeg', 'webm', 'mov'], 'audio' => ['mp3', 'wav', 'ogg', 'aac', 'flac'], 'archive' => ['zip', 'rar', '7z', 'tar', 'gz'], 'code' => ['json', 'xml']]]);
     }
 }

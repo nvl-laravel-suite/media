@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 use Illuminate\Contracts\Bus\Dispatcher;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -13,6 +15,7 @@ use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaImageVariation;
 use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Services\MediaAssetService;
+use Nvl\Media\Services\MediaDoctor;
 use Nvl\Media\Services\MediaLibrary;
 use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Media\Services\MediaOwnerSlotIdempotency;
@@ -26,12 +29,93 @@ use Nvl\Media\Tests\Fixtures\OwnershipMedia;
 use Nvl\Media\Tests\Fixtures\OwnershipMediaScenario;
 use Nvl\Media\Tests\OwnershipTestCase;
 use Nvl\Ownership\Services\OwnershipRunner;
+use Nvl\Ownership\Tests\Fixtures\OptsIntoAdoptedSchemaReuse;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
+use Nvl\Support\Ownership\Contracts\OwnershipContext;
+use Nvl\Support\Ownership\Enums\OwnershipContextMode;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
+use Nvl\Support\Providers\DoctorServiceProvider;
 
-uses(OwnershipTestCase::class);
+uses(OwnershipTestCase::class, OptsIntoAdoptedSchemaReuse::class);
 beforeEach(function (): void {
     Storage::fake('public');
+});
+it('passes strict aggregate Doctor for adopted Media with unresolved ownership', function (): void {
+    $this->app->register(DoctorServiceProvider::class);
+    $exit = Artisan::call('nvl:doctor', ['--strict' => true, '--format' => 'json']);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+    $checks = collect($report['checks'])->where('package', 'nvl/media')->keyBy('key');
+    $table = (new MediaOwnerSlotOperation)->getTable();
+
+    expect($checks["schema.index.{$table}.media_owner_slot_idempotency_unique"])->toMatchArray(['severity' => 'error', 'result' => 'pass'])
+        ->and($checks['storage.persisted_paths'])->toMatchArray(['severity' => 'info', 'result' => 'pass'])
+        ->and($checks['storage.persisted_paths']['message'])->toContain('deferred')
+        ->and($checks['owner_slots.registrations'])->toMatchArray(['severity' => 'info', 'result' => 'pass'])
+        ->and($checks['owner_slots.registrations']['message'])->toContain('deferred')
+        ->and($exit)->toBe(0);
+});
+it('reports an invalid adopted owner-slot idempotency constraint', function (bool $replaceScopedIndex, array $columns, bool $unique, string $expectedColumn): void {
+    $operation = new MediaOwnerSlotOperation;
+    $table = $operation->getTable();
+    $operation->getConnection()->getSchemaBuilder()->table($table, static function (Blueprint $table) use ($replaceScopedIndex, $columns, $unique): void {
+        if ($replaceScopedIndex) {
+            $table->dropUnique('media_owner_scope_idempotency_unique');
+        }
+        if ($unique) {
+            $table->unique($columns, $replaceScopedIndex ? 'media_owner_slot_idempotency_unique' : 'host_global_idempotency_unique');
+        } else {
+            $table->index($columns, 'media_owner_slot_idempotency_unique');
+        }
+    });
+
+    $check = collect(app(MediaDoctor::class)->inspect())->firstWhere('key', "schema.index.{$table}.media_owner_slot_idempotency_unique");
+    expect($check)->toMatchArray(['severity' => 'error', 'passed' => false])
+        ->and($check['message'])->toContain($expectedColumn);
+})->group('fresh-adoption')->with([
+    'unique extra column' => [true, ['owner_scope_key', 'idempotency_key', 'slot'], true, 'owner_scope_key'],
+    'non-unique scoped columns' => [true, ['owner_scope_key', 'idempotency_key'], false, 'owner_scope_key'],
+    'lingering global index' => [false, ['idempotency_key'], true, 'global'],
+]);
+it('checks both Media samples only for the admitted owner', function (): void {
+    $runner = app(OwnershipRunner::class);
+    $actor = OwnershipActor::query()->firstOrFail();
+    $company = OwnershipCompany::query()->findOrFail(7);
+    $otherCompany = OwnershipCompany::query()->findOrFail(8);
+    $doctor = app(MediaDoctor::class);
+
+    $runner->run($company, $actor, function () use ($actor, $doctor): void {
+        $owner = OwnershipMediaScenario::owner();
+        $media = OwnershipMediaScenario::upload($owner);
+        app(MediaOwnerSlotIdempotency::class)->begin((string) Str::uuid(), $actor, $owner, 'missing-slot', MediaOwnerSlotOperationType::Clear, []);
+        Storage::disk('public')->delete($media->buildPath());
+
+        $checks = collect($doctor->inspect())->keyBy('key');
+        expect($checks['storage.persisted_paths'])->toMatchArray(['severity' => 'warning', 'passed' => false])
+            ->and($checks['storage.persisted_paths']['message'])->toContain($media->buildPath())
+            ->and($checks['owner_slots.registrations'])->toMatchArray(['severity' => 'error', 'passed' => false])
+            ->and($checks['owner_slots.registrations']['message'])->toContain('missing-slot');
+    });
+
+    $runner->run($otherCompany, $actor, function () use ($doctor): void {
+        $checks = collect($doctor->inspect())->keyBy('key');
+        expect($checks['storage.persisted_paths'])->toMatchArray(['severity' => 'warning', 'passed' => true])
+            ->and($checks['owner_slots.registrations'])->toMatchArray(['severity' => 'error', 'passed' => true]);
+    });
+});
+it('keeps Media Doctor sample failures in an admitted central context without access', function (): void {
+    app(OwnershipRunner::class)->central('media-maintain', OwnershipActor::query()->firstOrFail(), function (): void {
+        $checks = collect(app(MediaDoctor::class)->inspect())->keyBy('key');
+        expect($checks['storage.persisted_paths'])->toMatchArray(['severity' => 'warning', 'passed' => false])
+            ->and($checks['owner_slots.registrations'])->toMatchArray(['severity' => 'error', 'passed' => false]);
+    });
+});
+it('keeps Media Doctor sample failures when unresolved ownership storage is unavailable', function (): void {
+    expect(app(OwnershipContext::class)->snapshot()->mode)->toBe(OwnershipContextMode::Unresolved);
+    config()->set('nvl-ownership.enabled', false);
+
+    $checks = collect(app(MediaDoctor::class)->inspect())->keyBy('key');
+    expect($checks['storage.persisted_paths'])->toMatchArray(['severity' => 'warning', 'passed' => false])
+        ->and($checks['owner_slots.registrations'])->toMatchArray(['severity' => 'error', 'passed' => false]);
 });
 it('removes the owned row pivot assignment and object on a real outer rollback', function (): void {
     app(OwnershipRunner::class)->run(OwnershipCompany::query()->findOrFail(7), OwnershipActor::query()->firstOrFail(), function (): void {

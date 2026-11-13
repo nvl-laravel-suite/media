@@ -12,8 +12,9 @@ use Nvl\Media\Tests\Fixtures\OwnershipCompany;
 use Nvl\Media\Tests\Fixtures\OwnershipMediaScenario;
 use Nvl\Media\Tests\OwnershipTestCase;
 use Nvl\Ownership\Services\OwnershipRunner;
+use Nvl\Ownership\Tests\Fixtures\OptsIntoAdoptedSchemaReuse;
 
-uses(OwnershipTestCase::class);
+uses(OwnershipTestCase::class, OptsIntoAdoptedSchemaReuse::class);
 
 it('retains native owner admission when purging a tombstone and inherited variation objects', function (): void {
     Storage::fake('public');

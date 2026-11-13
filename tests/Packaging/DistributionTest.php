@@ -6,37 +6,49 @@ use Composer\InstalledVersions;
 use Illuminate\Filesystem\Filesystem;
 use Symfony\Component\Process\Process;
 
-beforeEach(function (): void {
-    $this->packageRoot = dirname(__DIR__, 2);
-    $this->distributionRoot = sys_get_temp_dir().'/nvl-media-distribution-'.bin2hex(random_bytes(8));
-    $filesystem = new Filesystem;
-    $filesystem->makeDirectory($this->distributionRoot.'/source', 0755, true);
+$sharedDistributionRoot = null;
+$sharedArchive = null;
+$sharedPackageRoot = dirname(__DIR__, 2);
 
-    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($this->packageRoot, FilesystemIterator::SKIP_DOTS | FilesystemIterator::FOLLOW_SYMLINKS)) as $file) {
-        $relative = substr($file->getPathname(), strlen($this->packageRoot) + 1);
-        if (! $file->isFile() || preg_match('~^(?:vendor|\.temp)/~', $relative)) {
+beforeAll(function () use (&$sharedDistributionRoot, &$sharedArchive, $sharedPackageRoot): void {
+    $sharedDistributionRoot = sys_get_temp_dir().'/nvl-media-distribution-'.bin2hex(random_bytes(8));
+    $filesystem = new Filesystem;
+    $filesystem->makeDirectory($sharedDistributionRoot.'/source', 0755, true);
+
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($sharedPackageRoot, FilesystemIterator::SKIP_DOTS | FilesystemIterator::FOLLOW_SYMLINKS)) as $file) {
+        $relative = substr($file->getPathname(), strlen($sharedPackageRoot) + 1);
+        if (! $file->isFile() || preg_match('~^(?:vendor|tests|\.temp)/~', $relative)) {
             continue;
         }
-        $destination = $this->distributionRoot.'/source/'.$relative;
+        $destination = $sharedDistributionRoot.'/source/'.$relative;
         $filesystem->ensureDirectoryExists(dirname($destination));
         $filesystem->copy($file->getPathname(), $destination);
     }
 
-    foreach (['vendor/should-not-ship.php', 'composer.lock', '.temp/cache', 'build/output', 'coverage/report', '.phpunit.cache/test-results', '.phpunit.result.cache', '.DS_Store', 'src/.DS_Store'] as $excluded) {
-        $destination = $this->distributionRoot.'/source/'.$excluded;
+    foreach (['vendor/should-not-ship.php', 'tests/should-not-ship.php', 'composer.lock', '.temp/cache', 'build/output', 'coverage/report', '.phpunit.cache/test-results', '.phpunit.result.cache', '.DS_Store', 'src/.DS_Store'] as $excluded) {
+        $destination = $sharedDistributionRoot.'/source/'.$excluded;
         $filesystem->ensureDirectoryExists(dirname($destination));
         $filesystem->put($destination, 'development artifact');
     }
 
-    $process = new Process(['composer', '--working-dir='.$this->distributionRoot.'/source', 'archive', '--format=tar', '--dir='.$this->distributionRoot, '--file=nvl-media', '--no-interaction']);
+    $process = new Process(['composer', '--working-dir='.$sharedDistributionRoot.'/source', 'archive', '--format=tar', '--dir='.$sharedDistributionRoot, '--file=nvl-media', '--no-interaction']);
     $process->mustRun();
-    $this->archive = new PharData($this->distributionRoot.'/nvl-media.tar');
-    $this->archive->extractTo($this->distributionRoot.'/dist');
+    $sharedArchive = new PharData($sharedDistributionRoot.'/nvl-media.tar');
+    $sharedArchive->extractTo($sharedDistributionRoot.'/dist');
 });
 
-afterEach(function (): void {
-    unset($this->archive);
-    (new Filesystem)->deleteDirectory($this->distributionRoot);
+afterAll(function () use (&$sharedDistributionRoot, &$sharedArchive): void {
+    $sharedArchive = null;
+    if (is_string($sharedDistributionRoot) && is_dir($sharedDistributionRoot)) {
+        (new Filesystem)->deleteDirectory($sharedDistributionRoot);
+    }
+    $sharedDistributionRoot = null;
+});
+
+beforeEach(function () use (&$sharedDistributionRoot, &$sharedArchive, $sharedPackageRoot): void {
+    $this->packageRoot = $sharedPackageRoot;
+    $this->distributionRoot = $sharedDistributionRoot;
+    $this->archive = $sharedArchive;
 });
 
 it('ships complete runtime and integration resources while excluding development artifacts', function (): void {
@@ -63,7 +75,7 @@ it('ships complete runtime and integration resources while excluding development
 
 it('boots the extracted package and publishes its skills without optional integrations', function (): void {
     $vendor = dirname(InstalledVersions::getInstallPath('laravel/framework') ?? throw new RuntimeException('Laravel test dependencies are not installed.'), 2);
-    $process = new Process([PHP_BINARY, $this->packageRoot.'/tests/Fixtures/Packaging/distribution-consumer.php', $vendor, $this->distributionRoot.'/dist', $this->distributionRoot.'/consumer']);
+    $process = new Process([PHP_BINARY, '-d', 'opcache.enable_cli=1', $this->packageRoot.'/tests/Fixtures/Packaging/distribution-consumer.php', $vendor, $this->distributionRoot.'/dist', $this->distributionRoot.'/consumer']);
     $process->mustRun();
     $result = json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR);
 

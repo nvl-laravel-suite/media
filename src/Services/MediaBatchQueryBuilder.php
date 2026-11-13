@@ -64,7 +64,6 @@ final readonly class MediaBatchQueryBuilder
         $grammar = $visible->getGrammar();
         $driver = $query->getModel()->getConnection()->getDriverName();
         $window = match ($driver) {
-            'mysql', 'mariadb' => 'ROW_NUMBER() OVER (PARTITION BY BINARY associable_type, BINARY associable_id, BINARY collection ORDER BY `order` ASC, id ASC) AS nvl_media_rank',
             'pgsql' => 'ROW_NUMBER() OVER (PARTITION BY associable_type COLLATE "C", associable_id COLLATE "C", collection COLLATE "C" ORDER BY "order" ASC, id ASC) AS nvl_media_rank',
             default => 'ROW_NUMBER() OVER (PARTITION BY associable_type COLLATE BINARY, associable_id COLLATE BINARY, collection COLLATE BINARY ORDER BY "order" ASC, id ASC) AS nvl_media_rank',
         };
@@ -74,13 +73,13 @@ final readonly class MediaBatchQueryBuilder
             foreach ($batch->identities() as $identity) {
                 $pairs->orWhere(function (QueryBuilder $pair) use ($identity, $ceilings, $driver, $grammar): void {
                     foreach (['associable_type' => $identity->type, 'associable_id' => $identity->id] as $column => $value) {
-                        $pair->whereRaw(ExactMediaText::value(ExactMediaText::text($grammar->wrap($column), $driver), $driver), [$value, $value]);
+                        $pair->whereRaw(ExactMediaText::value(ExactMediaText::text($grammar->wrap($column)), $driver), [$value, $value]);
                     }
                     $pair->where(function (QueryBuilder $slots) use ($identity, $ceilings, $driver, $grammar): void {
                         foreach ($ceilings[$identity->type][$identity->id] as $slot => $ceiling) {
                             $slots->orWhere(function (QueryBuilder $named) use ($slot, $ceiling, $driver, $grammar): void {
                                 $name = (string) $slot;
-                                $named->whereRaw(ExactMediaText::value(ExactMediaText::text($grammar->wrap('collection'), $driver), $driver), [$name, $name]);
+                                $named->whereRaw(ExactMediaText::value(ExactMediaText::text($grammar->wrap('collection')), $driver), [$name, $name]);
                                 $named->where('nvl_media_rank', '<=', $ceiling);
                             });
                         }
@@ -114,8 +113,8 @@ final readonly class MediaBatchQueryBuilder
         MediaBatchOwnerAdmission::exact($associations, 'collection', $slot);
         $connection = $associations->getModel()->getConnection();
         $grammar = $connection->getQueryGrammar();
-        $left = ExactMediaText::text($grammar->wrap($associations->getModel()->qualifyColumn('associable_id')), $connection->getDriverName());
-        $right = ExactMediaText::text($grammar->wrap($owner->getQualifiedKeyName()), $connection->getDriverName());
+        $left = ExactMediaText::text($grammar->wrap($associations->getModel()->qualifyColumn('associable_id')));
+        $right = ExactMediaText::text($grammar->wrap($owner->getQualifiedKeyName()));
         $associations->whereRaw(new ExactMediaText($left, $right, $connection->getDriverName()));
         $associations->whereIn('media_id', $this->available(MediaModelRegistry::query()->withoutEagerLoads())->select('id'));
         $associations->where(fn (Builder $nested) => $policy->scopeHostAssociations($nested, $owner, $actor, $slot));
@@ -129,8 +128,8 @@ final readonly class MediaBatchQueryBuilder
     public function associations(): Builder
     {
         $query = MediaAssociation::query()->withoutEagerLoads();
-        if (! in_array($query->getModel()->getConnection()->getDriverName(), ['sqlite', 'pgsql', 'mysql', 'mariadb'], true)) {
-            throw new MediaBatchReadException('Media batch reads require SQLite, PostgreSQL, MySQL or MariaDB window support.');
+        if (! in_array($query->getModel()->getConnection()->getDriverName(), ['sqlite', 'pgsql'], true)) {
+            throw new MediaBatchReadException('Media batch reads require SQLite or PostgreSQL window support.');
         }
 
         return $this->boundary->query($query, 'media.associations')->where($query->getModel()->qualifyColumn('is_active'), true);

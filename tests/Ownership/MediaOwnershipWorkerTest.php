@@ -21,7 +21,7 @@ use Symfony\Component\Process\Process;
 
 uses(OwnershipTestCase::class);
 it('runs real captured Media workers and concurrent receipts on native databases', function (): void {
-    if (! in_array(getenv('NVL_OWNERSHIP_TEST_DRIVER'), ['pgsql', 'mysql', 'mariadb'], true)) {
+    if (getenv('NVL_OWNERSHIP_TEST_DRIVER') !== 'pgsql') {
         $this->markTestSkipped('Requires the explicitly isolated native persistence database.');
     }
     Storage::fake('public');
@@ -69,7 +69,7 @@ it('runs real captured Media workers and concurrent receipts on native databases
     }
     $source = json_encode(NativeDatabaseSource::capture(DB::connection('sqlite')), JSON_THROW_ON_ERROR);
     $root = Storage::disk('public')->path('');
-    $worker = new Process([PHP_BINARY, __DIR__.'/../Fixtures/ownership-worker.php', $source, json_encode(['root' => $root], JSON_THROW_ON_ERROR)], timeout: 40);
+    $worker = new Process([PHP_BINARY, '-d', 'opcache.enable_cli=1', __DIR__.'/../Fixtures/ownership-worker.php', $source, json_encode(['root' => $root], JSON_THROW_ON_ERROR)], timeout: 40);
     $worker->mustRun();
     $pending = DB::table('jobs')->get(['queue', 'attempts', 'reserved_at', 'available_at', 'created_at'])->all();
     expect($worker->getOutput())->toBe('unresolved')->and(DB::table('jobs')->count())->toBe(0, json_encode(['pending' => $pending, 'worker_errors' => $worker->getErrorOutput(), 'failed' => DB::table('failed_jobs')->pluck('exception')->all()], JSON_THROW_ON_ERROR))->and(DB::table('failed_jobs')->pluck('exception')->all())->toBe([]);
@@ -88,7 +88,7 @@ it('runs real captured Media workers and concurrent receipts on native databases
     try {
         foreach ([7, 8] as $index => $company) {
             $options = ['root' => $root, 'mode' => 'receipt', 'company' => $company, 'owner' => $records[$company]['owner'], 'key' => $key, 'gate' => $gate, 'ready' => $ready[$index]];
-            $processes[] = $process = new Process([PHP_BINARY, __DIR__.'/../Fixtures/ownership-worker.php', $source, json_encode($options, JSON_THROW_ON_ERROR)], timeout: 30);
+            $processes[] = $process = new Process([PHP_BINARY, '-d', 'opcache.enable_cli=1', __DIR__.'/../Fixtures/ownership-worker.php', $source, json_encode($options, JSON_THROW_ON_ERROR)], timeout: 30);
             $process->start();
         }
         $deadline = microtime(true) + 15;

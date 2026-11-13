@@ -14,8 +14,8 @@ use Nvl\Tenancy\Services\TenantRunner;
 use Nvl\Tenancy\ValueObjects\TenantId;
 
 it('claims the same owner-slot key concurrently in independent tenant partitions', function (): void {
-    if (! in_array(DB::connection()->getDriverName(), ['mysql', 'pgsql'], true) || ! function_exists('pcntl_fork') || ! function_exists('pcntl_waitpid') || ! function_exists('pcntl_exec')) {
-        $this->markTestSkipped('The tenant owner-slot race requires PostgreSQL/MySQL and pcntl.');
+    if (DB::connection()->getDriverName() !== 'pgsql' || ! function_exists('pcntl_fork') || ! function_exists('pcntl_waitpid') || ! function_exists('pcntl_exec')) {
+        $this->markTestSkipped('The tenant owner-slot race requires PostgreSQL and pcntl.');
     }
     $scenario = MediaTenancyScenario::install();
     $ownerA = $scenario->owner($scenario::A);

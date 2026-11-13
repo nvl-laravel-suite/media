@@ -13,10 +13,11 @@ use Nvl\Media\Tests\Fixtures\CatalogOwnershipMedia;
 use Nvl\Media\Tests\Fixtures\OwnershipActor;
 use Nvl\Media\Tests\Fixtures\OwnershipCompany;
 use Nvl\Ownership\Services\OwnershipRunner;
+use Nvl\Ownership\Tests\Fixtures\OptsIntoAdoptedSchemaReuse;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 
-uses(CatalogMediaTestCase::class);
+uses(CatalogMediaTestCase::class, OptsIntoAdoptedSchemaReuse::class);
 it('defaults grant issuance to deny and keeps copied bytes independent after revocation', function (): void {
     Storage::fake('public');
     $runner = app(OwnershipRunner::class);

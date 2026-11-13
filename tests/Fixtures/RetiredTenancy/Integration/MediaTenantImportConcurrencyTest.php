@@ -27,8 +27,8 @@ use Nvl\Tenancy\ValueObjects\TenantId;
 /** Return why the separate-process catalog race cannot run. */
 function mediaCatalogConcurrencySkipReason(): ?string
 {
-    if (! in_array(DB::connection()->getDriverName(), ['mysql', 'pgsql'], true)) {
-        return 'The Media catalog race requires PostgreSQL or MySQL.';
+    if (DB::connection()->getDriverName() !== 'pgsql') {
+        return 'The Media catalog race requires PostgreSQL.';
     }
     if (! function_exists('pcntl_fork') || ! function_exists('pcntl_waitpid') || ! function_exists('pcntl_exec')) {
         return 'The Media catalog race requires pcntl.';
@@ -153,7 +153,7 @@ it('linearizes catalog import against revocation with each process winning once'
     $filesAfter = Storage::disk('tenant-disk')->allFiles();
     sort($filesAfter);
     expect($revokeResult['revoke']['ok'])->toBeTrue()->and($revokeResult['import']['ok'])->toBeFalse()->and($revokeResult['import']['message'])->toContain('changed during staging')->and(DB::table(MediaTables::Media)->where('tenant_id', MediaTenancyScenario::A)->where('catalog_source_id', $revokeFirst['source']->id)->exists())->toBeFalse()->and($filesAfter)->toBe($filesBefore);
-})->skip(fn (): bool => mediaCatalogConcurrencySkipReason() !== null, 'The Media catalog race requires PostgreSQL/MySQL and pcntl.');
+})->skip(fn (): bool => mediaCatalogConcurrencySkipReason() !== null, 'The Media catalog race requires PostgreSQL and pcntl.');
 it('linearizes catalog import against a separate-process grant refresh', function (): void {
     $scenario = MediaTenancyScenario::install(catalogCopies: true);
     $importFirst = mediaCatalogConcurrencyFixture($scenario, 'refresh-import-first');
@@ -162,4 +162,4 @@ it('linearizes catalog import against a separate-process grant refresh', functio
     $refreshFirst = mediaCatalogConcurrencyFixture($scenario, 'refresh-first');
     $refreshResult = mediaCatalogConcurrencyRace($refreshFirst['grant'], $refreshFirst['source'], 'revoke', 'refresh');
     expect($refreshResult['revoke']['ok'])->toBeTrue()->and($refreshResult['import']['ok'])->toBeFalse()->and($refreshResult['import']['message'])->toContain('changed during staging')->and(DB::table(MediaTables::Media)->where('tenant_id', MediaTenancyScenario::A)->where('catalog_source_id', $refreshFirst['source']->id)->exists())->toBeFalse();
-})->skip(fn (): bool => mediaCatalogConcurrencySkipReason() !== null, 'The Media catalog refresh race requires PostgreSQL/MySQL and pcntl.');
+})->skip(fn (): bool => mediaCatalogConcurrencySkipReason() !== null, 'The Media catalog refresh race requires PostgreSQL and pcntl.');

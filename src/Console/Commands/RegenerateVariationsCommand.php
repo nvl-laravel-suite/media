@@ -6,6 +6,7 @@ namespace Nvl\Media\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Enums\MediaType;
@@ -272,11 +273,11 @@ class RegenerateVariationsCommand extends Command
         }
 
         if ($after !== null) {
-            $query->where('created_at', '>=', $after);
+            $query->where('created_at', '>=', Carbon::parse($after)->startOfDay());
         }
 
         if ($before !== null) {
-            $query->where('created_at', '<=', $before);
+            $query->where('created_at', '<=', Carbon::parse($before)->endOfDay());
         }
 
         return $query->orderBy('id');

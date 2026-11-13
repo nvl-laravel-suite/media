@@ -79,7 +79,6 @@ final readonly class OwnerMediaReader
         $counts = new stdClass;
         $connection = $query->getModel()->getConnection();
         $group = match ($connection->getDriverName()) {
-            'mysql', 'mariadb' => new Expression('BINARY `collection`'),
             'pgsql' => new Expression('"collection" COLLATE "C"'),
             default => new Expression('"collection" COLLATE BINARY'),
         };

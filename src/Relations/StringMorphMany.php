@@ -127,10 +127,6 @@ final class StringMorphMany extends MorphMany
     {
         $wrapped = $query->getQuery()->getGrammar()->wrap($column);
 
-        return match ($query->getModel()->getConnection()->getDriverName()) {
-            'pgsql', 'sqlite' => "CAST({$wrapped} AS TEXT)",
-            'sqlsrv' => "CAST({$wrapped} AS NVARCHAR(255))",
-            default => "CAST({$wrapped} AS CHAR)",
-        };
+        return "CAST({$wrapped} AS TEXT)";
     }
 }

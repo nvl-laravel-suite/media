@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Illuminate\Database\Connection;
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\MySqlConnection;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\Builder;
 use Illuminate\Support\Facades\DB;
@@ -185,9 +184,7 @@ return new class extends Migration
 
             return;
         }
-        $expression = in_array($driver, ['mysql', 'mariadb'], true)
-            ? "((ownership_key = 'platform' AND tenant_id IS NULL) OR (tenant_id IS NOT NULL AND ownership_key = CONCAT('tenant:', tenant_id)))"
-            : "((ownership_key = 'platform' AND tenant_id IS NULL) OR (tenant_id IS NOT NULL AND ownership_key = 'tenant:' || tenant_id))";
+        $expression = "((ownership_key = 'platform' AND tenant_id IS NULL) OR (tenant_id IS NOT NULL AND ownership_key = 'tenant:' || tenant_id))";
         try {
             $connection->statement("ALTER TABLE {$table} ADD CONSTRAINT {$name} CHECK ({$expression})");
         } catch (Throwable $exception) {
@@ -207,9 +204,7 @@ return new class extends Migration
 
             return;
         }
-        $sql = $connection instanceof MySqlConnection && ! $connection->isMaria()
-            ? "ALTER TABLE {$table} DROP CHECK {$name}"
-            : "ALTER TABLE {$table} DROP CONSTRAINT IF EXISTS {$name}";
+        $sql = "ALTER TABLE {$table} DROP CONSTRAINT IF EXISTS {$name}";
         try {
             $connection->statement($sql);
         } catch (Throwable $exception) {

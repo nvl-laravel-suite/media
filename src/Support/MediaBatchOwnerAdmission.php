@@ -145,7 +145,7 @@ final readonly class MediaBatchOwnerAdmission
     public static function exact(Builder $query, string $column, string $value): void
     {
         $connection = $query->getModel()->getConnection();
-        $wrapped = ExactMediaText::text($connection->getQueryGrammar()->wrap($column), $connection->getDriverName());
+        $wrapped = ExactMediaText::text($connection->getQueryGrammar()->wrap($column));
         $query->whereRaw(ExactMediaText::value($wrapped, $connection->getDriverName()), [$value, $value]);
     }
 }

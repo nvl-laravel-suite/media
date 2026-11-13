@@ -283,7 +283,7 @@ final class StorageHealthCommand extends Command
             /** @var Media $row */
             $visibility = $row->is_public ? 'public' : 'private';
             $rawTotal = $row->getAttribute('total');
-            $total = is_int($rawTotal) ? $rawTotal : 0;
+            $total = is_numeric($rawTotal) ? (int) $rawTotal : 0;
 
             $this->line("  {$row->disk} / {$visibility}: {$total}");
         }

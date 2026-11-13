@@ -163,3 +163,16 @@ it('updates explicit nonowned storage paths when the native service changes the 
     expect(Storage::disk('public')->get($updated->buildPath()))->toBe($operation === 'replace' ? 'new explicit bytes' : 'old-content');
     Storage::disk('public')->assertMissing($oldPath);
 })->with(['replace', 'move']);
+
+it('does not discard deferred owned source deletion when an unrelated secondary connection rolls back', function (): void {
+    config()->set('database.connections.media_secondary_tx', ['driver' => 'sqlite', 'database' => ':memory:']);
+    $media = createCommittedTransactionMedia(['hash' => 'cross-connection-delete.txt']);
+    $path = $media->buildPath();
+
+    DB::connection('media_secondary_tx')->beginTransaction();
+    app(MediaLibrary::class)->delete(SystemActor::Background, $media);
+    DB::connection('media_secondary_tx')->rollBack();
+
+    expect(Media::withTrashed()->find($media->id)?->trashed())->toBeTrue();
+    Storage::disk('public')->assertMissing($path);
+});

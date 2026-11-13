@@ -26,7 +26,7 @@ use Orchestra\Testbench\Foundation\Application;
 require dirname(__DIR__, 5).'/vendor/autoload.php';
 $source = json_decode($argv[1], true, flags: JSON_THROW_ON_ERROR);
 $options = json_decode($argv[2], true, flags: JSON_THROW_ON_ERROR);
-if (! is_array($source) || ! in_array($source['driver'] ?? null, ['pgsql', 'mysql', 'mariadb'], true) || ! is_string($source['database'] ?? null) || preg_match('/^nvl_own_test_[a-z0-9_]+$/D', $source['database']) !== 1 || ! is_array($options) || ! is_string($options['root'] ?? null)) {
+if (! is_array($source) || ($source['driver'] ?? null) !== 'pgsql' || ! is_string($source['database'] ?? null) || preg_match('/^nvl_own_test_[a-z0-9_]+$/D', $source['database']) !== 1 || ! is_array($options) || ! is_string($options['root'] ?? null)) {
     throw new RuntimeException('Media workers require a dedicated native persistence source.');
 }
 OwnershipWorkerProvider::$source = $source;

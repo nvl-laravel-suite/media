@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Nvl\Media\Providers;
 
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use InvalidArgumentException;
 use Nvl\Media\Console\Commands\AdoptSpatieMediaCommand;
 use Nvl\Media\Console\Commands\MediaDoctorCommand;
 use Nvl\Media\Console\Commands\MigrateDiskCommand;
@@ -207,10 +209,18 @@ final class MediaServiceProvider extends ServiceProvider implements OwnershipInt
 
         $this->app->bindIf(
             MediaContentScanner::class,
-            MediaConfiguration::string(
-                'nvl-media.content_scanner',
-                NullMediaContentScanner::class,
-            ),
+            static function (Application $app): MediaContentScanner {
+                $class = MediaConfiguration::string(
+                    'nvl-media.content_scanner',
+                    NullMediaContentScanner::class,
+                );
+                $scanner = $app->make($class);
+                if (! $scanner instanceof MediaContentScanner) {
+                    throw new InvalidArgumentException('Configured media content_scanner must implement MediaContentScanner.');
+                }
+
+                return $scanner;
+            },
         );
         $this->app->bindIf(MediaAuthorization::class, DefaultMediaAuthorization::class);
         $this->app->bindIf(MediaBatchAuthorization::class, UnsupportedMediaBatchAuthorization::class);
@@ -219,18 +229,36 @@ final class MediaServiceProvider extends ServiceProvider implements OwnershipInt
         $this->app->bindIf(MediaHostResolver::class, SystemMediaHostResolver::class);
         $this->app->bindIf(
             MediaSearchDriver::class,
-            MediaConfiguration::string(
-                'nvl-media.query.search_driver',
-                PortableMediaSearchDriver::class,
-            ),
+            static function (Application $app): MediaSearchDriver {
+                $class = MediaConfiguration::string(
+                    'nvl-media.query.search_driver',
+                    PortableMediaSearchDriver::class,
+                );
+                $driver = $app->make($class);
+                if (! $driver instanceof MediaSearchDriver) {
+                    throw new InvalidArgumentException('Configured media search_driver must implement MediaSearchDriver.');
+                }
+
+                return $driver;
+            },
         );
-        $multipartGateway = (bool) config('nvl-media.multipart.enabled', false)
-            ? MediaConfiguration::string(
-                'nvl-media.multipart.gateway',
-                UnsupportedMultipartUploadGateway::class,
-            )
-            : UnsupportedMultipartUploadGateway::class;
-        $this->app->bindIf(MultipartUploadGateway::class, $multipartGateway);
+        $this->app->bindIf(
+            MultipartUploadGateway::class,
+            static function (Application $app): MultipartUploadGateway {
+                $class = (bool) config('nvl-media.multipart.enabled', false)
+                    ? MediaConfiguration::string(
+                        'nvl-media.multipart.gateway',
+                        UnsupportedMultipartUploadGateway::class,
+                    )
+                    : UnsupportedMultipartUploadGateway::class;
+                $gateway = $app->make($class);
+                if (! $gateway instanceof MultipartUploadGateway) {
+                    throw new InvalidArgumentException('Configured media multipart gateway must implement MultipartUploadGateway.');
+                }
+
+                return $gateway;
+            },
+        );
 
     }
 

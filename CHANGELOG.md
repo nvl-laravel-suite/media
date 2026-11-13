@@ -5,11 +5,15 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Key transaction rollback staging by connection name and transaction depth, match Unicode filenames case-insensitively across SQLite and PostgreSQL (`COLLATE pg_c_utf8`), and harden attachment and variation CLI lifecycles.
+
 ## [7.0.4] - 2026-11-11
 
 ### Fixed
 
-- Return a model's media associations in a stable order when several share the same `order` value (the default is 0). The `nvlMediaAssociations()` relation and the `ordered()` scope sorted by `order` alone, so PostgreSQL and MySQL could return two files of one slot in either order; they now break ties by identifier, as the paginated readers already did.
+- Return a model's media associations in a stable order when several share the same `order` value (the default is 0). The `nvlMediaAssociations()` relation and the `ordered()` scope sorted by `order` alone. Both now break ties by identifier, as the paginated readers already did.
 - Keep builder-level `forceDelete()`, `updateOrInsert()` and `updateFrom()` on Media inside the ownership boundary by adopting Core's owned write trait on the Media builder. Require Core 7.0.6.
 - `MediaAttachments::deleteAll()` no longer throws `MediaInUseException` when one public asset fills two collections of the owner being cleaned up; each placement is removed in turn. Removing such an asset through `remove()` or `removeFromModel()` without naming a collection is still refused.
 - Accept WAV, RAR and ADTS AAC uploads with the default allowlist by adding the MIME names libmagic reports (`audio/x-wav`, `application/x-rar`, `audio/x-hx-aac-adts`).
@@ -29,7 +33,7 @@ All notable changes to `nvl/media` are documented here.
 - `nvl:media:reconcile` uses `nvl-media.reconciliation.orphan_age_minutes` when `--older-than` is not passed, and no longer copies its referenced-path set once per row.
 - Remove configuration nothing read: `nvl-media.integrity.*` and `nvl-media.multipart.required_scan`, with their doctor checks. Integrity verification and the multipart scan requirement are unconditional.
 - Hold the deduplication lock until the host transaction ends, so two identical uploads inside open transactions no longer both insert.
-- Library search treats `%`, `_` and `\` as literal text and ignores letter case on SQLite, MySQL, MariaDB and PostgreSQL alike.
+- Library search treats `%`, `_` and `\` as literal text and ignores letter case.
 - `Media::getUrl('thumb')` and `MediaImageVariation::getUrl()` use the cached existence lookup instead of asking the disk on every call.
 - Refuse to decode an image whose header declares more than `nvl-media.image_constraints.max_pixels` (64,000,000) pixels.
 - Integer settings supplied as numeric strings by environment variables are honoured instead of falling back to the default.

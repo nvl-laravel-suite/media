@@ -28,15 +28,11 @@ final readonly class ExactMediaText implements Expression
     }
 
     /**
-     * Cast one grammar-wrapped identifier column to the driver's text type.
+     * Cast one grammar-wrapped identifier column to text.
      */
-    public static function text(string $column, string $driver): string
+    public static function text(string $column): string
     {
-        return match ($driver) {
-            'pgsql', 'sqlite' => "CAST({$column} AS TEXT)",
-            'sqlsrv' => "CAST({$column} AS NVARCHAR(255))",
-            default => "CAST({$column} AS CHAR)",
-        };
+        return "CAST({$column} AS TEXT)";
     }
 
     /** Return byte-exact SQL for the active grammar. */
@@ -44,26 +40,16 @@ final readonly class ExactMediaText implements Expression
     {
         if ($this->valueComparison) {
             return match ($this->driver) {
-                'mysql', 'mariadb' => "BINARY {$this->left} = BINARY ? ".
-                    "AND OCTET_LENGTH({$this->left}) = OCTET_LENGTH(?)",
                 'pgsql' => "{$this->left} COLLATE \"C\" = CAST(? AS TEXT) COLLATE \"C\" ".
                     "AND OCTET_LENGTH({$this->left}) = OCTET_LENGTH(CAST(? AS TEXT))",
-                'sqlsrv' => "{$this->left} COLLATE Latin1_General_100_BIN2 = ".
-                    'CAST(? AS NVARCHAR(255)) COLLATE Latin1_General_100_BIN2 '.
-                    "AND DATALENGTH({$this->left}) = DATALENGTH(CAST(? AS NVARCHAR(255)))",
                 default => "{$this->left} = ? COLLATE BINARY ".
                     "AND LENGTH(CAST({$this->left} AS BLOB)) = LENGTH(CAST(? AS BLOB))",
             };
         }
 
         return match ($this->driver) {
-            'mysql', 'mariadb' => "BINARY {$this->left} = BINARY {$this->right} ".
-                "AND OCTET_LENGTH({$this->left}) = OCTET_LENGTH({$this->right})",
             'pgsql' => "{$this->left} COLLATE \"C\" = {$this->right} COLLATE \"C\" ".
                 "AND OCTET_LENGTH({$this->left}) = OCTET_LENGTH({$this->right})",
-            'sqlsrv' => "{$this->left} COLLATE Latin1_General_100_BIN2 = ".
-                "{$this->right} COLLATE Latin1_General_100_BIN2 ".
-                "AND DATALENGTH({$this->left}) = DATALENGTH({$this->right})",
             default => "{$this->left} = {$this->right} COLLATE BINARY ".
                 "AND LENGTH(CAST({$this->left} AS BLOB)) = ".
                 "LENGTH(CAST({$this->right} AS BLOB))",
