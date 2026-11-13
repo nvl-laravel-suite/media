@@ -7,6 +7,11 @@ use ShipMonk\ComposerDependencyAnalyser\Config\ErrorType;
 
 $configuration = (new Configuration)
     ->ignoreErrorsOnPackage('nvl/media', [ErrorType::SHADOW_DEPENDENCY])
+    ->ignoreErrorsOnExtensionsAndPaths(
+        ['ext-pdo', 'ext-pdo_sqlite'],
+        [__DIR__.'/src/Services/PortableMediaSearchDriver.php'],
+        [ErrorType::SHADOW_DEPENDENCY],
+    )
     ->ignoreErrorsOnPackage(
         'orchestra/testbench-core',
         [ErrorType::SHADOW_DEPENDENCY],

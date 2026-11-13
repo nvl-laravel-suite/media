@@ -1,9 +1,13 @@
 <?php
 
 declare(strict_types=1);
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
+use Nvl\Media\Contracts\MediaSearchDriver;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
@@ -96,16 +100,62 @@ describe('New index filters', function () {
         $ids = collect($items)->pluck('id')->toArray();
         expect($ids)->toContain($media_avatar->id)->not->toContain($media_gallery->id);
     });
-    it('matches Unicode Cyrillic filenames case-insensitively during search', function () {
+    it('matches Unicode filenames case-insensitively during search', function (string $filename, string $search, string $otherFilename): void {
         $user = explorerUser();
-        $matching = explorerMedia(['is_public' => true, 'filename' => 'Съобщение-клиент.jpg']);
-        $other = explorerMedia(['is_public' => true, 'filename' => 'Друг-документ.jpg']);
-        $response = $this->actingAs($user)->getJson('/nvl/api/v1/media?search='.urlencode('съобщение'));
+        $matching = explorerMedia(['filename' => $filename]);
+        $other = explorerMedia(['filename' => $otherFilename]);
+        $response = $this->actingAs($user)->getJson('/nvl/api/v1/media?search='.urlencode($search));
         $response->assertStatus(200);
         $ids = collect(extractMediaItems($response))->pluck('id')->toArray();
         expect($ids)->toContain($matching->id)->not->toContain($other->id);
-    });
+    })->with([
+        'Cyrillic' => ['Съобщение-клиент.jpg', 'съобщение', 'Друг-документ.jpg'],
+        'mixed case' => ['ÄbÇDé.jpg', 'äbçdé', 'ÄbCDé.jpg'],
+        'literal wildcards and escape character' => ['ÄbÇDé!%_.jpg', 'äbçdé!%_', 'ÄbÇDé!xA.jpg'],
+    ]);
 });
+
+it('matches Unicode filenames without case distinctions on SQLite read and write connections', function (string $filename, string $search): void {
+    $primary = 'media_search_primary';
+    $replica = 'media_search_replica';
+    $originalConnection = config('nvl-media.connection');
+    config(['nvl-media.connection' => $primary]);
+    $model = new Media;
+    $table = $model->getTable();
+
+    try {
+        foreach ([$primary, $replica] as $connection) {
+            config(["database.connections.{$connection}" => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
+            Schema::connection($connection)->create($table, function (Blueprint $table): void {
+                $table->string('id')->primary();
+                $table->string('filename');
+                $table->string('type');
+                $table->json('tags')->nullable();
+                $table->softDeletes();
+            });
+            DB::connection($connection)->table($table)->insert(['id' => $connection, 'filename' => $filename, 'type' => 'image']);
+        }
+        DB::connection($primary)->setReadPdo(DB::connection($replica)->getPdo());
+
+        $read = $model->newQuery();
+        $write = $model->newQuery()->useWritePdo();
+        $driver = app(MediaSearchDriver::class);
+        $driver->apply($read, $search);
+        $driver->apply($write, $search);
+
+        expect($read->pluck('id')->all())->toBe([$replica])
+            ->and($write->pluck('id')->all())->toBe([$primary]);
+    } finally {
+        config(['nvl-media.connection' => $originalConnection]);
+        DB::purge($primary);
+        DB::purge($replica);
+    }
+})->with([
+    'mixed case' => ['ÄbÇDé.jpg', 'äbçdé'],
+    'uppercase sigma' => ['Σ.jpg', 'ς'],
+    'final sigma' => ['ς.jpg', 'Σ'],
+]);
+
 /* =================================================================
  * Rename
  * ================================================================= */

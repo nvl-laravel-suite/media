@@ -3,10 +3,12 @@
 declare(strict_types=1);
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\DatabaseTransactionsManager;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -35,6 +37,7 @@ use Nvl\Media\Services\MediaAttachments;
 use Nvl\Media\Services\MediaOwnerSlotIdempotency;
 use Nvl\Media\Services\MediaStagingPolicy;
 use Nvl\Media\Services\MediaTemporaryFileRegistry;
+use Nvl\Media\Services\MediaTransactionRollbackRegistry;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaOwnerSlotOperationClaim;
 use Nvl\Media\Tests\Fixtures\MediaLibraryItemDataFactory;
@@ -945,6 +948,79 @@ it('completes split copy claims only at an outer transaction root', function ():
         releaseOwnerSlotLedger($connection, $ledgerPath);
     }
 });
+it('retries a rolled-back split slot claim after its sibling savepoint commits', function (string $operation): void {
+    Storage::fake('public');
+    $ledger = 'owner_slot_savepoint';
+    $connection = DB::connection();
+    $testingManager = app('db.transactions');
+    // Testbench's wrapping transaction can make the savepoint itself the callback root.
+    $connection->commit();
+    $transactions = new DatabaseTransactionsManager;
+    app()->instance('db.transactions', $transactions);
+    $connection->setTransactionManager($transactions);
+    $ledgerPath = useOwnerSlotLedger($ledger, 'media_owner_slot_savepoint_');
+
+    try {
+        $actor = ownerSlotWorkflowActor();
+        $committedOwner = ownerSlotWorkflowOwner('Committed sibling');
+        $rolledBackOwner = ownerSlotWorkflowOwner('Rolled-back sibling');
+        $committedInput = ownerSlotStoredMedia('%PDF-1.4 committed sibling', ['uploaded_by' => (string) $actor->getKey(), 'uploaded_by_type' => $actor->getMorphClass()]);
+        $rolledBackInput = ownerSlotStoredMedia('%PDF-1.4 rolled-back sibling', ['uploaded_by' => (string) $actor->getKey(), 'uploaded_by_type' => $actor->getMorphClass()]);
+        if ($operation === 'clear') {
+            attachOwnerSlotMedia($committedInput, $committedOwner, 'document');
+            attachOwnerSlotMedia($rolledBackInput, $rolledBackOwner, 'document');
+        }
+        useOwnerSlotAuthorization(static fn (): bool => true);
+        $attachments = app(MediaAttachments::class);
+        $mutate = static function (OwnerSlotWorkflowModel $owner, Media $input, string $key) use ($actor, $attachments, $operation): ?Media {
+            if ($operation === 'clear') {
+                $attachments->clearSlot($actor, $owner, 'document', $key);
+
+                return null;
+            }
+
+            return $operation === 'copy'
+                ? $attachments->copySlot($actor, $owner, 'document', $input->id, $key)
+                : $attachments->replaceSlot($actor, $owner, 'document', $input->id, $key);
+        };
+        $committedKey = Str::uuid()->toString();
+        $rolledBackKey = Str::uuid()->toString();
+        $status = static fn (string $key): MediaOwnerSlotOperationStatus => MediaOwnerSlotOperation::query()->where('idempotency_key', $key)->sole()->status;
+
+        $connection->beginTransaction();
+        $connection->beginTransaction();
+        $committed = $mutate($committedOwner, $committedInput, $committedKey);
+        $connection->commit();
+        $connection->beginTransaction();
+        $rolledBack = $mutate($rolledBackOwner, $rolledBackInput, $rolledBackKey);
+        expect($status($committedKey))->toBe(MediaOwnerSlotOperationStatus::Processing)
+            ->and($status($rolledBackKey))->toBe(MediaOwnerSlotOperationStatus::Processing);
+        $connection->rollBack();
+        $connection->commit();
+
+        expect($committedOwner->fresh()?->getFirstMedia('document')?->id)->toBe($committed?->id)
+            ->and($status($committedKey))->toBe(MediaOwnerSlotOperationStatus::Completed)
+            ->and($rolledBackOwner->fresh()?->getFirstMedia('document')?->id)->toBe($operation === 'clear' ? $rolledBackInput->id : null)
+            ->and($status($rolledBackKey))->toBe(MediaOwnerSlotOperationStatus::Failed)
+            ->and(app(MediaTransactionRollbackRegistry::class)->count())->toBe(0);
+
+        $retried = $mutate($rolledBackOwner, $rolledBackInput, $rolledBackKey);
+        expect($rolledBackOwner->fresh()?->getFirstMedia('document')?->id)->toBe($retried?->id)
+            ->and($status($rolledBackKey))->toBe(MediaOwnerSlotOperationStatus::Completed);
+        if ($operation === 'copy') {
+            expect($retried?->id)->not->toBe($rolledBack?->id);
+        }
+    } finally {
+        while ($connection->transactionLevel() > 0) {
+            $connection->rollBack();
+        }
+        releaseOwnerSlotLedger($ledger, $ledgerPath);
+        app()->instance('db.transactions', $testingManager);
+        $connection->setTransactionManager($testingManager);
+        $connection->beginTransaction();
+        RefreshDatabaseState::$migrated = false;
+    }
+})->with(['replace', 'clear', 'copy']);
 it('rolls back copy before Media callbacks when split checkpoint persistence fails', function (): void {
     Storage::fake('public');
     $connection = 'owner_slot_checkpoint_failure';

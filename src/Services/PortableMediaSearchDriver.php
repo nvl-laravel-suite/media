@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Grammars\PostgresGrammar;
 use InvalidArgumentException;
 use Nvl\Media\Contracts\MediaSearchDriver;
 use Nvl\Media\Models\Media;
+use PDO;
+use Pdo\Sqlite;
 
 /**
  * Portable substring and JSON search for moderate media datasets.
@@ -23,52 +26,49 @@ final class PortableMediaSearchDriver implements MediaSearchDriver
     public function apply(Builder $query, string $search): void
     {
         $model = $query->getModel();
-        $grammar = $model->getConnection()->getQueryGrammar();
+        $connection = $model->getConnection();
+        $grammar = $connection->getQueryGrammar();
         $filename = $grammar->wrap($model->qualifyColumn('filename'));
         $type = $grammar->wrap($model->qualifyColumn('type'));
         $tags = $model->qualifyColumn('tags');
+        $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%';
 
         if ($grammar instanceof PostgresGrammar) {
-            $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%';
-            $filenameIlike = "({$filename} COLLATE pg_c_utf8) ILIKE ? ESCAPE '!'";
-            $typeIlike = "({$type} COLLATE pg_c_utf8) ILIKE ? ESCAPE '!'";
-            $this->assertSafeSearchSql($filenameIlike);
-            $this->assertSafeSearchSql($typeIlike);
-            $query->where(function (Builder $builder) use ($filenameIlike, $typeIlike, $tags, $pattern, $search): void {
-                $builder->whereRaw($filenameIlike, [$pattern])
-                    ->orWhereRaw($typeIlike, [$pattern])
-                    ->orWhereJsonContains($tags, $search);
-            });
-
-            return;
+            $filenameLike = "({$filename} COLLATE pg_c_utf8) ILIKE ? ESCAPE '!'";
+            $typeLike = "({$type} COLLATE pg_c_utf8) ILIKE ? ESCAPE '!'";
+        } else {
+            $caseFunction = 'lower';
+            if ($connection->getDriverName() === 'sqlite') {
+                $this->registerSqliteCaseFoldFunction($connection);
+                $caseFunction = 'nvl_media_casefold';
+            }
+            $filenameLike = "{$caseFunction}({$filename}) like {$caseFunction}(?) escape '!'";
+            $typeLike = "{$caseFunction}({$type}) like {$caseFunction}(?) escape '!'";
         }
-
-        $variants = array_values(array_unique([
-            $search,
-            mb_strtolower($search, 'UTF-8'),
-            mb_strtoupper($search, 'UTF-8'),
-            mb_convert_case($search, MB_CASE_TITLE, 'UTF-8'),
-        ]));
-        $patterns = array_map(
-            static fn (string $variant): string => '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $variant).'%',
-            $variants,
-        );
-        $filenameLike = "lower({$filename}) like lower(?) escape '!'";
-        $typeLike = "lower({$type}) like lower(?) escape '!'";
         $this->assertSafeSearchSql($filenameLike);
         $this->assertSafeSearchSql($typeLike);
 
-        $query->where(function (Builder $builder) use ($filenameLike, $typeLike, $tags, $patterns, $search): void {
-            foreach ($patterns as $index => $pattern) {
-                if ($index === 0) {
-                    $builder->whereRaw($filenameLike, [$pattern]);
-                } else {
-                    $builder->orWhereRaw($filenameLike, [$pattern]);
-                }
-                $builder->orWhereRaw($typeLike, [$pattern]);
-            }
-            $builder->orWhereJsonContains($tags, $search);
+        $query->where(function (Builder $builder) use ($filenameLike, $typeLike, $tags, $pattern, $search): void {
+            $builder->whereRaw($filenameLike, [$pattern])
+                ->orWhereRaw($typeLike, [$pattern])
+                ->orWhereJsonContains($tags, $search);
         });
+    }
+
+    /** Register Unicode case folding on both PDOs used by the SQLite query. */
+    private function registerSqliteCaseFoldFunction(Connection $connection): void
+    {
+        $fold = static fn (?string $value): ?string => $value === null ? null : mb_convert_case($value, MB_CASE_FOLD, 'UTF-8');
+        $writePdo = $connection->getPdo();
+        $readPdo = $connection->getReadPdo();
+
+        foreach ($writePdo === $readPdo ? [$writePdo] : [$writePdo, $readPdo] as $pdo) {
+            if ($pdo instanceof Sqlite) {
+                $pdo->createFunction('nvl_media_casefold', $fold, 1, Sqlite::DETERMINISTIC);
+            } elseif ($pdo instanceof PDO) {
+                $pdo->sqliteCreateFunction('nvl_media_casefold', $fold, 1, PDO::SQLITE_DETERMINISTIC);
+            }
+        }
     }
 
     /**
@@ -76,7 +76,7 @@ final class PortableMediaSearchDriver implements MediaSearchDriver
      */
     private function assertSafeSearchSql(string $sql): void
     {
-        if (preg_match("/^(?:lower\\([A-Za-z0-9_.\"`\\[\\]]+\\)|\\([A-Za-z0-9_.\"`\\[\\]]+ COLLATE pg_c_utf8\\)) (?:ILIKE \\? ESCAPE|like lower\\(\\?\\) escape) '!'$/D", $sql) !== 1) {
+        if (preg_match("/^(?:(lower|nvl_media_casefold)\\([A-Za-z0-9_.\"`\\[\\]]+\\) like \\1\\(\\?\\) escape|\\([A-Za-z0-9_.\"`\\[\\]]+ COLLATE pg_c_utf8\\) ILIKE \\? ESCAPE) '!'$/D", $sql) !== 1) {
             throw new InvalidArgumentException('Media search columns produced unsafe SQL.');
         }
     }

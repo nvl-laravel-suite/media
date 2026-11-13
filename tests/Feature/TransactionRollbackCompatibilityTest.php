@@ -110,8 +110,8 @@ test('mutation locks survive savepoint rollback and release on either root outco
         $lock = app(MediaMutationLock::class);
         $rollbackCallbacks = app(MediaTransactionRollbackRegistry::class);
         DB::beginTransaction();
-        $lock->execute('rolled-back', static fn (): null => null);
         DB::beginTransaction();
+        $lock->execute('rolled-back', static fn (): null => null);
         expect(mediaRollbackMutationLockIsAvailable('rolled-back'))->toBeFalse()->and($rollbackCallbacks->count())->toBe(1);
         DB::rollBack();
         expect(mediaRollbackMutationLockIsAvailable('rolled-back'))->toBeFalse()->and($rollbackCallbacks->count())->toBe(1);

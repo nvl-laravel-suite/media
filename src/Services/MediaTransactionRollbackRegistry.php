@@ -66,11 +66,11 @@ final class MediaTransactionRollbackRegistry
      */
     public function afterRootTransaction(Closure $callback): bool
     {
-        return $this->afterRootTransactionOutcome($callback, $callback);
+        return $this->registerRootOutcome($callback, $callback, followOrigin: false);
     }
 
     /**
-     * Run distinct commit or rollback callbacks when the Media connection's open root transaction finishes.
+     * Run commit work at the root commit, or rollback work if the originating savepoint or root rolls back.
      *
      * @param  Closure(): void  $onCommit
      * @param  Closure(): void  $onRollback
@@ -78,29 +78,7 @@ final class MediaTransactionRollbackRegistry
      */
     public function afterRootTransactionOutcome(Closure $onCommit, Closure $onRollback): bool
     {
-        $connection = MediaModelRegistry::newInstance()->getConnection();
-
-        if ($connection->transactionLevel() === 0) {
-            return false;
-        }
-
-        $root = $this->container->make('db.transactions')
-            ->callbackApplicableTransactions()
-            ->filter(static fn (DatabaseTransactionRecord $transaction): bool => $transaction->connection === $connection->getName())
-            ->sortBy('level')
-            ->first();
-
-        if (! $root instanceof DatabaseTransactionRecord) {
-            return false;
-        }
-
-        $registrationId = $this->register($root->connection, $root->level, $onRollback);
-        $root->addCallback(function () use ($registrationId, $onCommit): void {
-            $this->cancel($registrationId);
-            $onCommit();
-        });
-
-        return true;
+        return $this->registerRootOutcome($onCommit, $onRollback, followOrigin: true);
     }
 
     /**
@@ -117,6 +95,46 @@ final class MediaTransactionRollbackRegistry
     public function count(): int
     {
         return count($this->callbacks);
+    }
+
+    /**
+     * Register root-bound cleanup or work that depends on its originating savepoint.
+     *
+     * @param  Closure(): void  $onCommit
+     * @param  Closure(): void  $onRollback
+     */
+    private function registerRootOutcome(Closure $onCommit, Closure $onRollback, bool $followOrigin): bool
+    {
+        $connection = MediaModelRegistry::newInstance()->getConnection();
+
+        if ($connection->transactionLevel() === 0) {
+            return false;
+        }
+
+        $transactions = $this->container->make('db.transactions')
+            ->callbackApplicableTransactions()
+            ->filter(static fn (DatabaseTransactionRecord $transaction): bool => $transaction->connection === $connection->getName())
+            ->sortBy('level');
+        $root = $transactions->first();
+
+        if (! $root instanceof DatabaseTransactionRecord) {
+            return false;
+        }
+
+        $registrationId = $this->register(
+            $root->connection,
+            $root->level,
+            $onRollback,
+            origin: $followOrigin ? $transactions->last() : null,
+        );
+        $root->addCallback(function () use ($registrationId, $onCommit): void {
+            if (isset($this->callbacks[$registrationId])) {
+                $this->cancel($registrationId);
+                $onCommit();
+            }
+        });
+
+        return true;
     }
 
     /**
