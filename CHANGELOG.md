@@ -5,6 +5,8 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [7.2.0] - 2026-11-16
+
 ### Added
 
 - Adoption runs through nvl:adopt with reviewed, checkpointed batches and an explicit activate step. Committed batches survive a failure. Keep writers stopped until verify and activate pass. `nvl:adopt media` stages assets, associations, variations and translations without copying files; a missing backing file fails verify and blocks activation. `MediaSchemaAdopter` remains as a compatibility wrapper.
@@ -13,6 +15,12 @@ All notable changes to `nvl/media` are documented here.
 
 - The media doctor now detects production itself. Leaving out `--production` no longer means development checks.
 - Search supports host matchers that return a new builder.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- adoption flow, PostgreSQL proof, release health and 7.2 floors
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.1.0] - 2026-11-16
 
