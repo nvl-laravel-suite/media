@@ -5,6 +5,20 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [7.1.0] - 2026-11-16
+
+### Highlights
+
+- Adopt legacy media records, specify attachment roles independently of collections, and check production upload scanner readiness.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- close NVL consumer adoption and portability gaps
+- require Core 7.1 for packages using the text matcher
+- Merge pull request #21 from nicolasvlachos/codex/consumer-postgresql-validation
+<!-- NVL GENERATED CHANGES END -->
+
 ## [7.0.6] - 2026-11-13
 
 ### Fixed
