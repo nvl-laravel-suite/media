@@ -19,6 +19,7 @@ final readonly class MediaScannerPolicy
      */
     public function __construct(
         private MediaContentScanner $scanner,
+        private MediaEnvironment $environment,
     ) {}
 
     /**
@@ -29,7 +30,7 @@ final readonly class MediaScannerPolicy
         if (! self::uploadsEnabled()) {
             throw new MediaUploadException('Untrusted Media uploads are disabled.');
         }
-        $production = app()->isProduction();
+        $production = $this->environment->production();
 
         if ($this->scanner instanceof NullMediaContentScanner && ! self::permitsNoop($production)) {
             throw new MediaUploadException(

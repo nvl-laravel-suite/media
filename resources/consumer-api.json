@@ -788,6 +788,7 @@
                 "scopeWhereTranslationNotNull",
                 "scopeWhereTranslationNull",
                 "scopeWithAllTranslations",
+                "scopeWithJoinedTranslation",
                 "scopeWithResolvedTranslations",
                 "scopeWithTag",
                 "setIsPublicAttribute",
@@ -804,6 +805,7 @@
                 "whereTranslationNotNull",
                 "whereTranslationNull",
                 "withAllTranslations",
+                "withJoinedTranslation",
                 "withResolvedTranslations"
             ],
             "properties": [

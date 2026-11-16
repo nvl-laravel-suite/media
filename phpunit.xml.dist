@@ -11,7 +11,6 @@
     <testsuites>
         <testsuite name="NVL Media">
             <directory>tests</directory>
-            <exclude>tests/Fixtures/RetiredTenancy</exclude>
         </testsuite>
     </testsuites>
     <php>

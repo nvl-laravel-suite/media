@@ -13,7 +13,7 @@ use Nvl\Media\Services\MediaDoctor;
 final class MediaDoctorCommand extends Command
 {
     protected $signature = 'nvl:media:doctor
-        {--production : Enforce production deployment requirements}
+        {--production : Enforce production deployment requirements; otherwise the environment is detected}
         {--strict : Treat warnings as failures}
         {--format=text : Output format: text or json}';
 
@@ -24,7 +24,7 @@ final class MediaDoctorCommand extends Command
      */
     public function handle(MediaDoctor $doctor): int
     {
-        $checks = $doctor->inspect((bool) $this->option('production'));
+        $checks = $doctor->inspect($this->option('production') ? true : null);
         $format = $this->option('format');
         if ($format === 'json') {
             $this->line((string) json_encode(['package' => 'nvl/media', 'healthy' => ! $this->hasFailures($checks), 'checks' => array_map(static fn (array $check): array => $check, $checks)], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));

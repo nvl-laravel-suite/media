@@ -24,8 +24,14 @@ final readonly class PortableMediaSearchDriver implements MediaSearchDriver
     public function apply(Builder $query, string $search): void
     {
         $query->where(function (Builder $builder) use ($search): void {
-            $this->textMatcher->contains($builder->getQuery(), $builder->qualifyColumn('filename'), $search);
-            $this->textMatcher->contains($builder->getQuery(), $builder->qualifyColumn('type'), $search, boolean: 'or');
+            foreach (['filename', 'type'] as $index => $column) {
+                $builder->setQuery($this->textMatcher->contains(
+                    $builder->getQuery(),
+                    $builder->qualifyColumn($column),
+                    $search,
+                    boolean: $index === 0 ? 'and' : 'or',
+                ));
+            }
             $builder->orWhereJsonContains($builder->qualifyColumn('tags'), $search);
         });
     }

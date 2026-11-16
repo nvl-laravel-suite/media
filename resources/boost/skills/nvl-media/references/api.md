@@ -965,6 +965,11 @@ public function scopeWithAllTranslations(Illuminate\Database\Eloquent\Builder $q
 resolved @param Illuminate\Database\Eloquent\Builder<Nvl\Media\Models\Media> $query
 @return Builder<static>
 resolved @return Illuminate\Database\Eloquent\Builder<Nvl\Media\Models\Media>
+public function scopeWithJoinedTranslation(Illuminate\Database\Eloquent\Builder $query, ?string $locale=null, string $alias="nvl_translation"): Illuminate\Database\Eloquent\Builder
+@param Builder<static> $query
+resolved @param Illuminate\Database\Eloquent\Builder<Nvl\Media\Models\Media> $query
+@return Builder<static>
+resolved @return Illuminate\Database\Eloquent\Builder<Nvl\Media\Models\Media>
 public function scopeWithResolvedTranslations(Illuminate\Database\Eloquent\Builder $query, ?string $locale=null): Illuminate\Database\Eloquent\Builder
 @param Builder<static> $query
 resolved @param Illuminate\Database\Eloquent\Builder<Nvl\Media\Models\Media> $query
@@ -1002,6 +1007,8 @@ resolved @method static Illuminate\Database\Eloquent\Builder<Nvl\Media\Models\Me
 resolved @method static Illuminate\Database\Eloquent\Builder<Nvl\Media\Models\Media> whereTranslationNull(string $field, ?string $locale = null)
 @method static Builder<static> withAllTranslations()
 resolved @method static Illuminate\Database\Eloquent\Builder<Nvl\Media\Models\Media> withAllTranslations()
+@method static Builder<static> withJoinedTranslation(?string $locale = null, string $alias = 'nvl_translation')
+resolved @method static Illuminate\Database\Eloquent\Builder<Nvl\Media\Models\Media> withJoinedTranslation(?string $locale = null, string $alias = 'nvl_translation')
 @method static Builder<static> withResolvedTranslations(?string $locale = null)
 resolved @method static Illuminate\Database\Eloquent\Builder<Nvl\Media\Models\Media> withResolvedTranslations(?string $locale = null)
 @property-read EloquentCollection<int, MediaAssociation> $associations

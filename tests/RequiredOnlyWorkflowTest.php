@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -19,9 +20,88 @@ use Nvl\Media\Slots\MediaPlacement;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Tests\Fixtures\StandaloneMediaOwner;
 use Nvl\Media\Tests\StandaloneMediaTestCase;
+use Nvl\Support\Adoption\AdoptionGate;
+use Nvl\Support\Adoption\AdoptionStore;
 use Nvl\Support\Enums\SystemActor;
 
 uses(StandaloneMediaTestCase::class);
+
+const LEGACY_MEDIA_OPTIONS = ['root_folder' => 'legacy', 'owner_types' => ['old-owner' => StandaloneMediaOwner::class]];
+
+/**
+ * Create committed legacy px_media tables with one asset graph plus extra bare assets, and their backing files.
+ *
+ * @return array{time: string, assets: list<string>, pivot: string, variation: string, translation: string}
+ */
+function seedLegacyMediaGraph(int $assets = 1, bool $variationFile = true): array
+{
+    Storage::fake('public');
+    config(['nvl-media.root_folder' => 'legacy', 'nvl-media.delivery.disks.public.public.mode' => 'direct']);
+    $columns = [
+        'px_media' => ['filename', 'hash', 'extension', 'mime_type', 'size', 'disk', 'folder', 'is_public', 'type', 'digest', 'tags', 'metadata', 'uploaded_by', 'deleted_at'],
+        'px_media_associations' => ['media_id', 'associable_type', 'associable_id', 'collection', 'locale', 'order', 'metadata'],
+        'px_media_image_variations' => ['media_id', 'label', 'width', 'height', 'size', 'format', 'quality'],
+        'px_media_translations' => ['media_id', 'locale', 'title', 'alt', 'caption'],
+    ];
+    foreach ($columns as $name => $fields) {
+        Schema::create($name, static function (Blueprint $table) use ($fields): void {
+            $table->uuid('id')->primary();
+            foreach ($fields as $field) {
+                $table->string($field)->nullable();
+            }
+            $table->timestamps();
+        });
+    }
+
+    $time = '2026-05-12 11:12:13';
+    $timestamps = ['created_at' => $time, 'updated_at' => $time];
+    $owner = StandaloneMediaOwner::query()->create(['name' => 'Legacy owner']);
+    $ids = array_map(static fn (): string => (string) Str::uuid(), range(1, $assets));
+    foreach ($ids as $index => $id) {
+        DB::table('px_media')->insert([
+            'id' => $id, 'filename' => 'original.jpg', 'hash' => ($index + 91).'.jpg', 'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'size' => 4,
+            'disk' => 'public', 'folder' => 'photos', 'is_public' => '1', 'type' => 'image', 'digest' => hash('sha256', 'file'), 'tags' => '["old"]',
+            'metadata' => '{"kind":"cover"}', 'uploaded_by' => null, ...$timestamps,
+        ]);
+        Storage::disk('public')->put('legacy/photos/'.($index + 91).'.jpg', 'file');
+    }
+    [$pivot, $variation, $translation] = array_map(static fn (): string => (string) Str::uuid(), range(1, 3));
+    DB::table('px_media_associations')->insert(['id' => $pivot, 'media_id' => $ids[0], 'associable_type' => 'old-owner', 'associable_id' => (string) $owner->getKey(), 'collection' => 'gallery', 'locale' => 'bg', 'order' => 4, 'metadata' => '{"slot":"cover"}', ...$timestamps]);
+    DB::table('px_media_image_variations')->insert(['id' => $variation, 'media_id' => $ids[0], 'label' => 'small', 'width' => 100, 'height' => 100, 'size' => 5, 'format' => 'webp', 'quality' => 80, ...$timestamps]);
+    DB::table('px_media_translations')->insert(['id' => $translation, 'media_id' => $ids[0], 'locale' => 'bg', 'title' => 'Заглавие', 'alt' => 'Снимка', 'caption' => '', ...$timestamps]);
+    if ($variationFile) {
+        Storage::disk('public')->put('legacy/photos/conversions/91-small.webp', 'thumb');
+    }
+
+    return ['time' => $time, 'assets' => $ids, 'pivot' => $pivot, 'variation' => $variation, 'translation' => $translation];
+}
+
+/**
+ * Install the opt-in core adoption tables and write the legacy options as an nvl:adopt manifest.
+ */
+function prepareMediaAdoption(): string
+{
+    $migrations = dirname((string) (new ReflectionClass(AdoptionStore::class))->getFileName(), 3).'/database/migrations';
+    test()->artisan('migrate', ['--path' => $migrations, '--realpath' => true])->assertSuccessful();
+    $manifest = (string) tempnam(sys_get_temp_dir(), 'nvl-media-adoption-');
+    file_put_contents($manifest, json_encode(LEGACY_MEDIA_OPTIONS, JSON_THROW_ON_ERROR));
+    test()->beforeApplicationDestroyed(static fn () => @unlink($manifest));
+
+    return $manifest;
+}
+
+/**
+ * Run one nvl:adopt media phase and decode its JSON report.
+ *
+ * @param  array<string, string|int>  $options
+ * @return array<string, mixed>
+ */
+function adoptMedia(string $phase, string $manifest, array $options = []): array
+{
+    $status = Artisan::call('nvl:adopt', ['package' => 'media', 'phase' => $phase, 'manifest' => $manifest, '--format' => 'json', ...$options]);
+
+    return ['status' => $status, ...json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR)];
+}
 
 it('uploads reads and deletes private Media with only required package providers', function (): void {
     Storage::fake('local');
@@ -43,43 +123,11 @@ it('uploads reads and deletes private Media with only required package providers
 });
 
 it('stages a legacy Media graph in place on the disk and resumes without changing its IDs', function (): void {
-    Storage::fake('public');
-    config(['nvl-media.root_folder' => 'legacy', 'nvl-media.delivery.disks.public.public.mode' => 'direct']);
-
-    $columns = [
-        'px_media' => ['filename', 'hash', 'extension', 'mime_type', 'size', 'disk', 'folder', 'is_public', 'type', 'digest', 'tags', 'metadata', 'uploaded_by', 'deleted_at'],
-        'px_media_associations' => ['media_id', 'associable_type', 'associable_id', 'collection', 'locale', 'order', 'metadata'],
-        'px_media_image_variations' => ['media_id', 'label', 'width', 'height', 'size', 'format', 'quality'],
-        'px_media_translations' => ['media_id', 'locale', 'title', 'alt', 'caption'],
-    ];
-    foreach ($columns as $name => $fields) {
-        Schema::create($name, static function (Blueprint $table) use ($fields): void {
-            $table->uuid('id')->primary();
-            foreach ($fields as $field) {
-                $table->string($field)->nullable();
-            }
-            $table->timestamps();
-        });
-    }
-
-    $time = '2026-05-12 11:12:13';
-    $timestamps = ['created_at' => $time, 'updated_at' => $time];
-    $owner = StandaloneMediaOwner::query()->create(['name' => 'Legacy owner']);
-    [$asset, $pivot, $variation, $translation] = array_map(static fn (): string => (string) Str::uuid(), range(1, 4));
-    $media = [
-        'id' => $asset, 'filename' => 'original.jpg', 'hash' => '91.jpg', 'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'size' => 4,
-        'disk' => 'public', 'folder' => 'photos', 'is_public' => '1', 'type' => 'image', 'digest' => hash('sha256', 'file'), 'tags' => '["old"]',
-        'metadata' => '{"kind":"cover"}', 'uploaded_by' => null, ...$timestamps,
-    ];
-    DB::table('px_media')->insert($media);
-    DB::table('px_media_associations')->insert(['id' => $pivot, 'media_id' => $asset, 'associable_type' => 'old-owner', 'associable_id' => (string) $owner->getKey(), 'collection' => 'gallery', 'locale' => 'bg', 'order' => 4, 'metadata' => '{"slot":"cover"}', ...$timestamps]);
-    DB::table('px_media_image_variations')->insert(['id' => $variation, 'media_id' => $asset, 'label' => 'small', 'width' => 100, 'height' => 100, 'size' => 5, 'format' => 'webp', 'quality' => 80, ...$timestamps]);
-    DB::table('px_media_translations')->insert(['id' => $translation, 'media_id' => $asset, 'locale' => 'bg', 'title' => 'Заглавие', 'alt' => 'Снимка', 'caption' => '', ...$timestamps]);
-    Storage::disk('public')->put('legacy/photos/91.jpg', 'file');
+    ['time' => $time, 'assets' => [$asset], 'pivot' => $pivot, 'variation' => $variation, 'translation' => $translation] = seedLegacyMediaGraph(variationFile: false);
 
     $adopter = app(MediaSchemaAdopter::class);
     $actor = SystemActor::Background;
-    $options = ['root_folder' => 'legacy', 'owner_types' => ['old-owner' => StandaloneMediaOwner::class]];
+    $options = LEGACY_MEDIA_OPTIONS;
     $blocked = $adopter->plan($actor, $options);
     expect($blocked['conflicts'])->toBe(['px_media_image_variations ['.$variation.'] has no backing file [public:legacy/photos/conversions/91-small.webp].']);
     Storage::disk('public')->put('legacy/photos/conversions/91-small.webp', 'thumb');
@@ -116,6 +164,17 @@ it('stages a legacy Media graph in place on the disk and resumes without changin
     expect(fn () => $adopter->plan($actor, $options))->toThrow(LogicException::class, 'incompatible schema');
 });
 
+it('reports an open transaction before unsafe legacy folders, as before the adapter refactor', function (): void {
+    $connection = Media::query()->getConnection();
+    $connection->beginTransaction();
+    try {
+        expect(fn () => app(MediaSchemaAdopter::class)->apply(SystemActor::Background, str_repeat('a', 64), ['root_folder' => '../escape']))
+            ->toThrow(LogicException::class, 'outside existing transactions');
+    } finally {
+        $connection->rollBack();
+    }
+});
+
 it('places media by role inside a separate collection and limits each role independently', function (): void {
     Storage::fake('local');
     $actor = SystemActor::Background;
@@ -143,4 +202,69 @@ it('places media by role inside a separate collection and limits each role indep
         ->and($replacement->locale)->toBe('bg')
         ->and($replacement->order)->toBe(7)
         ->and($replacement->metadata)->toBe(['caption' => 'Cover', 'slot' => 'cover']);
+});
+
+it('keeps committed asset batches through an interrupted nvl:adopt apply and resumes without duplicates', function (): void {
+    ['assets' => $assets, 'pivot' => $pivot] = seedLegacyMediaGraph(assets: 3);
+    $manifest = prepareMediaAdoption();
+    $mediaTable = MediaTables::get(MediaTables::Media);
+
+    $plan = adoptMedia('plan', $manifest);
+    expect($plan['status'])->toBe(0)
+        ->and($plan['collisions'])->toBe([])
+        ->and(array_map(static fn (array $count): ?int => $count['expected'], $plan['counts']))->toBe(['assets' => 3, 'associations' => 1, 'variations' => 1, 'translations' => 1])
+        ->and(DB::table(AdoptionStore::Runs)->count())->toBe(0)
+        ->and(DB::table($mediaTable)->count())->toBe(0);
+
+    $inserts = 0;
+    DB::connection()->beforeExecuting(static function (string $sql) use (&$inserts, $mediaTable): void {
+        if (str_starts_with($sql, 'insert into "'.$mediaTable.'"') && ++$inserts === 2) {
+            throw new RuntimeException('simulated interruption');
+        }
+    });
+    $failed = adoptMedia('apply', $manifest, ['--fingerprint' => $plan['fingerprint'], '--batch-size' => 1]);
+    $run = (string) DB::table(AdoptionStore::Runs)->value('id');
+    expect($failed['status'])->toBe(1)
+        ->and($failed['error'])->toContain('simulated interruption')
+        ->and(DB::table($mediaTable)->pluck('id')->all())->toBe([collect($assets)->sort()->first()])
+        ->and(DB::table(AdoptionStore::Runs)->value('status'))->toBe('failed')
+        ->and((int) DB::table(AdoptionStore::Checkpoints)->where('step', 'assets')->value('processed'))->toBe(1);
+
+    expect(adoptMedia('apply', $manifest, ['--fingerprint' => $plan['fingerprint']])['error'])->toContain('--run='.$run);
+    $resumed = adoptMedia('apply', $manifest, ['--fingerprint' => $plan['fingerprint'], '--batch-size' => 1, '--run' => $run]);
+    expect($resumed['status'])->toBe(0)
+        ->and($resumed['state'])->toBe('applied')
+        ->and(array_map(static fn (array $count): int => $count['processed'], $resumed['counts']))->toBe(['assets' => 3, 'associations' => 1, 'variations' => 1, 'translations' => 1])
+        ->and(DB::table($mediaTable)->orderBy('id')->pluck('id')->all())->toBe(collect($assets)->sort()->values()->all())
+        ->and(DB::table(MediaTables::get(MediaTables::Associations))->pluck('id')->all())->toBe([$pivot]);
+
+    expect(adoptMedia('verify', $manifest)['verification']['passed'])->toBeTrue()
+        ->and(adoptMedia('activate', $manifest, ['--fingerprint' => $plan['fingerprint']])['state'])->toBe('active')
+        ->and(app(AdoptionGate::class)->isActive('media'))->toBeTrue();
+
+    $legacy = app(MediaSchemaAdopter::class);
+    $review = $legacy->plan(SystemActor::Background, LEGACY_MEDIA_OPTIONS);
+    expect($legacy->verify(SystemActor::Background, $review['fingerprint'], LEGACY_MEDIA_OPTIONS)['staged'])
+        ->toBe(['assets' => 3, 'associations' => 1, 'variations' => 1, 'translations' => 1]);
+});
+
+it('blocks Media activation while a staged backing file is missing', function (): void {
+    seedLegacyMediaGraph();
+    $manifest = prepareMediaAdoption();
+    $plan = adoptMedia('plan', $manifest);
+    expect(adoptMedia('apply', $manifest, ['--fingerprint' => $plan['fingerprint']])['state'])->toBe('applied')
+        ->and(adoptMedia('verify', $manifest)['verification']['passed'])->toBeTrue();
+
+    Storage::disk('public')->delete('legacy/photos/conversions/91-small.webp');
+    $activation = adoptMedia('activate', $manifest, ['--fingerprint' => $plan['fingerprint']]);
+    expect($activation['status'])->toBe(1)
+        ->and($activation['error'])->toContain('changed since verification');
+
+    $verification = adoptMedia('verify', $manifest);
+    expect($verification['status'])->toBe(1)
+        ->and($verification['verification']['passed'])->toBeFalse()
+        ->and($verification['verification']['problems'])->toContain('px_media_image_variations ['.DB::table('px_media_image_variations')->value('id').'] has no backing file [public:legacy/photos/conversions/91-small.webp].')
+        ->and(adoptMedia('activate', $manifest, ['--fingerprint' => $plan['fingerprint']])['error'])->toContain('requires a passed verification')
+        ->and(adoptMedia('plan', $manifest)['collisions'])->not->toBeEmpty()
+        ->and(app(AdoptionGate::class)->isActive('media'))->toBeFalse();
 });

@@ -10,6 +10,7 @@ use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
+use Nvl\Media\Adoption\MediaAdoptionAdapter;
 use Nvl\Media\Console\Commands\AdoptSpatieMediaCommand;
 use Nvl\Media\Console\Commands\MediaDoctorCommand;
 use Nvl\Media\Console\Commands\MigrateDiskCommand;
@@ -41,6 +42,7 @@ use Nvl\Media\Services\MediaDeduplicationLock;
 use Nvl\Media\Services\MediaDeliveryPolicy;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDoctor;
+use Nvl\Media\Services\MediaEnvironment;
 use Nvl\Media\Services\MediaFileEffectScheduler;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaFileOperator;
@@ -74,6 +76,7 @@ use Nvl\Media\Services\UnsupportedMediaBatchAuthorization;
 use Nvl\Media\Services\UnsupportedMultipartUploadGateway;
 use Nvl\Media\Support\MediaConfiguration;
 use Nvl\Ownership\Services\OwnershipAdoptionRegistry;
+use Nvl\Support\Adoption\AdoptionRegistry;
 use Nvl\Support\Doctor\PackageDoctorContributor;
 use Nvl\Support\Globals\GlobalNames;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
@@ -104,6 +107,7 @@ final class MediaServiceProvider extends ServiceProvider implements OwnershipInt
             $rollbackCallbacks->handle(...),
         );
         $this->app->make(MediaResourceRegistrar::class)->register($this->app->make(OwnershipResourceRegistry::class));
+        $this->app->make(AdoptionRegistry::class)->register('media', MediaAdoptionAdapter::class);
         if ($this->app->bound(OwnershipAdoptionRegistry::class)) {
             $this->app->make(OwnershipAdoptionRegistry::class)->register('media', OwnershipMediaAdoptionAdapter::class);
         }
@@ -177,6 +181,7 @@ final class MediaServiceProvider extends ServiceProvider implements OwnershipInt
         $this->app->scoped(MediaDeliveryGuard::class);
         $this->app->scoped(MediaDiskGateway::class);
         $this->app->scoped(MediaDoctor::class);
+        $this->app->scoped(MediaEnvironment::class);
         $this->app->scoped(MediaFileEffectScheduler::class);
         $this->app->scoped(MediaFileExistence::class);
         $this->app->scoped(MediaFileOperator::class);

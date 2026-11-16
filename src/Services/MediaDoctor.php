@@ -50,13 +50,18 @@ final readonly class MediaDoctor
         private Container $container,
         private MediaFileExistence $existence,
         private OwnershipConstraintInspector $constraints,
+        private MediaEnvironment $environment,
     ) {}
 
     /**
+     * Run the diagnostics; a null production flag detects the application environment like uploads do.
+     *
      * @return list<array{key: string, severity: string, passed: bool, message: string}>
      */
-    public function inspect(bool $production = false): array
+    public function inspect(?bool $production = null): array
     {
+        $production = $this->environment->production($production);
+
         return [
             $this->permissionAdoptionCheck(),
             $this->s3DependencyCheck(),

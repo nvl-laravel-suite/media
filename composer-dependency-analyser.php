@@ -22,7 +22,6 @@ $configuration = (new Configuration)
 $configuration->addPathsToExclude(array_map(
     static fn (string $path): string => __DIR__.'/'.$path,
     [
-        'tests/Fixtures/RetiredTenancy',
         'tests/Fixtures/tenancy-consumer',
         'tests/MediaTenancyTestCase.php',
         'tests/MediaBatchTenancyTestCase.php',

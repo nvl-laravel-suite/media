@@ -12,7 +12,7 @@ php artisan nvl:media:doctor --production --strict
 php artisan nvl:media:doctor --strict --format=json
 ```
 
-- `--production`: enforces production schema/index, disk, remote-source, scanner, lock, queue, optional-dependency, delivery-policy and multipart requirements.
+- `--production`: forces production checks outside production; without it the doctor detects the application environment, as uploads do. Production checks enforce production schema/index, disk, remote-source, scanner, lock, queue, optional-dependency, delivery-policy and multipart requirements.
 - `--strict`: treats failed warnings as failures.
 - `--format=text|json`: human table or machine-readable output.
 
