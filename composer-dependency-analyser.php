@@ -17,30 +17,6 @@ $configuration = (new Configuration)
         [ErrorType::SHADOW_DEPENDENCY],
     );
 
-// These fixtures belong only to the retired Tenancy suite excluded by phpunit.xml.dist.
-// The active Ownership suites and every production path remain analysed.
-$configuration->addPathsToExclude(array_map(
-    static fn (string $path): string => __DIR__.'/'.$path,
-    [
-        'tests/Fixtures/tenancy-consumer',
-        'tests/MediaTenancyTestCase.php',
-        'tests/MediaBatchTenancyTestCase.php',
-        'tests/MediaCatalogTenancyTestCase.php',
-        'tests/MediaPlatformTenancyTestCase.php',
-        'tests/MediaTenantAssetTestCase.php',
-        'tests/Fixtures/BatchMediaTenancyFixtureServiceProvider.php',
-        'tests/Fixtures/MediaTenancyFixtureServiceProvider.php',
-        'tests/Fixtures/MediaTenancyConsumerServiceProvider.php',
-        'tests/Fixtures/MediaTenancyConsumerSetupCommand.php',
-        'tests/Fixtures/MediaTenancyConsumerMaintenanceMode.php',
-        'tests/Fixtures/MediaTenancyDirectory.php',
-        'tests/Fixtures/MediaTenancyMaintenanceMode.php',
-        'tests/Fixtures/MediaTenancyPlatformAccess.php',
-        'tests/Fixtures/MediaTenancyScenario.php',
-        'tests/Fixtures/TenancyOwnerAdoptionAdapter.php',
-    ],
-));
-
 // Optional integrations are guarded by the provider or the S3 dependency guard.
 // DistributionTest boots and publishes without either optional integration.
 $paths = [

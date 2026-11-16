@@ -4,12 +4,10 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Database\Factories;
 
-use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Services\MediaModelRegistry;
-use Nvl\Media\Services\MediaPathResolver;
 use Nvl\Media\Support\MediaDiskResolver;
 
 /**
@@ -48,12 +46,6 @@ class MediaFactory extends Factory
             }
 
             FactoryGuard::root($model, 'media.assets');
-            if (config('nvl-tenancy.enabled') === true && $model->getAttribute('storage_path') === null) {
-                $model->forceFill([
-                    'storage_path' => Container::getInstance()->make(MediaPathResolver::class)
-                        ->mediaPathForFolder($model, $model->folder ?? ''),
-                ]);
-            }
         });
     }
 
