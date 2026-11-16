@@ -5,6 +5,8 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [7.3.0] - 2026-11-17
+
 ### Added
 
 - `MediaAbility::FinalizeScan` authorizes `MediaScan::finalize()`. The default policy never grants it, so an uploader can no longer mark its own upload malware-clean; grant it to your scanner.
@@ -30,6 +32,12 @@ All notable changes to `nvl/media` are documented here.
 ### Changed
 
 - Documentation: list pages read through `getMany()` or slot reads, not `findMany()`; `scanner.untrusted_uploads=false` rejects server-proxied uploads; a PostgreSQL cutover recipe for GCT `px_media*` index names that collide with the native migrations.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- implement the Final spec audit for one release
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.2.0] - 2026-11-16
 
