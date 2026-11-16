@@ -128,3 +128,23 @@ it('reports legacy values too long for their canonical column during the dry run
         'translation [1]: Legacy translation title exceeds the canonical 255-character limit.',
     ]);
 });
+
+it('divergent existing UUID blocks dry-run and apply', function (): void {
+    stageLegacySpatieMedia(2);
+    $import = app(MediaImport::class);
+    expect($import->adopt(SystemActor::Background, 'adoption_legacy', 'adoption_legacy_translations', apply: true)['ready'])->toBeTrue()
+        ->and($import->adopt(SystemActor::Background, 'adoption_legacy', 'adoption_legacy_translations', apply: true)['matchedMedia'])->toBe(2);
+
+    $media = Media::query()->orderBy('id')->firstOrFail();
+    Media::query()->whereKey($media->id)->update(['filename' => 'other.txt']);
+    $translation = MediaTranslation::query()->orderBy('id')->firstOrFail();
+    MediaTranslation::query()->whereKey($translation->id)->update(['title' => 'Changed title']);
+
+    $dryRun = $import->adopt(SystemActor::Background, 'adoption_legacy', 'adoption_legacy_translations');
+    expect($dryRun['ready'])->toBeFalse()
+        ->and($dryRun['matchedMedia'])->toBe(1)
+        ->and($dryRun['errors'])->toContain((new Media)->getTable()." [{$media->id}] already exists with different data.")
+        ->and($dryRun['errors'])->toContain((new MediaTranslation)->getTable()." [{$translation->id}] already exists with different data.")
+        ->and(fn () => $import->adopt(SystemActor::Background, 'adoption_legacy', 'adoption_legacy_translations', apply: true))->toThrow(LogicException::class, 'cannot apply')
+        ->and($media->fresh()?->filename)->toBe('other.txt');
+});

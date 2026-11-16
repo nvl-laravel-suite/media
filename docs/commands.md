@@ -67,7 +67,7 @@ php artisan nvl:media:reconcile --production --disk=s3 --cleanup-orphans --older
 - `--production`: enables route verification and record requirement, prohibits live-write probes, and requires `--force` for orphan cleanup.
 - `--live-write`: create/read/delete a temporary health object. Never combine with production.
 - `--cleanup`: explicitly remove the temporary probe.
-- `--no-write`: assert read-only operation; incompatible with `--live-write`.
+- `--no-write`: assert read-only operation; incompatible with `--live-write` and `--cleanup-orphans`.
 
 Whole-disk orphan deletion is always refused when no disk/owner prefix exists. Root-level Media still supports record-based checks and deletion. `restrict_to_root=false` permits read-only whole-disk orphan inventory.
 
@@ -190,7 +190,7 @@ php artisan nvl:media:migrate-disk --column=folder --from=legacy --to=library --
 - `--dry-run`: inspect scope without writes.
 - `--from-path=`: retained as a rejected legacy option; physical moves require a configured source disk.
 
-Destination policies must admit each selected record's current visibility. Cross-disk copies stream data and verify the copied object before changing database metadata; canonical storage, visibility, revision and variation snapshots are rechecked under locks before the metadata swap. Source deletion waits for the outer commit. `--records-only` skips byte verification/copy and requires an independently verified destination copy. Association filters select media rows, not individual associations; shared rows move globally. Back up metadata, run dry-run, reconcile the source, perform the migration, then reconcile the destination.
+Destination policies must admit each selected record's current visibility. Cross-disk copies stream data and verify the copied object before changing database metadata; canonical storage, visibility, revision and variation snapshots are rechecked under locks before the metadata swap. Without a surrounding transaction, sources are deleted inside the metadata transaction and any failure restores them. Run inside a caller's transaction, the command deletes sources only after that transaction commits, and deletes destination copies it created if that transaction rolls back. `--records-only` skips byte verification/copy and requires an independently verified destination copy. Association filters select media rows, not individual associations; shared rows move globally. Back up metadata, run dry-run, reconcile the source, perform the migration, then reconcile the destination.
 
 Disk migration applies the destination disk root to originals and variations when roots differ, verifies copied bytes, and updates path metadata together with the disk. Equal roots preserve existing paths. Keep the source root configured until migration completes; `--records-only` assumes an external copy into the destination layout.
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
@@ -67,7 +68,7 @@ final class MediaUploader
      * @param  array<string, mixed>  $metadata  Arbitrary key-value pairs stored with the media
      * @param  string|null  $folderOverride  Override the resolved storage folder
      * @param  bool|null  $allowDuplicates  Force duplicate row creation and duplicate-safe filenames
-     * @param  bool|null  $deduplicateExisting  Reuse an existing media row when one already exists for the same digest
+     * @param  bool|null  $deduplicateExisting  Reuse an existing media row when one already exists for the same digest; exclusive slots never deduplicate and reject true
      * @param  bool  $skipAutoVariations  Skip preset/output conversion generation for this upload
      * @param  array<string, ConversionDefinition|array<string, mixed>>  $variationDefinitions
      * @return Media The freshly created Media model
@@ -90,6 +91,9 @@ final class MediaUploader
         array $variationDefinitions = [],
     ): Media {
         $actor = MediaActors::assert($actor);
+        if ($slot->isExclusive() && $deduplicateExisting === true) {
+            throw new \InvalidArgumentException("Exclusive Media slot [{$slot->name}] cannot deduplicate existing uploads.");
+        }
         if (MediaOwnership::active()) {
             $model = $this->owners->resolve($model);
         }
@@ -169,7 +173,7 @@ final class MediaUploader
             : $this->pathResolver->resolve($model, $slot);
 
         $duplicates_allowed = (bool) ($allowDuplicates ?? config('nvl-media.allow_duplicates', false));
-        $should_deduplicate = $deduplicateExisting ?? ! $duplicates_allowed;
+        $should_deduplicate = ! $slot->isExclusive() && ($deduplicateExisting ?? ! $duplicates_allowed);
 
         if (! $isPublic && $uploaderId === null && ! config('nvl-media.deduplication.allow_anonymous_private', false)) {
             $should_deduplicate = false;
@@ -182,11 +186,14 @@ final class MediaUploader
                 $isPublic,
                 $uploaderId,
                 $uploaderType,
+                $model,
+                $normalizedVariationDefinitions,
             );
 
             if ($existing !== null) {
                 return $this->uploadReuseDeduplicatedMedia($actor,
                     $existing,
+                    $model,
                     $normalizedVariationDefinitions,
                     $skipAutoVariations,
                 );
@@ -198,18 +205,21 @@ final class MediaUploader
                 $isPublic,
                 $uploaderId,
                 $uploaderType,
-                function () use ($actor, $file, $disk, $isPublic, $tags, $metadata, $folder, $duplicates_allowed, $validatedFile, $uploaderId, $uploaderType, $skipAutoVariations, $normalizedVariationDefinitions): Media {
+                function () use ($actor, $file, $disk, $model, $isPublic, $tags, $metadata, $folder, $duplicates_allowed, $validatedFile, $uploaderId, $uploaderType, $skipAutoVariations, $normalizedVariationDefinitions): Media {
                     $existing = $this->uploadFindDeduplicateCandidate($actor,
                         $validatedFile['digest'],
                         $disk,
                         $isPublic,
                         $uploaderId,
                         $uploaderType,
+                        $model,
+                        $normalizedVariationDefinitions,
                     );
 
                     if ($existing !== null) {
                         return $this->uploadReuseDeduplicatedMedia($actor,
                             $existing,
+                            $model,
                             $normalizedVariationDefinitions,
                             $skipAutoVariations,
                         );
@@ -392,52 +402,81 @@ final class MediaUploader
     }
 
     /**
-     * Merge compatible named definitions onto a shared deduplicated asset.
+     * Reuse a deduplicated asset after rechecking Reuse, and Mutate for new definitions, on its locked row.
+     *
+     * Merges compatible named definitions onto the shared asset.
      *
      * @param  array<string, array<string, mixed>>  $requestedDefinitions
+     *
+     * @throws AuthorizationException When the locked asset is no longer reusable by the actor
      */
     private function uploadReuseDeduplicatedMedia(Authenticatable|SystemActor $actor,
         Media $media,
+        Model $model,
         array $requestedDefinitions,
         bool $skipAutoVariations,
     ): Media {
-        $resolved = $requestedDefinitions === []
-            ? $media
-            : $this->mutationLock->execute(
-                $media->id,
-                function () use ($media, $requestedDefinitions): Media {
-                    return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($media, $requestedDefinitions): Media {
-                        $locked = MediaModelRegistry::query()->lockForUpdate()->findOrFail($media->id);
-                        $existingDefinitions = is_array($locked->variation_definitions)
-                            ? $locked->variation_definitions
-                            : [];
+        $resolved = $this->mutationLock->execute(
+            $media->id,
+            function () use ($actor, $media, $model, $requestedDefinitions): Media {
+                return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor, $media, $model, $requestedDefinitions): Media {
+                    $locked = MediaModelRegistry::query()->lockForUpdate()->findOrFail($media->id);
+                    if (! $this->uploadMayReuse($actor, $locked, $model, $requestedDefinitions)) {
+                        throw new AuthorizationException('The actor cannot reuse this deduplicated media.');
+                    }
+                    if ($requestedDefinitions === []) {
+                        return $locked;
+                    }
+                    $existingDefinitions = is_array($locked->variation_definitions)
+                        ? $locked->variation_definitions
+                        : [];
 
-                        foreach ($requestedDefinitions as $label => $definition) {
-                            $existing = $existingDefinitions[$label] ?? null;
+                    foreach ($requestedDefinitions as $label => $definition) {
+                        $existing = $existingDefinitions[$label] ?? null;
 
-                            if (is_array($existing) && $existing !== $definition) {
-                                throw new MediaUploadException(
-                                    "Deduplicated media [{$media->id}] already has a conflicting variation definition [{$label}].",
-                                );
-                            }
-
-                            $existingDefinitions[$label] = $definition;
+                        if (is_array($existing) && $existing !== $definition) {
+                            throw new MediaUploadException(
+                                "Deduplicated media [{$media->id}] already has a conflicting variation definition [{$label}].",
+                            );
                         }
 
-                        ksort($existingDefinitions);
-                        $locked->variation_definitions = $existingDefinitions;
-                        $locked->save();
+                        $existingDefinitions[$label] = $definition;
+                    }
 
-                        return $locked;
-                    });
-                },
-            );
+                    ksort($existingDefinitions);
+                    $locked->variation_definitions = $existingDefinitions;
+                    $locked->save();
+
+                    return $locked;
+                });
+            },
+        );
 
         if (! $skipAutoVariations) {
             $this->variationDispatcher->dispatchMissingConfiguredForUpload($resolved);
         }
 
         return $resolved;
+    }
+
+    /**
+     * Whether the actor may reuse a candidate for this owner, and change its definitions when the upload adds any.
+     *
+     * @param  array<string, array<string, mixed>>  $requestedDefinitions
+     */
+    private function uploadMayReuse(Authenticatable|SystemActor $actor, Media $candidate, Model $model, array $requestedDefinitions): bool
+    {
+        if (! $this->access->allows($actor, MediaAbility::Reuse, $candidate, $model)) {
+            return false;
+        }
+        $existingDefinitions = is_array($candidate->variation_definitions) ? $candidate->variation_definitions : [];
+        foreach ($requestedDefinitions as $label => $definition) {
+            if (($existingDefinitions[$label] ?? null) !== $definition) {
+                return $this->access->allows($actor, MediaAbility::Mutate, $candidate, $model);
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -462,6 +501,10 @@ final class MediaUploader
      *
      * - Public files dedup across all public files on the same disk.
      * - Private files dedup only within the same user's uploads.
+     * - Candidates the actor may not reuse, or whose definitions it may not change, are skipped, so the upload
+     *   stores a separate asset instead.
+     *
+     * @param  array<string, array<string, mixed>>  $requestedDefinitions
      */
     protected function uploadFindDeduplicateCandidate(Authenticatable|SystemActor $actor,
         string $digest,
@@ -469,6 +512,8 @@ final class MediaUploader
         bool $isPublic,
         ?string $uploadedBy,
         ?string $uploadedByType,
+        Model $model,
+        array $requestedDefinitions = [],
     ): ?Media {
         $query = MediaModelRegistry::query()->where('digest', $digest)
             ->where('disk', $disk)
@@ -482,7 +527,8 @@ final class MediaUploader
         }
 
         foreach ($query->orderBy('id')->get() as $candidate) {
-            if ($this->existence->existsFresh($candidate->disk, $candidate->buildPath())) {
+            if ($this->uploadMayReuse($actor, $candidate, $model, $requestedDefinitions)
+                && $this->existence->existsFresh($candidate->disk, $candidate->buildPath())) {
                 return $candidate;
             }
         }

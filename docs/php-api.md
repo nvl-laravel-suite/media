@@ -64,6 +64,7 @@ Namespace: `Nvl\Media\Services\MediaUploader`.
 Namespace: `Nvl\Media\Services\MediaAttachments`.
 
 - `attach(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media $media, Illuminate\Database\Eloquent\Model $model, Nvl\Media\Slots\MediaPlacement|string $collection = …, ?string $locale = …, ?int $order = …, array $metadata = …, bool $dispatchVariations = …, bool $requirePublic = …, ?Nvl\Media\Slots\MediaSlot $slot = …): Nvl\Media\Models\MediaAssociation`
+- `lockForAttachment(Illuminate\Database\Eloquent\Model $owner, string $collection, array $mediaIds, Closure $callback, ?Nvl\Media\Slots\MediaSlot $slot = …): mixed`
 - `detach(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media|string $media, Illuminate\Database\Eloquent\Model $model, ?string $collection = …): int`
 - `reuse(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media|string $media, Illuminate\Database\Eloquent\Model&Nvl\Media\Contracts\HasNvlMedia $model, string $collection = …, ?string $locale = …, ?int $order = …, array $metadata = …, bool $dispatchVariations = …): Nvl\Media\Models\MediaAssociation`
 - `remove(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Illuminate\Database\Eloquent\Model&Nvl\Media\Contracts\HasNvlMedia $owner, string $mediaId, ?string $collection = …): void`
@@ -76,6 +77,8 @@ Namespace: `Nvl\Media\Services\MediaAttachments`.
 - `replaceSlot(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Illuminate\Database\Eloquent\Model&Nvl\Media\Contracts\HasNvlMedia $owner, string $slot, string $mediaId, ?string $idempotencyKey = …): Nvl\Media\Models\Media`
 - `clearSlot(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Illuminate\Database\Eloquent\Model&Nvl\Media\Contracts\HasNvlMedia $owner, string $slot, ?string $idempotencyKey = …): void`
 - `copySlot(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Illuminate\Database\Eloquent\Model&Nvl\Media\Contracts\HasNvlMedia $owner, string $slot, string $sourceMediaId, ?string $idempotencyKey = …): Nvl\Media\Models\Media`
+
+`lockForAttachment()` runs its callback holding the owner-collection lock and then the sorted asset locks, the order `attach()` and deletion use. Pass the size-limited slot you attach into, so the assets an overflow may detach or delete are locked too. Take it before locking your own rows, as comment attachments do.
 
 ## `MediaLibrary`
 

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use DateTimeInterface;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Schema\Builder as SchemaBuilder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -78,6 +80,7 @@ final class MediaImport
                     MediaTables::get($table),
                     $rows,
                     $apply && $errors === [] && $missingPaths === [],
+                    $errors,
                 );
             };
 
@@ -421,21 +424,92 @@ final class MediaImport
     }
 
     /**
-     * Insert one chunk of mapped rows idempotently when asked, then count how many of its identifiers the target holds.
+     * Compare one chunk with the rows already staged under its identifiers, insert the missing rows when asked, and
+     * count the rows the target holds with the same facts. A staged row with the same ID but different facts is an
+     * error, so it blocks the dry run and the apply instead of counting as adopted.
      *
      * @param  list<array<string, mixed>>  $rows
+     * @param  list<string>  $errors
      */
-    private function adoptStoreChunk(ConnectionInterface $connection, string $table, array $rows, bool $insert): int
+    private function adoptStoreChunk(ConnectionInterface $connection, string $table, array $rows, bool $insert, array &$errors): int
     {
         if ($rows === []) {
             return 0;
         }
 
-        if ($insert) {
-            $connection->table($table)->insertOrIgnore($rows);
+        $existing = $connection->table($table)->whereIn('id', array_column($rows, 'id'))->get()->keyBy('id');
+        $pending = [];
+        $matched = 0;
+        $divergent = false;
+        foreach ($rows as $row) {
+            $id = is_string($row['id'] ?? null) ? $row['id'] : throw new LogicException("Media adoption produced a [{$table}] row without a string ID.");
+            $current = $existing->get($id);
+            if (! $current instanceof stdClass) {
+                $pending[] = $row;
+            } elseif ($this->adoptSameFacts($row, $current)) {
+                $matched++;
+            } else {
+                $divergent = true;
+                $errors[] = "{$table} [{$id}] already exists with different data.";
+            }
         }
 
-        return $connection->table($table)->whereIn('id', array_column($rows, 'id'))->count();
+        if ($insert && ! $divergent && $pending !== []) {
+            $connection->table($table)->insertOrIgnore($pending);
+            $matched += $connection->table($table)->whereIn('id', array_column($pending, 'id'))->count();
+        }
+
+        return $matched;
+    }
+
+    /**
+     * Whether a staged row holds the mapped facts, tolerating driver scalar, JSON and timestamp formatting.
+     *
+     * Timestamps the mapping generated because the legacy row had none are not facts and are skipped.
+     *
+     * @param  array<string, mixed>  $mapped
+     */
+    private function adoptSameFacts(array $mapped, stdClass $existing): bool
+    {
+        foreach ($mapped as $column => $expected) {
+            if ($expected instanceof DateTimeInterface) {
+                continue;
+            }
+            $actual = $existing->{$column} ?? null;
+            if ($expected === null || $actual === null) {
+                if ($expected !== $actual) {
+                    return false;
+                }
+
+                continue;
+            }
+            [$expected, $actual] = [$this->adoptFact($expected), $this->adoptFact($actual)];
+            if (in_array($column, ['tags', 'metadata', 'variation_definitions', 'failure_context'], true)) {
+                $same = json_decode($expected, true) === json_decode($actual, true);
+            } elseif (str_ends_with($column, '_at')) {
+                $same = Carbon::parse($expected)->equalTo(Carbon::parse($actual));
+            } else {
+                $same = $expected === $actual;
+            }
+            if (! $same) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Render one stored or mapped value as text, so driver booleans, integers and strings compare equal.
+     */
+    private function adoptFact(mixed $value): string
+    {
+        return match (true) {
+            is_bool($value) => $value ? '1' : '0',
+            is_scalar($value) => (string) $value,
+            $value instanceof DateTimeInterface => $value->format('Y-m-d H:i:s'),
+            default => json_encode($value, JSON_THROW_ON_ERROR),
+        };
     }
 
     /**

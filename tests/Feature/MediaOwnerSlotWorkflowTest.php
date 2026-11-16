@@ -1199,3 +1199,37 @@ it('replaces an exclusive slot whose current Media record was already deleted', 
         ->and(MediaAssociation::query()->where('media_id', $deleted->id)->exists())->toBeFalse()
         ->and(Media::withTrashed()->findOrFail($deleted->id)->trashed())->toBeTrue();
 });
+it('carried owner attributes cannot grant access', function (): void {
+    Storage::fake('public');
+    $owner = ownerSlotWorkflowOwner('Locked');
+    $actor = ownerSlotWorkflowActor();
+    $actorData = ownerSlotWorkflowActorData($actor);
+    $current = ownerSlotStoredMedia('%PDF-1.4 current', ['uploaded_by' => (string) $actor->getKey(), 'uploaded_by_type' => $actor->getMorphClass()]);
+    attachOwnerSlotMedia($current, $owner, 'document');
+    $candidate = ownerSlotStoredMedia('%PDF-1.4 candidate', ['uploaded_by' => (string) $actor->getKey(), 'uploaded_by_type' => $actor->getMorphClass()]);
+    useOwnerSlotAuthorization(static fn (Authenticatable|SystemActor $candidateActor, MediaAbility $ability, ?Media $candidateMedia, ?Model $candidateOwner): bool => $candidateOwner === null || $candidateOwner->getAttribute('name') === 'Granted');
+    $owner->setAttribute('name', 'Granted');
+    $attachments = app(MediaAttachments::class);
+
+    expect(fn () => $attachments->getSlot($actorData, $owner, 'document'))->toThrow(AuthorizationException::class)
+        ->and(fn () => $attachments->clearSlot($actorData, $owner, 'document'))->toThrow(AuthorizationException::class)
+        ->and(fn () => $attachments->replaceSlot($actorData, $owner, 'document', $candidate->id))->toThrow(AuthorizationException::class)
+        ->and(fn () => $attachments->copySlot($actorData, $owner, 'document', $candidate->id))->toThrow(AuthorizationException::class);
+    expect(MediaAssociation::query()->where('collection', 'document')->pluck('media_id')->all())->toBe([$current->id])
+        ->and(Media::query()->count())->toBe(2)
+        ->and($owner->fresh()?->getAttribute('name'))->toBe('Locked');
+});
+it('replays reauthorize the persisted owner, not carried attributes', function (): void {
+    $owner = ownerSlotWorkflowOwner('Granted');
+    $actor = ownerSlotWorkflowActor();
+    $actorData = ownerSlotWorkflowActorData($actor);
+    $media = ownerSlotMedia(['uploaded_by' => (string) $actor->getKey(), 'uploaded_by_type' => $actor->getMorphClass()]);
+    useOwnerSlotAuthorization(static fn (Authenticatable|SystemActor $candidateActor, MediaAbility $ability, ?Media $candidateMedia, ?Model $candidateOwner): bool => $candidateOwner === null || $candidateOwner->getAttribute('name') === 'Granted');
+    $key = Str::uuid()->toString();
+    $attachments = app(MediaAttachments::class);
+    $attachments->replaceSlot($actorData, $owner, 'document', $media->id, $key);
+    OwnerSlotWorkflowModel::query()->whereKey($owner->getKey())->update(['name' => 'Locked']);
+
+    expect($owner->getAttribute('name'))->toBe('Granted')
+        ->and(fn () => $attachments->replaceSlot($actorData, $owner, 'document', $media->id, $key))->toThrow(AuthorizationException::class);
+});

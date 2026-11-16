@@ -51,7 +51,7 @@ final class StorageHealthCommand extends Command
         {--production : Verifies route contracts, requires records, prohibits live-write, and requires force for orphan cleanup}
         {--live-write : Opt in to a temporary write/read/delete healthcheck object}
         {--cleanup : Explicitly request cleanup of the temporary live-write object}
-        {--no-write : Assert read-only mode; incompatible with --live-write}';
+        {--no-write : Assert read-only mode; incompatible with --live-write and --cleanup-orphans}';
 
     /** @var string */
     protected $description = 'Verify Media storage objects, variations, and route-backed URL contracts without migrating files.';
@@ -109,6 +109,12 @@ final class StorageHealthCommand extends Command
 
         if ($liveWrite && $noWrite) {
             $this->error('--live-write cannot be combined with --no-write.');
+
+            return self::FAILURE;
+        }
+
+        if ($cleanupOrphans && (bool) $this->option('no-write')) {
+            $this->error('--cleanup-orphans cannot be combined with --no-write.');
 
             return self::FAILURE;
         }

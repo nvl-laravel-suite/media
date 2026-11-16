@@ -56,6 +56,7 @@ final class MediaMultipart
 
         $actor = MediaActors::assert($actor);
         $this->assertEnabled();
+        $this->assertOutsideTransaction();
         if (! $this->authorization->allows($actor, MediaAbility::Upload)) {
             throw new MediaUploadException('The actor is not authorized to initiate media uploads.');
         }
@@ -134,6 +135,16 @@ final class MediaMultipart
     {
         if (! (bool) config('nvl-media.multipart.enabled', false)) {
             throw new MediaUploadException('Multipart uploads are disabled.');
+        }
+    }
+
+    /**
+     * Provider effects cannot roll back with a caller's transaction, so refuse to start them inside one.
+     */
+    private function assertOutsideTransaction(): void
+    {
+        if ($this->fileEffects->insideTransaction()) {
+            throw new MediaUploadException('Multipart uploads must run outside a database transaction.');
         }
     }
 
@@ -243,6 +254,7 @@ final class MediaMultipart
 
         $actor = MediaActors::assert($actor);
         $this->assertEnabled();
+        $this->assertOutsideTransaction();
 
         return $this->lock->execute($completion['uploadId'], fn (): Media => $this->completeCompleteLocked($completion, $actor));
     }
@@ -420,6 +432,7 @@ final class MediaMultipart
     {
         $actor = MediaActors::assert($actor);
         $this->assertEnabled();
+        $this->assertOutsideTransaction();
         $this->lock->execute($uploadId, function () use ($uploadId, $actor): void {
             $persisted = MediaMultipartUpload::query()->findOrFail($uploadId);
             $this->assertActor($persisted, $actor);

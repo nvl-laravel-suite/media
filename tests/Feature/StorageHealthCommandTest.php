@@ -136,6 +136,13 @@ it('deletes only explicitly requested age-eligible orphan objects', function ():
     $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--cleanup-orphans' => true, '--older-than' => 0])->expectsOutputToContain('Orphan objects deleted: 1')->assertSuccessful();
     Storage::disk('cloudflare-r2')->assertMissing($orphan);
 });
+it('no-write rejects orphan cleanup and preserves eligible bytes', function (): void {
+    configureStorageHealthR2Fake();
+    $orphan = 'media/orphans/no-write.txt';
+    Storage::disk('cloudflare-r2')->put($orphan, 'orphan');
+    $this->artisan('nvl:media:reconcile', ['--disk' => 'cloudflare-r2', '--no-write' => true, '--cleanup-orphans' => true, '--older-than' => 0])->expectsOutputToContain('--cleanup-orphans cannot be combined with --no-write.')->assertFailed();
+    expect(Storage::disk('cloudflare-r2')->get($orphan))->toBe('orphan');
+});
 it('reports objects referenced only by soft-deleted tombstones as candidates', function (): void {
     configureStorageHealthR2Fake();
     $media = createStorageHealthMedia(['hash' => 'tombstone.txt']);

@@ -25,3 +25,19 @@ Replace old event aliases and model-bearing listener payloads with the canonical
 The media doctor now detects production itself. Leaving out `--production` no longer means development checks. `nvl:media:doctor` and the aggregate `nvl:doctor` apply production rules whenever the application environment is production; `--production` still forces them elsewhere.
 
 Adoption runs through nvl:adopt with reviewed, checkpointed batches and an explicit activate step. Committed batches survive a failure. Keep writers stopped until verify and activate pass. Enable `nvl-core.adoption.migrations.enabled` and migrate, write the legacy source options as a JSON manifest, then run `php artisan nvl:adopt media plan|apply|verify|activate <manifest.json>`. Media stages assets, associations, variations and translations in place and copies no files; a missing backing file fails verify and blocks activation. `MediaSchemaAdopter` keeps its behaviour as a compatibility wrapper.
+
+## Upgrading to the next 7.x release
+
+Grant `MediaAbility::FinalizeScan` to the actor your scanner uses. `MediaScan::finalize()` now requires it instead of `mutate`, and the default policy never grants it, so an uploader cannot approve its own upload. A custom `MediaAuthorization` that allows every ability keeps working; review it so that ordinary uploaders do not hold this one.
+
+Deduplication now asks your policy for `reuse` on the existing asset (and `mutate` when the upload adds variation definitions). When either is denied the upload stores a separate asset. Exclusive slots never deduplicate, and `deduplicateExisting: true` with an exclusive slot throws `InvalidArgumentException`.
+
+Owner-slot workflows and `MediaLibrary::delete($actor, $media, owner: $owner)` pass the owner reloaded from storage to your policy, not the instance you supplied. Policies that read unsaved attributes from the owner must read persisted ones. `MediaLibrary::delete(owner: $owner)` therefore requires the owner record to still exist; a soft-deleted owner is accepted. `clearCollectionExcept()` throws `InvalidArgumentException` for an excluded item that is neither a `Media` model nor a UUID string.
+
+Call multipart `initiate()`, `complete()` and `abort()` outside database transactions; inside one they now throw `MediaUploadException`. `nvl:media:migrate-disk` inside a caller's transaction defers source deletion until that transaction commits. `nvl:media:reconcile` rejects `--no-write` together with `--cleanup-orphans`.
+
+`MediaImport::adopt()` reports staged rows whose ID matches but whose data differs, and refuses to apply until they are resolved. Earlier runs counted them as adopted; rerun the dry run before applying.
+
+On PostgreSQL, rename GCT's colliding `px_media*` indexes, or keep the legacy tables on a separate source connection, before installing the native schema; see the README.
+
+`nvl:adopt media` now refuses to resume when staged rows behind a stored checkpoint were deleted or changed. Restore them or start a new run. It needs the Core release that adds `AdoptionAdapter::assertCheckpoint()`.

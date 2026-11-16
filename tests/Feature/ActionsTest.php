@@ -2,9 +2,13 @@
 
 declare(strict_types=1);
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Events\TransactionBeginning;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Auth\User;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
@@ -13,7 +17,9 @@ use League\Flysystem\FilesystemAdapter as FlysystemAdapter;
 use League\Flysystem\FilesystemOperator;
 use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Contracts\MediaContentScanner;
+use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Definitions\Tables\MediaTables;
+use Nvl\Media\Enums\MediaAbility;
 use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Enums\MediaType;
 use Nvl\Media\Enums\MediaVisibility;
@@ -32,10 +38,13 @@ use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaLibrary;
 use Nvl\Media\Services\MediaReader;
 use Nvl\Media\Services\MediaUploader;
+use Nvl\Media\Slots\MediaPlacement;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Tests\Stubs\RestrictedMediaModel;
 use Nvl\Media\Tests\Stubs\TestMediaModel;
+use Nvl\Support\Config\PackageOptions;
 use Nvl\Support\Enums\SystemActor;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 
 function createMediaRecord(array $overrides = []): Media
 {
@@ -65,6 +74,27 @@ function failActionPublicDiskDeletes(bool $throwOnDelete): void
         }
     };
     Storage::set('public', $failingDisk);
+}
+/**
+ * Bind a consumer policy for one test and drop scoped services that captured the previous one.
+ *
+ * @param  Closure(Authenticatable|SystemActor, MediaAbility, ?Media, ?Model): bool  $callback
+ */
+function useActionAuthorization(Closure $callback): void
+{
+    app()->instance(MediaAuthorization::class, new readonly class($callback) implements MediaAuthorization
+    {
+        /**
+         * @param  Closure(Authenticatable|SystemActor, MediaAbility, ?Media, ?Model): bool  $callback
+         */
+        public function __construct(private Closure $callback) {}
+
+        public function allows(Authenticatable|SystemActor $actor, MediaAbility $ability, ?Media $media = null, ?Model $owner = null): bool
+        {
+            return ($this->callback)($actor, $ability, $media, $owner);
+        }
+    });
+    app()->forgetScopedInstances();
 }
 /* =================================================================
  * UploadMediaAction
@@ -569,6 +599,19 @@ describe('DeleteMediaAction', function () {
         expect(Media::query()->find($media->id))->not->toBeNull();
         expect($action->delete(auth()->user() ?? SystemActor::Background, $media, force: true))->toBeTrue()->and(Media::query()->find($media->id))->toBeNull();
     });
+    it('carried owner attributes cannot grant access', function (): void {
+        Storage::fake('public');
+        $user = createTestUser();
+        $owner = TestMediaModel::query()->create(['name' => 'Locked']);
+        $media = createMediaRecord(['is_public' => false]);
+        Storage::disk('public')->put($media->buildPath(), 'kept');
+        useActionAuthorization(static fn (Authenticatable|SystemActor $actor, MediaAbility $ability, ?Media $candidate, ?Model $candidateOwner): bool => $candidateOwner?->getAttribute('name') === 'Granted');
+        $owner->setAttribute('name', 'Granted');
+
+        expect(fn () => app(MediaLibrary::class)->delete($user, $media, owner: $owner))->toThrow(AuthorizationException::class);
+        expect(Media::query()->find($media->id))->not->toBeNull()
+            ->and(Storage::disk('public')->get($media->buildPath()))->toBe('kept');
+    });
     it('soft-deletes the media record and retains its diagnostic tombstone', function () {
         $media = createMediaRecord();
         $media_id = $media->id;
@@ -674,4 +717,85 @@ it('accepts native MediaType enums in authorized reader filters', function (): v
     $page = app(MediaReader::class)->paginate(SystemActor::Background, ['type' => MediaType::IMAGE]);
 
     expect($page->getCollection()->modelKeys())->toBe([$media->id]);
+});
+
+it('denied reuse cannot attach or alter foreign deduplicated media', function (): void {
+    Storage::fake('public');
+    $owner = TestMediaModel::query()->create(['name' => 'Shared owner']);
+    $first = createTestUser();
+    $second = createTestUser();
+    $foreignAbilities = [];
+    useActionAuthorization(static function (Authenticatable|SystemActor $actor, MediaAbility $ability, ?Media $media) use (&$foreignAbilities): bool {
+        return $media === null || ! in_array($ability, [MediaAbility::Reuse, MediaAbility::Mutate], true)
+            || (string) $media->uploaded_by === (string) $actor->getAuthIdentifier()
+            || in_array($ability, $foreignAbilities, true);
+    });
+    $upload = static fn (User $actor, array $definitions = []): Media => app(MediaUploader::class)->upload(
+        $actor, UploadedFile::fake()->createWithContent('shared.png', (string) base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', true)),
+        'public', $owner, new MediaSlot('gallery'), 'shared.png', isPublic: true, skipAutoVariations: true, variationDefinitions: $definitions,
+    );
+    $thumb = ['thumb' => ConversionDefinition::fromPreset('thumb', ['width' => 16, 'height' => 16, 'format' => 'png'])];
+    $foreign = $upload($first);
+
+    $foreignAbilities = [MediaAbility::Reuse];
+    expect($upload($second)->id)->toBe($foreign->id);
+    $separate = $upload($second, $thumb);
+    expect($separate->id)->not->toBe($foreign->id)
+        ->and($separate->buildPath())->not->toBe($foreign->buildPath())
+        ->and($foreign->fresh()?->variation_definitions)->toBeNull();
+
+    $foreignAbilities = [];
+    expect($upload($second)->id)->toBe($separate->id)
+        ->and(MediaAssociation::query()->where('media_id', $foreign->id)->exists())->toBeFalse()
+        ->and($foreign->fresh()?->variation_definitions)->toBeNull()
+        ->and(Media::query()->count())->toBe(2);
+});
+
+it('UUID Collections preserve excluded associations and bytes', function (): void {
+    Storage::fake('public');
+    $owner = TestMediaModel::query()->create(['name' => 'Gallery owner']);
+    $items = array_map(static function (int $index) use ($owner): Media {
+        $media = createMediaRecord(['is_public' => false]);
+        Storage::disk('public')->put($media->buildPath(), "bytes {$index}");
+        app(MediaAttachments::class)->attach(SystemActor::Background, $media, $owner, 'gallery', dispatchVariations: false);
+
+        return $media;
+    }, [0, 1, 2]);
+
+    app(MediaAttachments::class)->clearCollectionExcept(SystemActor::Background, $owner, 'gallery', collect([$items[0]->id, $items[1]]));
+
+    expect(MediaAssociation::query()->where('collection', 'gallery')->whereIn('media_id', [$items[0]->id, $items[1]->id])->count())->toBe(2)
+        ->and(Media::query()->whereKey([$items[0]->id, $items[1]->id])->count())->toBe(2)
+        ->and(Storage::disk('public')->get($items[0]->buildPath()))->toBe('bytes 0')
+        ->and(Storage::disk('public')->get($items[1]->buildPath()))->toBe('bytes 1')
+        ->and(Media::query()->find($items[2]->id))->toBeNull()
+        ->and(Storage::disk('public')->exists($items[2]->buildPath()))->toBeFalse();
+});
+
+it('locks every overflowing slot asset before any row when a full slot is replaced', function (): void {
+    $owner = TestMediaModel::query()->create(['name' => 'Full slot owner']);
+    $slot = (new MediaSlot('gallery'))->privateExclusive()->onlyKeepLatest(1);
+    $previous = createMediaRecord(['is_public' => false]);
+    $next = createMediaRecord(['is_public' => false]);
+    $attachments = app(MediaAttachments::class);
+    $attachments->attach(SystemActor::Background, $previous, $owner, new MediaPlacement('gallery', $slot), dispatchVariations: false);
+
+    $store = Cache::store(PackageOptions::lockStore('media', 'mutation'));
+    $previousKey = 'nvl:media:mutation:'.hash('sha256', app(OwnershipBoundary::class)->key('media.assets', $previous->id));
+    $heldAtFirstRowLock = null;
+    Event::listen(TransactionBeginning::class, static function () use (&$heldAtFirstRowLock, $store, $previousKey): void {
+        if ($heldAtFirstRowLock === null) {
+            $probe = $store->lock($previousKey, 5);
+            $heldAtFirstRowLock = ! $probe->get();
+            if (! $heldAtFirstRowLock) {
+                $probe->release();
+            }
+        }
+    });
+
+    $attachments->attach(SystemActor::Background, $next, $owner, new MediaPlacement('gallery', $slot), dispatchVariations: false);
+
+    expect($heldAtFirstRowLock)->toBeTrue()
+        ->and(Media::query()->find($previous->id))->toBeNull()
+        ->and(MediaAssociation::query()->where('collection', 'gallery')->where('media_id', $next->id)->exists())->toBeTrue();
 });

@@ -439,3 +439,35 @@ it('migrates a large selection without putting every identifier into one query',
     expect(Media::query()->where('disk', 'public')->where('folder', 'bulk')->count())->toBe(1100)
         ->and($largestBindingCount)->toBeLessThanOrEqual(1005);
 });
+
+it('removes source bytes only after the surrounding transaction commits and new copies when it rolls back', function (bool $commit): void {
+    Storage::fake('public');
+    Storage::fake('cloudflare-r2');
+    config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'nvl-media.allowed_disks' => ['public', 'cloudflare-r2']]);
+    $media = createMigratableMedia(['hash' => 'ambient-transaction.jpg']);
+    $path = $media->buildPath();
+    Storage::disk('public')->put($path, 'ambient-transaction-content');
+
+    $level = DB::transactionLevel();
+    DB::beginTransaction();
+    try {
+        $this->artisan('nvl:media:migrate-disk', ['--from' => 'public', '--to' => 'cloudflare-r2', '--no-interaction' => true])->assertExitCode(0);
+        Storage::disk('public')->assertExists($path);
+        Storage::disk('cloudflare-r2')->assertExists($path);
+        $commit ? DB::commit() : DB::rollBack();
+    } finally {
+        // A failed assertion must not leave this transaction open for the next test.
+        while (DB::transactionLevel() > $level) {
+            DB::rollBack();
+        }
+    }
+
+    expect($media->fresh()->disk)->toBe($commit ? 'cloudflare-r2' : 'public');
+    if ($commit) {
+        Storage::disk('public')->assertMissing($path);
+        expect(Storage::disk('cloudflare-r2')->get($path))->toBe('ambient-transaction-content');
+    } else {
+        Storage::disk('cloudflare-r2')->assertMissing($path);
+        expect(Storage::disk('public')->get($path))->toBe('ambient-transaction-content');
+    }
+})->with(['commit' => true, 'rollback' => false]);

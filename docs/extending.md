@@ -4,7 +4,7 @@ Native services own orchestration. Replace focused host boundaries through conta
 
 Authorization receives an explicit native actor; background identities require explicit grants. Batch policies express the complete visibility predicate in SQL before hydration and receive the admitted owner set. Register actual model slots through `HasNvlMedia` and `MediaRegistration`.
 
-Synchronous `MediaContentScanner::scan(UploadedFile $file): void` throws to reject content. Out-of-band scanners submit the validated native attestation array to `MediaScan::finalize()`; ordinary request metadata is not an attestation. Multipart gateways retain provider upload identity, bounded parts and recovery. Remote ingestion retains DNS/connected-IP checks and byte/time limits. Search adapters must retain native ownership and authorization predicates.
+Synchronous `MediaContentScanner::scan(UploadedFile $file): void` throws to reject content. Out-of-band scanners submit the validated native attestation array to `MediaScan::finalize()`; ordinary request metadata is not an attestation. `finalize()` requires the `MediaAbility::FinalizeScan` ability, which the default policy never grants: grant it in your `MediaAuthorization` to the scanner's actor only, so an uploader cannot approve its own upload. Multipart gateways retain provider upload identity, bounded parts and recovery. Remote ingestion retains DNS/connected-IP checks and byte/time limits. Search adapters must retain native ownership and authorization predicates.
 
 ## Contracts
 

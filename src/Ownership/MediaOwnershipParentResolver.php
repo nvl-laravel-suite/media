@@ -7,6 +7,7 @@ namespace Nvl\Media\Ownership;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Nvl\Media\Services\MediaModelRegistry;
 use Nvl\Support\OwnerRegistry;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
@@ -25,7 +26,11 @@ final readonly class MediaOwnershipParentResolver
 {
     public function __construct(private OwnershipResourceRegistry $resources, private OwnershipBoundary $boundary, private OwnershipContext $context, private OwnerRegistry $identities) {}
 
-    public function resolve(Model $owner, bool $lock = false): Model
+    /**
+     * Reload the owner under its canonical boundary. `$withTrashed` also admits a soft-deleted owner, for example a
+     * comment being force-deleted, while every other scope and the ownership boundary still apply.
+     */
+    public function resolve(Model $owner, bool $lock = false, bool $withTrashed = false): Model
     {
         $class = $owner::class;
         $prototype = new $class;
@@ -47,6 +52,9 @@ final readonly class MediaOwnershipParentResolver
             }
             $this->boundary->assertRecord($owner, $definition->key);
             $query = $this->boundary->query((new $definition->model)->newQuery()->useWritePdo(), $definition->key)->whereKey($owner->getKey());
+            if ($withTrashed) {
+                $query->withoutGlobalScope(SoftDeletingScope::class);
+            }
             if ($lock) {
                 $query->lockForUpdate();
             }
@@ -55,6 +63,9 @@ final readonly class MediaOwnershipParentResolver
         }
         if (MediaOwnership::active()) {
             $query = $this->scopeAnchor($prototype->newQuery())->whereKey($key);
+            if ($withTrashed) {
+                $query->withoutGlobalScope(SoftDeletingScope::class);
+            }
             if ($lock) {
                 $query->lockForUpdate();
             }
@@ -63,6 +74,9 @@ final readonly class MediaOwnershipParentResolver
         }
 
         $query = $prototype->newQuery()->useWritePdo()->whereKey($key);
+        if ($withTrashed) {
+            $query->withoutGlobalScope(SoftDeletingScope::class);
+        }
         if ($lock) {
             $query->lockForUpdate();
         }

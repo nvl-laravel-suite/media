@@ -130,6 +130,14 @@ final readonly class MediaOwnerSlotResolver
         return $associations->first();
     }
 
+    /**
+     * Reload the persisted owner so authorization never trusts the caller's carried attributes.
+     */
+    public function owner(Model&HasNvlMedia $owner, bool $lock = false): Model&HasNvlMedia
+    {
+        return $this->canonical($owner, $lock);
+    }
+
     /** Return an ownership-verified Media-capable owner. */
     private function canonical(Model&HasNvlMedia $owner, bool $lock = false): Model&HasNvlMedia
     {

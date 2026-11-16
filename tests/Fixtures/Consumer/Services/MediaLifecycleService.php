@@ -67,11 +67,7 @@ final class MediaLifecycleService
         string $collection = 'default',
         array|Collection $except = [],
     ): void {
-        if ($except instanceof Collection) {
-            $exceptIds = $except->pluck('id')->all();
-        } else {
-            $exceptIds = collect($except)->map(fn ($item) => $item instanceof Media ? $item->id : $item)->all();
-        }
+        $exceptIds = collect($except)->map(static fn (Media|string $item): string => $item instanceof Media ? $item->id : $item)->all();
 
         $items = $model->nvlMedia()->all($collection)
             ->reject(fn (Media $media) => in_array($media->id, $exceptIds, true));

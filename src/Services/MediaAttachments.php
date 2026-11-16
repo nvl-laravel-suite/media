@@ -122,7 +122,7 @@ final class MediaAttachments
         }
         $locale = $locale === null ? null : (new LocaleCode($locale))->value;
 
-        return $this->mutationLock->executeForOwnerCollection($model, $collection, function () use ($actor, $media, $model, $collection, $locale, $order, $metadata, $dispatchVariations, $requirePublic, $slot): MediaAssociation {
+        return $this->lockForAttachment($model, $collection, [$media->id], slot: $slot, callback: function () use ($actor, $media, $model, $collection, $locale, $order, $metadata, $dispatchVariations, $requirePublic, $slot): MediaAssociation {
             return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor, $media, $model, $collection, $locale, $order, $metadata, $dispatchVariations, $requirePublic, $slot): MediaAssociation {
                 $ownerId = $model->getKey();
                 if (! is_int($ownerId) && ! is_string($ownerId)) {
@@ -144,14 +144,7 @@ final class MediaAttachments
                 }
                 $association = $this->attachLocked($actor, $locked, $model, $collection, $locale, $order, $metadata, $dispatchVariations, $requirePublic);
                 if ($slot?->slotSizeLimit !== null) {
-                    $rows = MediaAssociation::query()->where('associable_type', $model->getMorphClass())
-                        ->where('associable_id', (string) $ownerId)->where('collection', $collection)
-                        ->where(function (Builder $placements) use ($slot, $collection): void {
-                            $placements->getQuery()->where('metadata->slot', $slot->name);
-                            if ($slot->name === $collection) {
-                                $placements->orWhereNull('metadata->slot');
-                            }
-                        })
+                    $rows = $this->slotPlacements($model, $collection, $slot)
                         ->whereKeyNot($association->id)->orderBy('created_at')->orderBy('id')->lockForUpdate()->get();
                     $overflow = max(0, $rows->count() + 1 - $slot->slotSizeLimit);
                     foreach ($rows->take($overflow) as $old) {
@@ -165,6 +158,59 @@ final class MediaAttachments
                 return $association;
             });
         });
+    }
+
+    /**
+     * Hold the locks `attach()` takes, in the one order every Media mutation uses: the owner-collection lock, then the
+     * sorted asset locks. Take them before any row lock; a caller that locks its own rows first (a comment, say) runs
+     * those rows inside the callback, so it never waits for an asset lock while holding a row a deletion needs.
+     *
+     * For a size-limited slot the asset locks also cover every asset already placed in it, since attaching may detach
+     * and delete the oldest. The owner-collection lock keeps that placement set stable until the callback ends.
+     *
+     * @template TResult
+     *
+     * @param  list<string>  $mediaIds
+     * @param  Closure(): TResult  $callback
+     * @return TResult
+     */
+    public function lockForAttachment(Model $owner, string $collection, array $mediaIds, Closure $callback, ?MediaSlot $slot = null): mixed
+    {
+        $owner = $this->owners->resolve($owner);
+
+        return $this->mutationLock->executeForOwnerCollection(
+            $owner,
+            $collection,
+            fn (): mixed => $this->mutationLock->executeMany(
+                $slot?->slotSizeLimit === null ? $mediaIds : [
+                    ...$mediaIds,
+                    ...$this->slotPlacements($owner, $collection, $slot)->pluck('media_id')->filter(static fn (mixed $id): bool => is_string($id))->values()->all(),
+                ],
+                $callback,
+            ),
+        );
+    }
+
+    /**
+     * Query the associations that occupy one slot of an owner collection.
+     *
+     * @return Builder<MediaAssociation>
+     */
+    private function slotPlacements(Model $owner, string $collection, MediaSlot $slot): Builder
+    {
+        $ownerId = $owner->getKey();
+        if (! is_int($ownerId) && ! is_string($ownerId)) {
+            throw new InvalidArgumentException('Media owners require a scalar key.');
+        }
+
+        return MediaAssociation::query()->where('associable_type', $owner->getMorphClass())
+            ->where('associable_id', (string) $ownerId)->where('collection', $collection)
+            ->where(function (Builder $placements) use ($slot, $collection): void {
+                $placements->getQuery()->where('metadata->slot', $slot->name);
+                if ($slot->name === $collection) {
+                    $placements->orWhereNull('metadata->slot');
+                }
+            });
     }
 
     /**
@@ -426,11 +472,11 @@ final class MediaAttachments
         array|Collection $except = [],
     ): void {
         $actor = MediaActors::assert($actor);
-        if ($except instanceof Collection) {
-            $exceptIds = $except->pluck('id')->all();
-        } else {
-            $exceptIds = collect($except)->map(fn ($item) => $item instanceof Media ? $item->id : $item)->all();
-        }
+        $exceptIds = collect($except)->map(static fn (mixed $item): string => match (true) {
+            $item instanceof Media => $item->id,
+            is_string($item) => $item,
+            default => throw new InvalidArgumentException('Excluded Media must be Media models or UUID strings.'),
+        })->all();
 
         $items = $this->ownerAssets($actor, $model, $collection)
             ->reject(fn (Media $media) => in_array($media->id, $exceptIds, true));
@@ -574,6 +620,7 @@ final class MediaAttachments
         string $slot,
     ): ?Media {
         $actor = MediaActors::assert($actor);
+        $owner = $this->resolver->owner($owner);
         $slot = $this->resolver->slot($owner, $slot)->name;
         $association = $this->resolver->currentAssociation($owner, $slot);
         $media = $association instanceof MediaAssociation
@@ -606,6 +653,7 @@ final class MediaAttachments
         ?string $idempotencyKey = null,
     ): Media {
         $actor = MediaActors::assert($actor);
+        $owner = $this->resolver->owner($owner);
         $slotDefinition = $this->resolver->slot($owner, $slot);
         $slot = $slotDefinition->name;
         $mediaId = $this->ownerslotworkflowMediaId($actor, $mediaId, 'replacements');
@@ -717,6 +765,7 @@ final class MediaAttachments
         ?string $idempotencyKey = null,
     ): void {
         $actor = MediaActors::assert($actor);
+        $owner = $this->resolver->owner($owner);
         $slotDefinition = $this->resolver->slot($owner, $slot);
         $slot = $slotDefinition->name;
         $durableClaim = null;
@@ -910,7 +959,7 @@ final class MediaAttachments
         MediaSlot $slotDefinition,
         string $candidateId,
     ): Media {
-        $this->ownerslotworkflowLockOwner($actor, $owner);
+        $owner = $this->ownerslotworkflowLockOwner($actor, $owner);
         $candidate = $this->ownerslotworkflowLockedMedia($actor, $candidateId);
         $currentAssociation = $this->resolver->currentAssociation(
             $owner,
@@ -982,7 +1031,7 @@ final class MediaAttachments
         string $slot,
         MediaSlot $slotDefinition,
     ): array {
-        $this->ownerslotworkflowLockOwner($actor, $owner);
+        $owner = $this->ownerslotworkflowLockOwner($actor, $owner);
         $association = $this->resolver->currentAssociation(
             $owner,
             $slot,
@@ -1116,29 +1165,17 @@ final class MediaAttachments
     }
 
     /**
-     * Serialize even an initially empty slot through its durable owner row.
+     * Serialize even an initially empty slot through its durable owner row and return that reloaded owner.
      *
-     * Cross-connection owners continue to rely on the configured shared mutation lock.
+     * Authorization inside the transition receives this reloaded owner, never the caller's carried attributes.
+     * Cross-connection owners are reloaded without a row lock and rely on the configured shared mutation lock.
      */
-    private function ownerslotworkflowLockOwner(Authenticatable|SystemActor $actor, Model&HasNvlMedia $owner): void
+    private function ownerslotworkflowLockOwner(Authenticatable|SystemActor $actor, Model&HasNvlMedia $owner): Model&HasNvlMedia
     {
-        $ownerConnection = $owner->getConnection();
-        $mediaConnection = (new MediaAssociation)->getConnection();
-
-        if ($ownerConnection->getName() !== $mediaConnection->getName()) {
-            return;
-        }
-
-        $locked = $owner->newQuery()
-            ->whereKey($owner->getKey())
-            ->lockForUpdate()
-            ->first();
-
-        if (! $locked instanceof Model) {
-            throw new MediaUploadException(
-                'The persisted Media owner disappeared during its slot transition.',
-            );
-        }
+        return $this->resolver->owner(
+            $owner,
+            lock: $owner->getConnection()->getName() === (new MediaAssociation)->getConnection()->getName(),
+        );
     }
 
     /**
@@ -1427,6 +1464,7 @@ final class MediaAttachments
         ?string $idempotencyKey = null,
     ): Media {
         $actor = MediaActors::assert($actor);
+        $owner = $this->resolver->owner($owner);
         $slotDefinition = $this->resolver->slot($owner, $slot);
         $slot = $slotDefinition->name;
         $sourceMediaId = $this->ownerslotworkflowMediaId($actor, $sourceMediaId, 'copies');
@@ -1627,7 +1665,7 @@ final class MediaAttachments
         ): void {
             $mutationState->markCommitted();
         });
-        $this->ownerslotworkflowLockOwner($actor, $owner);
+        $owner = $this->ownerslotworkflowLockOwner($actor, $owner);
         $source = $this->ownerslotworkflowLockedMedia($actor, $sourceMediaId);
         $this->ownerslotworkflowAssertAvailable($actor, $source);
         $this->ownerslotworkflowAuthorize($actor, MediaAbility::View, $source, $owner);

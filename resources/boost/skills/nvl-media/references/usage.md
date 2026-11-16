@@ -90,7 +90,7 @@ Upload and association have separate transactions in this example; an attachment
 
 ## Reads, metadata and cleanup
 
-Use `MediaReader::getMany`/`findMany` and `slots` for bounded list-page reads. Keep requested ID/owner/slot limits and native actor visibility. Select the appropriate strict-vs-finding semantics from [API](api.md). Direct model relations do not independently apply a current actor policy.
+Use `MediaReader::getMany` for a bounded page of known IDs and `MediaReader::slots` (or `MediaAttachments::getSlot`) for owner slot reads. Both apply the same View check as `get`. Do not use `findMany` for list pages: it resolves records for bulk-mutation authorization and skips the per-asset View policy. Keep requested ID/owner/slot limits and native actor visibility; see [API](api.md). Direct model relations do not independently apply a current actor policy.
 
 `MediaLibrary::updateMetadata` owns its field allowlist and localized title/alt/caption seam. Byte hash, scanner identity, disk/path and ownership do not become localized/client-editable metadata. `rename` and verified `relocate` retain storage and integrity checks. Visibility changes are file lifecycle operations. Deletion uses transactional cleanup scheduling and retained tombstone recovery; do not unlink files or synthesize a successful database rollback around an already published storage effect. Preserve enclosing transaction commit/rollback and worker context.
 

@@ -418,6 +418,7 @@ enum Nvl\Media\Enums\MediaAbility implements BackedEnum, UnitEnum: string
 public const Nvl\Media\Enums\MediaAbility Associate=Nvl\Media\Enums\MediaAbility::Associate="associate"
 public const Nvl\Media\Enums\MediaAbility Delete=Nvl\Media\Enums\MediaAbility::Delete="delete"
 public const Nvl\Media\Enums\MediaAbility Download=Nvl\Media\Enums\MediaAbility::Download="download"
+public const Nvl\Media\Enums\MediaAbility FinalizeScan=Nvl\Media\Enums\MediaAbility::FinalizeScan="finalize_scan"
 public const Nvl\Media\Enums\MediaAbility List=Nvl\Media\Enums\MediaAbility::List="list"
 public const Nvl\Media\Enums\MediaAbility ListAll=Nvl\Media\Enums\MediaAbility::ListAll="list_all"
 public const Nvl\Media\Enums\MediaAbility ManageStaging=Nvl\Media\Enums\MediaAbility::ManageStaging="manage_staging"
@@ -1303,6 +1304,12 @@ resolved @param (Nvl\Media\Models\Media | string) $media
 @param (string | null) $collection
 @return int
 public function getSlot(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Illuminate\Database\Eloquent\Model&Nvl\Media\Contracts\HasNvlMedia $owner, string $slot): ?Nvl\Media\Models\Media
+public function lockForAttachment(Illuminate\Database\Eloquent\Model $owner, string $collection, array $mediaIds, Closure $callback, ?Nvl\Media\Slots\MediaSlot $slot=null): mixed
+@template TResult
+@param list<string> $mediaIds
+@param Closure(): TResult $callback
+@return TResult
+template Nvl\Media\Services\MediaAttachments::TResult
 public function remove(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Illuminate\Database\Eloquent\Model&Nvl\Media\Contracts\HasNvlMedia $owner, string $mediaId, ?string $collection=null): void
 public function removeFromModel(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Illuminate\Database\Eloquent\Model&Nvl\Media\Contracts\HasNvlMedia $model, string|Nvl\Media\Models\Media $media, ?string $collection=null, ?Closure $beforeOrphanDelete=null): void
 @param (Closure(Media): void | null) $beforeOrphanDelete

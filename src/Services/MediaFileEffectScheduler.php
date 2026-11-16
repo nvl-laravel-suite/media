@@ -65,6 +65,14 @@ final class MediaFileEffectScheduler
     }
 
     /**
+     * Whether a caller's transaction is open on the Media connection, ignoring a test's wrapping transaction.
+     */
+    public function insideTransaction(): bool
+    {
+        return $this->transactionRecord() instanceof DatabaseTransactionRecord;
+    }
+
+    /**
      * Delete staged object paths immediately after a pre-commit failure.
      *
      * @param  list<string>  $paths

@@ -295,7 +295,7 @@ final class MediaLibrary
                     'disk' => $disk,
                     'visibility' => $visibility,
                     'revision' => $nextRevision,
-                    ...(MediaOwnership::active() ? ['storage_path' => $targetOriginal] : []),
+                    ...(MediaOwnership::active() || (is_string($locked->storage_path) && $locked->storage_path !== '') ? ['storage_path' => $targetOriginal] : []),
                 ])->save();
                 $locked->imageVariations()->update(['source_revision' => $nextRevision]);
                 if ($rewritePaths) {
@@ -353,12 +353,11 @@ final class MediaLibrary
     public function delete(Authenticatable|SystemActor $actor, Media|string $media, bool $force = false, ?Model $owner = null): bool
     {
         $actor = MediaActors::assert($actor);
-        $this->access->authorize($actor, MediaAbility::Delete, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media), $owner);
         $mediaId = $media instanceof Media ? $media->id : $media;
 
         return $this->mutationLock->execute(
             $mediaId,
-            fn (): bool => $this->deleteExecuteUnderAcquiredLock($actor, $mediaId, $force),
+            fn (): bool => $this->deleteExecuteUnderAcquiredLock($actor, $mediaId, $force, $owner),
         );
     }
 
@@ -451,19 +450,21 @@ final class MediaLibrary
     /**
      * Execute deletion after the media mutation lock has been acquired.
      */
-    private function deleteExecuteUnderAcquiredLock(Authenticatable|SystemActor $actor, Media|string $media, bool $force = false): bool
+    private function deleteExecuteUnderAcquiredLock(Authenticatable|SystemActor $actor, Media|string $media, bool $force = false, ?Model $owner = null): bool
     {
         $mediaId = $media instanceof Media ? $media->id : $media;
 
-        return (function () use ($mediaId, $force): bool {
+        return (function () use ($actor, $mediaId, $force, $owner): bool {
             $originalPath = '';
             $variationPaths = [];
             $affectedAssociations = [];
             $disk = '';
 
             $deleted = (MediaModelRegistry::newInstance())->getConnection()->transaction(function () use (
+                $actor,
                 $mediaId,
                 $force,
+                $owner,
                 &$originalPath,
                 &$variationPaths,
                 &$affectedAssociations,
@@ -473,6 +474,7 @@ final class MediaLibrary
                     ->with(['associations', 'imageVariations'])
                     ->lockForUpdate()
                     ->findOrFail($mediaId);
+                $this->access->authorize($actor, MediaAbility::Delete, $lockedMedia, $owner === null ? null : $this->owners->resolve($owner, lock: true, withTrashed: true));
 
                 if (! $force
                     && $lockedMedia->is_public

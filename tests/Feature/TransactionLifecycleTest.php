@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Conversions\ConversionDefinition;
 use Nvl\Media\Enums\MediaType;
+use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaAssociation;
 use Nvl\Media\Models\MediaImageVariation;
@@ -176,3 +177,39 @@ it('does not discard deferred owned source deletion when an unrelated secondary 
     expect(Media::withTrashed()->find($media->id)?->trashed())->toBeTrue();
     Storage::disk('public')->assertMissing($path);
 });
+
+it('explicit-path relocation respects commit and rollback across disk roots', function (bool $commit): void {
+    Schema::table((new Media)->getTable(), static function (Blueprint $table): void {
+        $table->string('storage_path')->nullable();
+    });
+    config([
+        'filesystems.disks.archive' => ['driver' => 'local', 'root' => storage_path('framework/testing/disks/archive')],
+        'nvl-media.allowed_disks' => ['public', 'archive'],
+        'nvl-media.root_folders' => ['public' => 'media', 'archive' => 'archive-root'],
+    ]);
+    Storage::fake('archive');
+    $media = createCommittedTransactionMedia();
+    Storage::disk('public')->move($media->buildPath(), 'adopted/original.txt');
+    $media->forceFill(['storage_path' => 'adopted/original.txt'])->save();
+
+    DB::beginTransaction();
+    $relocated = app(MediaLibrary::class)->relocate(SystemActor::Background, $media, 'archive', MediaVisibility::Private, $media->revision);
+    $target = $relocated->buildPath();
+    expect($relocated->storage_path)->toStartWith('archive-root/')
+        ->and(Storage::disk('archive')->get($target))->toBe('old-content');
+    Storage::disk('public')->assertExists('adopted/original.txt');
+    $commit ? DB::commit() : DB::rollBack();
+
+    $current = $media->fresh();
+    if ($commit) {
+        expect($current?->disk)->toBe('archive')
+            ->and($current?->storage_path)->toBe($target)
+            ->and(Storage::disk('archive')->get($current->buildPath()))->toBe('old-content');
+        Storage::disk('public')->assertMissing('adopted/original.txt');
+    } else {
+        expect($current?->disk)->toBe('public')
+            ->and($current?->storage_path)->toBe('adopted/original.txt')
+            ->and(Storage::disk('public')->get($current->buildPath()))->toBe('old-content');
+        Storage::disk('archive')->assertMissing($target);
+    }
+})->with(['commit' => true, 'rollback' => false]);

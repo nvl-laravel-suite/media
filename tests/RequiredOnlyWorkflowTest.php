@@ -268,3 +268,91 @@ it('blocks Media activation while a staged backing file is missing', function ()
         ->and(adoptMedia('plan', $manifest)['collisions'])->not->toBeEmpty()
         ->and(app(AdoptionGate::class)->isActive('media'))->toBeFalse();
 });
+
+it('refuses to resume nvl:adopt apply after staged Media rows behind the checkpoint were deleted', function (): void {
+    ['assets' => $assets] = seedLegacyMediaGraph(assets: 3);
+    $manifest = prepareMediaAdoption();
+    $mediaTable = MediaTables::get(MediaTables::Media);
+    $associationTable = MediaTables::get(MediaTables::Associations);
+    $plan = adoptMedia('plan', $manifest);
+
+    $inserts = 0;
+    DB::connection()->beforeExecuting(static function (string $sql) use (&$inserts, $mediaTable): void {
+        if (str_starts_with($sql, 'insert into "'.$mediaTable.'"') && ++$inserts === 2) {
+            throw new RuntimeException('simulated interruption');
+        }
+    });
+    $failed = adoptMedia('apply', $manifest, ['--fingerprint' => $plan['fingerprint'], '--batch-size' => 1]);
+    $run = (string) DB::table(AdoptionStore::Runs)->value('id');
+    $first = collect($assets)->sort()->first();
+    expect($failed['status'])->toBe(1)
+        ->and(DB::table($mediaTable)->pluck('id')->all())->toBe([$first]);
+
+    $staged = (array) DB::table($mediaTable)->where('id', $first)->first();
+    DB::table($mediaTable)->where('id', $first)->delete();
+    $behindCursor = adoptMedia('apply', $manifest, ['--fingerprint' => $plan['fingerprint'], '--batch-size' => 1, '--run' => $run]);
+    expect($behindCursor['status'])->toBe(1)
+        ->and($behindCursor['error'])->toContain('behind deleted staged Media row ['.$first.']')
+        ->and(DB::table($mediaTable)->count())->toBe(0)
+        ->and((int) DB::table(AdoptionStore::Checkpoints)->where('step', 'assets')->value('processed'))->toBe(1);
+
+    $interruptedAssociations = false;
+    DB::connection()->beforeExecuting(static function (string $sql) use (&$interruptedAssociations, $associationTable): void {
+        if (! $interruptedAssociations && str_starts_with($sql, 'insert into "'.$associationTable.'"')) {
+            $interruptedAssociations = true;
+            throw new RuntimeException('simulated association interruption');
+        }
+    });
+    DB::table($mediaTable)->insert($staged);
+    $second = adoptMedia('apply', $manifest, ['--fingerprint' => $plan['fingerprint'], '--run' => $run]);
+    expect($second['status'])->toBe(1)
+        ->and($second['error'])->toContain('simulated association interruption')
+        ->and(DB::table($mediaTable)->count())->toBe(3);
+
+    DB::table($mediaTable)->where('id', $assets[0])->delete();
+    $completedDependency = adoptMedia('apply', $manifest, ['--fingerprint' => $plan['fingerprint'], '--run' => $run]);
+    expect($completedDependency['status'])->toBe(1)
+        ->and($completedDependency['error'])->toContain('behind deleted staged Media row ['.$assets[0].']')
+        ->and(DB::table($associationTable)->count())->toBe(0)
+        ->and(DB::table($mediaTable)->count())->toBe(2);
+});
+
+it('identical exclusive uploads have distinct rows and paths', function (): void {
+    Storage::fake('public');
+    $owner = StandaloneMediaOwner::query()->create(['name' => 'Exclusive owner']);
+    $slot = (new MediaSlot('contract'))->isPublic()->exclusive();
+    $upload = static fn (?bool $deduplicate = null): Media => app(MediaUploader::class)->upload(
+        SystemActor::Background, UploadedFile::fake()->createWithContent('contract.txt', 'Identical contract bytes.'),
+        'public', $owner, $slot, 'contract.txt', isPublic: true, deduplicateExisting: $deduplicate, skipAutoVariations: true,
+    );
+
+    $first = $upload();
+    $second = $upload();
+    expect($second->id)->not->toBe($first->id)
+        ->and($second->buildPath())->not->toBe($first->buildPath())
+        ->and(Storage::disk('public')->get($first->buildPath()))->toBe('Identical contract bytes.')
+        ->and(Storage::disk('public')->get($second->buildPath()))->toBe('Identical contract bytes.')
+        ->and(fn () => $upload(true))->toThrow(InvalidArgumentException::class, 'cannot deduplicate')
+        ->and(Media::query()->count())->toBe(2);
+});
+
+it('refuses to resume when the checkpoint count differs from the legacy rows before its cursor', function (): void {
+    seedLegacyMediaGraph(assets: 3);
+    $manifest = prepareMediaAdoption();
+    $mediaTable = MediaTables::get(MediaTables::Media);
+    $plan = adoptMedia('plan', $manifest);
+    $inserts = 0;
+    DB::connection()->beforeExecuting(static function (string $sql) use (&$inserts, $mediaTable): void {
+        if (str_starts_with($sql, 'insert into "'.$mediaTable.'"') && ++$inserts === 2) {
+            throw new RuntimeException('simulated interruption');
+        }
+    });
+    expect(adoptMedia('apply', $manifest, ['--fingerprint' => $plan['fingerprint'], '--batch-size' => 1])['status'])->toBe(1);
+    $run = (string) DB::table(AdoptionStore::Runs)->value('id');
+    DB::table(AdoptionStore::Checkpoints)->where('step', 'assets')->update(['processed' => 2]);
+
+    $resumed = adoptMedia('apply', $manifest, ['--fingerprint' => $plan['fingerprint'], '--batch-size' => 1, '--run' => $run]);
+    expect($resumed['status'])->toBe(1)
+        ->and($resumed['error'])->toContain('counts 2 source rows, but 1 precede its cursor')
+        ->and(DB::table($mediaTable)->count())->toBe(1);
+});

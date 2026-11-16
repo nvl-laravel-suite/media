@@ -21,4 +21,7 @@ enum MediaAbility: string
     case Delete = 'delete';
     case Reuse = 'reuse';
     case ManageStaging = 'manage_staging';
+
+    /** Accept or reject a scanner attestation; only a trusted scanner should hold it. */
+    case FinalizeScan = 'finalize_scan';
 }

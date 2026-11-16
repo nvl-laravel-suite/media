@@ -15,6 +15,8 @@ use Nvl\Support\Enums\SystemActor;
 /**
  * Conservative standalone policy based on public visibility and uploader identity.
  *
+ * It never grants FinalizeScan: an uploader must not approve its own upload, so hosts grant it to their scanner.
+ *
  * @internal
  */
 final class DefaultMediaAuthorization implements MediaAuthorization
@@ -28,7 +30,7 @@ final class DefaultMediaAuthorization implements MediaAuthorization
         ?Media $media = null,
         ?Model $owner = null,
     ): bool {
-        if ($actor instanceof SystemActor) {
+        if ($actor instanceof SystemActor || $ability === MediaAbility::FinalizeScan) {
             return false;
         }
 

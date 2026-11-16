@@ -242,7 +242,7 @@ Integrity verification is not configurable. Every upload, replacement, copy and 
 | `nvl-media.scanner.required` | `false` | Require scanner policy |
 | `nvl-media.scanner.allow_noop` | `false` | Permit the no-op scanner when scanning is required in a development environment |
 | `nvl-media.scanner.allow_unscanned_production` | `false` | Explicitly allow the no-op scanner for server-proxied production uploads. The doctor reports this bypass. |
-| `nvl-media.scanner.untrusted_uploads` | `true` | Mark incoming content as untrusted for diagnostics |
+| `nvl-media.scanner.untrusted_uploads` | `true` | Accept server-proxied uploads. `false` rejects every server-proxied upload before ingestion; the scanner rules above apply while it is `true` |
 | `nvl-media.svg_scanning` | `true` | Run built-in structural SVG scanning |
 
 Environment:
@@ -464,7 +464,7 @@ Public application URLs and direct variation URLs carry a content version; origi
 
 `nvl-media.hash_filenames` must not be treated as a switch back to display-derived object names. Hardened ingestion always generates an opaque object name with only the validated canonical extension. The uploader's `fileName` and `MediaLibrary::rename()` affect presentation metadata.
 
-Private deduplication is scoped by uploader type and identifier. Anonymous private uploads create unique records by default. Public shared slots deduplicate by validated content digest, disk, and visibility.
+Private deduplication is scoped by uploader type and identifier. Anonymous private uploads create unique records by default. Public shared slots deduplicate by validated content digest, disk, and visibility. A candidate is reused only when the actor may `reuse` it for the upload's owner, and `mutate` it when the upload adds variation definitions; otherwise the upload stores a separate asset. Both checks repeat on the locked row, and a denial there rejects the upload. Exclusive slots never deduplicate, and passing `deduplicateExisting: true` with an exclusive slot is rejected.
 
 ## Atomic locks
 

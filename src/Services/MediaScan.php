@@ -31,7 +31,7 @@ final class MediaScan
         private readonly PackageLogger $packageLogger,
     ) {}
 
-    /** Apply a scanner's bound attestation to its pending asset.
+    /** Apply a scanner's bound attestation to its pending asset. The actor needs the FinalizeScan ability.
      * @param  array<string, mixed>  $result
      */
     public function finalize(Authenticatable|SystemActor $actor,
@@ -60,7 +60,7 @@ final class MediaScan
         ];
 
         $actor = MediaActors::assert($actor);
-        $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
+        $this->access->authorize($actor, MediaAbility::FinalizeScan, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
         $id = $media instanceof Media ? $media->id : $media;
 
         return $this->mutationLock->execute($id, function () use ($actor, $id, $result): Media {

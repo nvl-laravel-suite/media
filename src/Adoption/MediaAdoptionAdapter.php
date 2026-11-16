@@ -97,28 +97,68 @@ final class MediaAdoptionAdapter extends AdoptionAdapter
     }
 
     /**
+     * Re-map the committed legacy prefix in pages and refuse it unless every mapped row is still staged unchanged.
+     */
+    public function assertCheckpoint(AdoptionStep $step, ?array $cursor, int $processed): void
+    {
+        $legacyTable = LegacyMediaGraph::Graph[$step->id][0] ?? throw new AdoptionException("Media adoption has no step [{$step->id}].");
+        $origin = $this->graph->origin($this->source);
+        $after = null;
+        $committed = 0;
+        do {
+            /** @var list<stdClass> $page */
+            $page = $step->page($step->through($origin->table($legacyTable)->useWritePdo(), $cursor), $after, 500)->get()->all();
+            $rows = [];
+            foreach ($this->graph->mapRows($origin, $step->id, $page, $this->source) as ['row' => $row, 'error' => $error]) {
+                $rows[] = $row ?? throw new AdoptionException("Adoption checkpoint of step [{$step->id}] covers a legacy row that no longer maps: {$error}");
+            }
+            $missing = array_key_first($this->pending($step->id, $rows));
+            if ($missing !== null) {
+                throw new AdoptionException("Adoption checkpoint of step [{$step->id}] is behind deleted staged Media row [{$missing}].");
+            }
+            $committed += count($page);
+            $after = $page === [] ? null : $step->cursorFrom($page[array_key_last($page)]);
+        } while (count($page) === 500);
+        if ($committed !== $processed) {
+            throw new AdoptionException("Media adoption checkpoint for [{$step->id}] counts {$processed} source rows, but {$committed} precede its cursor.");
+        }
+    }
+
+    /**
      * Insert missing rows, keep matching staged rows and refuse any staged row that differs from its source.
      */
     public function writeBatch(AdoptionBatch $batch): ?string
     {
-        $target = $this->connection();
         $table = $this->graph->table($batch->step);
-        $existing = $target->table($table)->useWritePdo()->whereIn('id', array_column($batch->rows, 'id'))->get()->keyBy('id');
+        foreach (array_chunk(array_values($this->pending($batch->step, $batch->rows)), 30) as $chunk) {
+            $this->connection()->table($table)->insert($chunk);
+        }
+
+        return null;
+    }
+
+    /**
+     * Return the mapped rows that are not staged yet, keyed by ID, refusing any staged row that differs from its source.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return array<string, array<string, mixed>>
+     */
+    private function pending(string $step, array $rows): array
+    {
+        $table = $this->graph->table($step);
+        $existing = $this->connection()->table($table)->useWritePdo()->whereIn('id', array_column($rows, 'id'))->get()->keyBy('id');
         $pending = [];
-        foreach ($batch->rows as $row) {
-            $id = is_string($row['id'] ?? null) ? $row['id'] : throw new AdoptionException("Media adoption batch for [{$batch->step}] has a row without a string ID.");
+        foreach ($rows as $row) {
+            $id = is_string($row['id'] ?? null) ? $row['id'] : throw new AdoptionException("Media adoption batch for [{$step}] has a row without a string ID.");
             $current = $existing->get($id);
             if ($current === null) {
-                $pending[] = $row;
+                $pending[$id] = $row;
             } elseif (! $this->graph->matches($row, $current)) {
                 throw new AdoptionException("Media adoption drift: {$table} [{$id}] differs from its legacy row.");
             }
         }
-        foreach (array_chunk($pending, 30) as $chunk) {
-            $target->table($table)->insert($chunk);
-        }
 
-        return null;
+        return $pending;
     }
 
     public function verify(AdoptionPlan $plan): AdoptionVerification

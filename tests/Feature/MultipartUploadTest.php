@@ -1,9 +1,11 @@
 <?php
 
 declare(strict_types=1);
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Filesystem\FilesystemAdapter;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Nvl\Media\Contracts\MultipartUploadGateway;
 use Nvl\Media\Contracts\RecoverableMultipartUploadGateway;
@@ -11,6 +13,7 @@ use Nvl\Media\Enums\MediaLifecycleStatus;
 use Nvl\Media\Enums\MediaMultipartStatus;
 use Nvl\Media\Enums\MediaVisibility;
 use Nvl\Media\Exceptions\MediaUploadException;
+use Nvl\Media\Models\Media;
 use Nvl\Media\Models\MediaMultipartUpload;
 use Nvl\Media\Services\MediaMultipart;
 use Nvl\Media\Services\MediaScan;
@@ -414,3 +417,41 @@ it('accepts a completed object without a provider SHA-256 and verifies its bytes
     $finalized = app(MediaScan::class)->finalize(SystemActor::Background, $media, ['clean' => true, 'mimeType' => 'text/plain', 'extension' => 'txt', 'size' => strlen($contents), 'checksum' => $checksum, 'diagnostics' => []]);
     expect($finalized->status)->toBe($expected);
 })->with(['matching bytes' => ['deferred-checksum', MediaLifecycleStatus::Available], 'different bytes' => ['deferred-CHECKSUM', MediaLifecycleStatus::Quarantined]]);
+
+it('rejects caller transactions before multipart provider effects', function (bool $commit): void {
+    $checksum = hash('sha256', 'transactional');
+    $gateway = multipartGateway(['path' => 'ignored', 'checksum' => $checksum, 'size' => 13, 'mimeType' => 'text/plain', 'objectIdentity' => null]);
+    app()->instance(MultipartUploadGateway::class, $gateway);
+    $multipart = app(MediaMultipart::class);
+    $data = ['disk' => 'public', 'filename' => 'file.txt', 'mimeType' => 'text/plain', 'size' => 13, 'checksum' => $checksum, 'visibility' => MediaVisibility::Private, 'folder' => null];
+    $session = $multipart->initiate($data, multipartActor());
+    $multipart->signPart(['uploadId' => $session['uploadId'], 'partNumber' => 1, 'checksum' => $checksum, 'byteLength' => 13], multipartActor());
+    $gateway->initiated = null;
+    $completion = ['uploadId' => $session['uploadId'], 'parts' => [['partNumber' => 1, 'etag' => 'etag', 'checksum' => null]]];
+
+    DB::beginTransaction();
+    expect(fn () => $multipart->initiate($data, multipartActor()))->toThrow(MediaUploadException::class, 'outside a database transaction')
+        ->and(fn () => $multipart->complete($completion, multipartActor()))->toThrow(MediaUploadException::class, 'outside a database transaction')
+        ->and(fn () => $multipart->abort($session['uploadId'], multipartActor()))->toThrow(MediaUploadException::class, 'outside a database transaction');
+    $commit ? DB::commit() : DB::rollBack();
+
+    expect($gateway->initiated)->toBeNull()
+        ->and($gateway->completionCount)->toBe(0)
+        ->and($gateway->abortCount)->toBe(0)
+        ->and(MediaMultipartUpload::query()->count())->toBe(1)
+        ->and(Media::query()->count())->toBe(0)
+        ->and($multipart->complete($completion, multipartActor())->digest)->toBe($checksum);
+})->with(['commit' => true, 'rollback' => false]);
+
+it('ordinary uploader cannot approve scans; trusted scanner can', function (): void {
+    [$session, , $checksum] = initiateMultipartSession('scan-attestation');
+    $multipart = app(MediaMultipart::class);
+    $multipart->signPart(['uploadId' => $session['uploadId'], 'partNumber' => 1, 'checksum' => $checksum, 'byteLength' => 16], multipartActor());
+    $media = $multipart->complete(['uploadId' => $session['uploadId'], 'parts' => [['partNumber' => 1, 'etag' => 'etag', 'checksum' => null]]], multipartActor());
+    Storage::disk('public')->put($session['objectKey'], 'scan-attestation');
+    $attestation = ['clean' => true, 'mimeType' => 'text/plain', 'extension' => 'txt', 'size' => 16, 'checksum' => $checksum, 'diagnostics' => []];
+
+    expect(fn () => app(MediaScan::class)->finalize(multipartActor(), $media, $attestation))->toThrow(AuthorizationException::class, 'finalize_scan')
+        ->and($media->fresh()?->status)->toBe(MediaLifecycleStatus::PendingScan)
+        ->and(app(MediaScan::class)->finalize(SystemActor::Background, $media, $attestation)->status)->toBe(MediaLifecycleStatus::Available);
+});

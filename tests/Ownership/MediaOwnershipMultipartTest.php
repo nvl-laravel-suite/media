@@ -16,6 +16,7 @@ use Nvl\Media\Tests\Fixtures\OwnershipMultipartGateway;
 use Nvl\Media\Tests\OwnershipTestCase;
 use Nvl\Ownership\Services\OwnershipRunner;
 use Nvl\Ownership\Tests\Fixtures\OptsIntoAdoptedSchemaReuse;
+use Nvl\Support\Enums\SystemActor;
 
 uses(OwnershipTestCase::class, OptsIntoAdoptedSchemaReuse::class);
 it('keeps multipart receipts completion and scanning in the captured native company', function (): void {
@@ -35,7 +36,7 @@ it('keeps multipart receipts completion and scanning in the captured native comp
         $completion = ['uploadId' => $session['uploadId'], 'parts' => [['partNumber' => 1, 'etag' => 'etag', 'checksum' => null]]];
         $media = app(MediaMultipart::class)->complete($completion, $producer);
         expect($media::class)->toBe(OwnershipMedia::class)->and($media->status)->toBe(MediaLifecycleStatus::PendingScan);
-        $media = app(MediaScan::class)->finalize(OwnershipActor::query()->firstOrFail(), $media, ['clean' => true, 'mimeType' => 'text/plain', 'extension' => 'txt', 'size' => 9, 'checksum' => $checksum, 'diagnostics' => []]);
+        $media = app(MediaScan::class)->finalize(SystemActor::Background, $media, ['clean' => true, 'mimeType' => 'text/plain', 'extension' => 'txt', 'size' => 9, 'checksum' => $checksum, 'diagnostics' => []]);
         expect($media->status)->toBe(MediaLifecycleStatus::Available)->and(app(MediaMultipart::class)->complete($completion, $producer)->id)->toBe($media->id)->and(MediaModelRegistry::query()->count())->toBe(1);
     });
 });

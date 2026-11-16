@@ -5,6 +5,32 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- `MediaAbility::FinalizeScan` authorizes `MediaScan::finalize()`. The default policy never grants it, so an uploader can no longer mark its own upload malware-clean; grant it to your scanner.
+- `MediaAttachments::lockForAttachment()` holds the owner-collection lock and the sorted asset locks that `attach()` takes, so a caller that locks its own rows (Comments) can take Media's locks first.
+- `nvl:adopt media` confirms a stored checkpoint before resuming: it re-reads the committed legacy prefix of the step and refuses to continue when a staged asset, association, variation or translation behind the cursor was deleted or changed.
+
+### Fixed
+
+- Owner-slot reads and transitions, and `MediaLibrary::delete()`, authorize the owner and asset reloaded and locked inside the transaction, so attributes carried on the caller's model no longer grant access.
+- Upload deduplication reuses an existing asset only when the actor may `reuse` it, and `mutate` it before new variation definitions are merged; both are rechecked on the locked row.
+- `clearCollectionExcept()` keeps the excluded items when given a Collection of UUID strings instead of deleting them.
+- Exclusive slots no longer deduplicate identical uploads into one shared asset; `deduplicateExisting: true` with an exclusive slot is rejected.
+- Relocation updates an explicit `storage_path` without native ownership too, so the relocated row no longer points at the old disk's path.
+- `nvl:media:migrate-disk` run inside a caller's transaction deletes source objects only after that transaction commits, and removes the copies it created if it rolls back. Multipart `initiate()`, `complete()` and `abort()` reject a surrounding database transaction before any provider effect.
+- The Spatie-style `MediaImport::adopt()` no longer counts a staged row with the same ID but different data as adopted; it reports it and blocks the dry run and the apply.
+- `nvl:media:reconcile --no-write --cleanup-orphans` is rejected instead of deleting orphan objects.
+- `MediaLibrary::delete(owner:)` accepts a soft-deleted owner again, so force-deleting a trashed comment (or a trashed reply under a force-deleted parent) removes its attachments instead of failing.
+- Owner-slot replays and checkpoint recovery authorize the reloaded owner too, not the caller's carried attributes.
+- `nvl:adopt media` also refuses a checkpoint whose processed count differs from the legacy rows before its cursor.
+- `attach()` takes its asset lock before locking any row, the same order as deletion (collection lock, asset locks, then rows), so an attachment racing a deletion of the same asset no longer waits out the lock timeout.
+- Attaching into a full size-limited slot locks the assets it may detach or delete before any row, instead of taking their asset locks after the row locks. `lockForAttachment()` accepts the slot for this.
+
+### Changed
+
+- Documentation: list pages read through `getMany()` or slot reads, not `findMany()`; `scanner.untrusted_uploads=false` rejects server-proxied uploads; a PostgreSQL cutover recipe for GCT `px_media*` index names that collide with the native migrations.
+
 ## [7.2.0] - 2026-11-16
 
 ### Added

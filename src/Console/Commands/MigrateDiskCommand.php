@@ -13,6 +13,7 @@ use Nvl\Media\Ownership\MediaOwnership;
 use Nvl\Media\Services\MediaDeliveryPolicy;
 use Nvl\Media\Services\MediaDiskGateway;
 use Nvl\Media\Services\MediaDiskGuard;
+use Nvl\Media\Services\MediaFileEffectScheduler;
 use Nvl\Media\Services\MediaFileExistence;
 use Nvl\Media\Services\MediaFileOperator;
 use Nvl\Media\Services\MediaModelRegistry;
@@ -57,6 +58,7 @@ class MigrateDiskCommand extends Command
         private readonly MediaFileOperator $files,
         private readonly MediaMutationLock $mutationLock,
         private readonly MediaDeliveryPolicy $deliveryPolicy,
+        private readonly MediaFileEffectScheduler $fileEffects,
         ?MediaPathResolver $paths = null,
     ) {
         $this->paths = $paths ?? new MediaPathResolver;
@@ -241,9 +243,17 @@ class MigrateDiskCommand extends Command
         }
 
         if (! $dryRun) {
+            $connection = $records->firstOrFail()->getConnection();
+            $ambient = $this->fileEffects->insideTransaction();
             try {
-                $records->firstOrFail()->getConnection()->transaction(function () use ($records, $from, $to, $completedMoves): void {
+                $connection->transaction(function () use ($records, $from, $to, $completedMoves, $ambient): void {
                     $this->updateDiskColumn($this->lockVerifiedSnapshot($records, $to), $from, $to);
+
+                    if ($ambient) {
+                        $this->deferAmbientMoves($from, $to, $completedMoves);
+
+                        return;
+                    }
 
                     foreach ($completedMoves as $move) {
                         if (! $this->files->delete($from, $move['old'])) {
@@ -267,6 +277,22 @@ class MigrateDiskCommand extends Command
         $this->info('Migration complete.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Inside a caller's transaction, remove sources only after its root commits and new copies only if it rolls back.
+     *
+     * @param  array<int, array{old: string, new: string, destination_existed: bool}>  $completedMoves
+     */
+    private function deferAmbientMoves(string $from, string $to, array $completedMoves): void
+    {
+        $this->fileEffects->deleteAfterCommit($from, array_column($completedMoves, 'old'), 'migrate_disk_source');
+        $this->fileEffects->deleteAfterRollback(
+            $to,
+            array_column(array_filter($completedMoves, static fn (array $move): bool => ! $move['destination_existed']), 'new'),
+            'migrate_disk_destination',
+        );
+        $this->line('  Source objects are removed once the surrounding transaction commits.');
     }
 
     /**
