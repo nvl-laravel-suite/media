@@ -5,9 +5,17 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [7.4.0] - 2026-11-17
+
 ### Changed
 
 - Remove the Media factory's dead `nvl-tenancy.enabled` storage-path branch; the Tenancy bridge is retired.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- native-only fixtures, storage-aware PostgreSQL filters, core 7.3 floors
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.3.0] - 2026-11-17
 
