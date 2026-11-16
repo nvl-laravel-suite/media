@@ -32,6 +32,7 @@ use Nvl\Media\Models\MediaOwnerSlotOperation;
 use Nvl\Media\Models\MediaTranslation;
 use Nvl\Media\Ownership\MediaOwnership;
 use Nvl\Media\Ownership\MediaOwnershipParentResolver;
+use Nvl\Media\Slots\MediaPlacement;
 use Nvl\Media\Slots\MediaSlot;
 use Nvl\Media\Support\MediaActors;
 use Nvl\Media\Support\MediaAssociationSnapshot;
@@ -85,16 +86,11 @@ final class MediaAttachments
      * @param  bool  $dispatchVariations  Whether to trigger association-driven variation generation
      * @param  bool  $requirePublic  Require public visibility inside the association transaction
      */
-    /**
-     * Attach an admitted asset under owner and asset locks, enforcing the selected slot.
-     *
-     * @param  array<string, mixed>  $metadata
-     */
     public function attach(
         Authenticatable|SystemActor $actor,
         Media $media,
         Model $model,
-        string $collection = 'default',
+        string|MediaPlacement $collection = 'default',
         ?string $locale = null,
         ?int $order = null,
         array $metadata = [],
@@ -106,11 +102,23 @@ final class MediaAttachments
         $model = $this->owners->resolve($model);
         MediaOwnership::assertAsset($media);
         $this->access->authorize($actor, MediaAbility::Associate, $media, $model);
+        if ($collection instanceof MediaPlacement) {
+            if ($locale !== null || $order !== null || $metadata !== [] || $slot !== null) {
+                throw new InvalidArgumentException('Supply placement fields together on the Media placement.');
+            }
+            $locale = $collection->locale;
+            $order = $collection->order;
+            $metadata = $collection->metadata;
+            $slot = $collection->slot;
+            if ($slot !== null) {
+                $metadata['slot'] = $slot->name;
+            }
+            $collection = $collection->collection;
+        } elseif ($slot !== null && $slot->name !== $collection) {
+            throw new InvalidArgumentException('Use a Media placement when the slot and collection have different names.');
+        }
         if (trim($collection) === '' || mb_strlen($collection) > 50 || ($order !== null && $order < 0)) {
             throw new InvalidArgumentException('Media collections and ordering must be valid bounded values.');
-        }
-        if ($slot !== null && $slot->name !== $collection) {
-            throw new InvalidArgumentException('The Media slot must match its collection.');
         }
         $locale = $locale === null ? null : (new LocaleCode($locale))->value;
 
@@ -138,6 +146,12 @@ final class MediaAttachments
                 if ($slot?->slotSizeLimit !== null) {
                     $rows = MediaAssociation::query()->where('associable_type', $model->getMorphClass())
                         ->where('associable_id', (string) $ownerId)->where('collection', $collection)
+                        ->where(function (Builder $placements) use ($slot, $collection): void {
+                            $placements->getQuery()->where('metadata->slot', $slot->name);
+                            if ($slot->name === $collection) {
+                                $placements->orWhereNull('metadata->slot');
+                            }
+                        })
                         ->whereKeyNot($association->id)->orderBy('created_at')->orderBy('id')->lockForUpdate()->get();
                     $overflow = max(0, $rows->count() + 1 - $slot->slotSizeLimit);
                     foreach ($rows->take($overflow) as $old) {

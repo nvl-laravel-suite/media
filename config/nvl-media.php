@@ -189,6 +189,7 @@ return [
     'scanner' => [
         'required' => env('NVL_MEDIA_SCANNER_REQUIRED', false),
         'allow_noop' => env('NVL_MEDIA_ALLOW_NOOP_SCANNER', false),
+        'allow_unscanned_production' => env('NVL_MEDIA_ALLOW_UNSCANNED_PRODUCTION', false),
         'untrusted_uploads' => env('NVL_MEDIA_UNTRUSTED_UPLOADS', true),
     ],
 

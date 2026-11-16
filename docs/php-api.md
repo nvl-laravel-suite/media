@@ -63,7 +63,7 @@ Namespace: `Nvl\Media\Services\MediaUploader`.
 
 Namespace: `Nvl\Media\Services\MediaAttachments`.
 
-- `attach(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media $media, Illuminate\Database\Eloquent\Model $model, string $collection = …, ?string $locale = …, ?int $order = …, array $metadata = …, bool $dispatchVariations = …, bool $requirePublic = …, ?Nvl\Media\Slots\MediaSlot $slot = …): Nvl\Media\Models\MediaAssociation`
+- `attach(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media $media, Illuminate\Database\Eloquent\Model $model, Nvl\Media\Slots\MediaPlacement|string $collection = …, ?string $locale = …, ?int $order = …, array $metadata = …, bool $dispatchVariations = …, bool $requirePublic = …, ?Nvl\Media\Slots\MediaSlot $slot = …): Nvl\Media\Models\MediaAssociation`
 - `detach(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media|string $media, Illuminate\Database\Eloquent\Model $model, ?string $collection = …): int`
 - `reuse(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media|string $media, Illuminate\Database\Eloquent\Model&Nvl\Media\Contracts\HasNvlMedia $model, string $collection = …, ?string $locale = …, ?int $order = …, array $metadata = …, bool $dispatchVariations = …): Nvl\Media\Models\MediaAssociation`
 - `remove(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Illuminate\Database\Eloquent\Model&Nvl\Media\Contracts\HasNvlMedia $owner, string $mediaId, ?string $collection = …): void`

@@ -63,10 +63,12 @@ Search for the relevant fully qualified service or contract and read only its ma
 - `Nvl\Media\Services\MediaOwnerBatchReader`
 - `Nvl\Media\Services\MediaReader`
 - `Nvl\Media\Services\MediaScan`
+- `Nvl\Media\Services\MediaSchemaAdopter`
 - `Nvl\Media\Services\MediaUploader`
 - `Nvl\Media\Services\MediaUrlResolver`
 - `Nvl\Media\Services\MediaVariations`
 - `Nvl\Media\Services\OwnerMediaReader`
+- `Nvl\Media\Slots\MediaPlacement`
 - `Nvl\Media\Slots\MediaSlot`
 - `Nvl\Media\Traits\InteractsWithNvlMedia`
 
@@ -1277,8 +1279,10 @@ public function resolve(Nvl\Media\Models\Media $media, ?string $variationLabel=n
 ```text
 final class Nvl\Media\Services\MediaAttachments
 public function __construct(Nvl\Media\Services\MediaAccessService $access, Nvl\Media\Services\MediaVariationDispatcher $variationDispatcher, Nvl\Media\Services\MediaMutationLock $mutationLock, Nvl\Media\Ownership\MediaOwnershipParentResolver $owners, Nvl\Support\Ownership\Contracts\OwnershipBoundary $tenantBoundary, Nvl\Support\Events\DomainEventDispatcher $domainEvents, Nvl\Support\Ownership\Contracts\OwnershipWriter $ownershipWriter, Nvl\Media\Support\MediaBatchOwnerAdmission $removeOwners, Nvl\Media\Contracts\MediaAuthorization $authorization, Nvl\Media\Services\MediaMutationLock $lock, Nvl\Media\Services\MediaLibrary $deleteAction, Nvl\Media\Services\MediaOwnerSlotResolver $resolver, Nvl\Media\Services\MediaStagingPolicy $stagingPolicy, Nvl\Media\Services\MediaLibrary $deleteMedia, Nvl\Media\Services\MediaOwnerSlotIdempotency $idempotency, Nvl\Media\Services\MediaUploader $uploadMedia, Nvl\Media\Services\MediaLocalFileMaterializer $materializer): mixed
-public function attach(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media $media, Illuminate\Database\Eloquent\Model $model, string $collection="default", ?string $locale=null, ?int $order=null, array $metadata=[], bool $dispatchVariations=true, bool $requirePublic=false, ?Nvl\Media\Slots\MediaSlot $slot=null): Nvl\Media\Models\MediaAssociation
+public function attach(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Media\Models\Media $media, Illuminate\Database\Eloquent\Model $model, string|Nvl\Media\Slots\MediaPlacement $collection="default", ?string $locale=null, ?int $order=null, array $metadata=[], bool $dispatchVariations=true, bool $requirePublic=false, ?Nvl\Media\Slots\MediaSlot $slot=null): Nvl\Media\Models\MediaAssociation
 @param array<string, mixed> $metadata
+@param bool $dispatchVariations
+@param bool $requirePublic
 public function clearCollection(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Illuminate\Database\Eloquent\Model&Nvl\Media\Contracts\HasNvlMedia $model, string $collection="default"): void
 public function clearCollectionExcept(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Illuminate\Database\Eloquent\Model&Nvl\Media\Contracts\HasNvlMedia $model, string $collection="default", array|Illuminate\Support\Collection $except=[]): void
 @param (array<int, (Media | string)> | Collection<int, (Media | string)>) $except
@@ -1442,6 +1446,28 @@ public function finalize(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\E
 @param array<string, mixed> $result
 ```
 
+## Nvl\Media\Services\MediaSchemaAdopter
+
+```text
+final readonly class Nvl\Media\Services\MediaSchemaAdopter
+public function __construct(Illuminate\Database\DatabaseManager $database, Nvl\Media\Services\MediaAccessService $access, Nvl\Media\Services\MediaFileExistence $existence): mixed
+public function apply(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, string $fingerprint, array $source=[]): array
+@param Source $source
+resolved @param array{connection?: string, root_folder?: string, conversions_folder?: string, uploader_type?: string, owner_types?: array<string, string>} $source
+@return Review
+resolved @return array{schema_fingerprint: string, fingerprint: string, source: array<string, int>, staged: array<string, int>, conflicts: list<string>}
+public function plan(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, array $source=[]): array
+@param Source $source
+resolved @param array{connection?: string, root_folder?: string, conversions_folder?: string, uploader_type?: string, owner_types?: array<string, string>} $source
+@return Review
+resolved @return array{schema_fingerprint: string, fingerprint: string, source: array<string, int>, staged: array<string, int>, conflicts: list<string>}
+public function verify(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, string $fingerprint, array $source=[]): array
+@param Source $source
+resolved @param array{connection?: string, root_folder?: string, conversions_folder?: string, uploader_type?: string, owner_types?: array<string, string>} $source
+@return Review
+resolved @return array{schema_fingerprint: string, fingerprint: string, source: array<string, int>, staged: array<string, int>, conflicts: list<string>}
+```
+
 ## Nvl\Media\Services\MediaUploader
 
 ```text
@@ -1501,6 +1527,20 @@ public function __construct(Nvl\Media\Support\MediaBatchOwnerAdmission $owners, 
 public function read(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Illuminate\Database\Eloquent\Model&Nvl\Media\Contracts\HasNvlMedia $owner, ?string $collection=null, int $page=1, int $perPage=25, array $variations=[], ?string $locale=null): array
 @param list<string> $variations
 @return array{items: list<array<string, mixed>>, page: int, per_page: int, total: int, collectionCounts: stdClass, distinctAssetCount: int, originalBytes: int}
+```
+
+## Nvl\Media\Slots\MediaPlacement
+
+```text
+final readonly class Nvl\Media\Slots\MediaPlacement
+public function __construct(string $collection, ?Nvl\Media\Slots\MediaSlot $slot=null, ?string $locale=null, ?int $order=null, array $metadata=[]): mixed
+@param array<string, mixed> $metadata
+public readonly string $collection
+public readonly ?string $locale
+public readonly array $metadata
+@param array<string, mixed> $metadata
+public readonly ?int $order
+public readonly ?Nvl\Media\Slots\MediaSlot $slot
 ```
 
 ## Nvl\Media\Slots\MediaSlot

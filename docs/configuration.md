@@ -240,7 +240,8 @@ Integrity verification is not configurable. Every upload, replacement, copy and 
 | --- | --- | --- |
 | `nvl-media.content_scanner` | `NullMediaContentScanner::class` | Container implementation of `MediaContentScanner` |
 | `nvl-media.scanner.required` | `false` | Require scanner policy |
-| `nvl-media.scanner.allow_noop` | `false` | Permit the no-op scanner outside strict production checks |
+| `nvl-media.scanner.allow_noop` | `false` | Permit the no-op scanner when scanning is required in a development environment |
+| `nvl-media.scanner.allow_unscanned_production` | `false` | Explicitly allow the no-op scanner for server-proxied production uploads. The doctor reports this bypass. |
 | `nvl-media.scanner.untrusted_uploads` | `true` | Mark incoming content as untrusted for diagnostics |
 | `nvl-media.svg_scanning` | `true` | Run built-in structural SVG scanning |
 
@@ -586,6 +587,7 @@ Mutation paths invalidate affected existence entries. Disable the cache for diag
 | `NVL_MEDIA_REMOTE_VERIFY_CONNECTED_IP` | `nvl-media.sources.remote.verify_connected_ip` |
 | `NVL_MEDIA_SCANNER_REQUIRED` | `nvl-media.scanner.required` |
 | `NVL_MEDIA_ALLOW_NOOP_SCANNER` | `nvl-media.scanner.allow_noop` |
+| `NVL_MEDIA_ALLOW_UNSCANNED_PRODUCTION` | `nvl-media.scanner.allow_unscanned_production` |
 | `NVL_MEDIA_UNTRUSTED_UPLOADS` | `nvl-media.scanner.untrusted_uploads` |
 | `NVL_MEDIA_MULTIPART_ENABLED` | `nvl-media.multipart.enabled` |
 | `NVL_MEDIA_MULTIPART_LOCK_STORE` | `nvl-media.locks.multipart.store` |

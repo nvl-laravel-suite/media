@@ -1153,6 +1153,18 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Media\\Services\\MediaSchemaAdopter": {
+            "kind": "class",
+            "file": "src/Services/MediaSchemaAdopter.php",
+            "methods": [
+                "__construct",
+                "apply",
+                "plan",
+                "verify"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Media\\Services\\MediaUploader": {
             "kind": "class",
             "file": "src/Services/MediaUploader.php",
@@ -1199,6 +1211,21 @@
                 "read"
             ],
             "properties": [],
+            "constants": []
+        },
+        "Nvl\\Media\\Slots\\MediaPlacement": {
+            "kind": "class",
+            "file": "src/Slots/MediaPlacement.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "collection",
+                "locale",
+                "metadata",
+                "order",
+                "slot"
+            ],
             "constants": []
         },
         "Nvl\\Media\\Slots\\MediaSlot": {

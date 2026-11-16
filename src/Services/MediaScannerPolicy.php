@@ -26,13 +26,29 @@ final readonly class MediaScannerPolicy
      */
     public function assertReady(): void
     {
-        $required = (bool) config('nvl-media.scanner.required', false);
-        $allowNoop = (bool) config('nvl-media.scanner.allow_noop', false);
+        if (! self::uploadsEnabled()) {
+            throw new MediaUploadException('Untrusted Media uploads are disabled.');
+        }
+        $production = app()->isProduction();
 
-        if ($required && $this->scanner instanceof NullMediaContentScanner && ! $allowNoop) {
+        if ($this->scanner instanceof NullMediaContentScanner && ! self::permitsNoop($production)) {
             throw new MediaUploadException(
                 'Media scanning is required but no production MediaContentScanner is bound.',
             );
         }
+    }
+
+    /** Determine whether materialized untrusted files may enter the ingestion pipeline. */
+    public static function uploadsEnabled(): bool
+    {
+        return config('nvl-media.scanner.untrusted_uploads', true) !== false;
+    }
+
+    /** Use the production opt-out independently of the existing development bypass. */
+    public static function permitsNoop(bool $production): bool
+    {
+        return $production
+            ? config('nvl-media.scanner.allow_unscanned_production', false) === true
+            : (! (bool) config('nvl-media.scanner.required', false) || config('nvl-media.scanner.allow_noop', false) === true);
     }
 }

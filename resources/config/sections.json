@@ -53,6 +53,7 @@
                 "queue.name",
                 "root_folders",
                 "scanner.allow_noop",
+                "scanner.allow_unscanned_production",
                 "scanner.required",
                 "scanner.untrusted_uploads",
                 "sources.remote.enabled"

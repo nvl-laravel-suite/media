@@ -778,20 +778,19 @@ final readonly class MediaDoctor
     {
         $scanner = $this->resolve(MediaContentScanner::class);
         $authorization = $this->resolve(MediaAuthorization::class);
-        $acceptsUntrustedUploads = (bool) config('nvl-media.scanner.untrusted_uploads', true);
-        $scannerSafe = $production
-            ? (! $acceptsUntrustedUploads || ! $scanner instanceof NullMediaContentScanner)
-            : (! (bool) config('nvl-media.scanner.required', false)
-                || ! $scanner instanceof NullMediaContentScanner
-                || (bool) config('nvl-media.scanner.allow_noop', false));
+        $uploadsEnabled = MediaScannerPolicy::uploadsEnabled();
+        $realScanner = $scanner instanceof MediaContentScanner && ! $scanner instanceof NullMediaContentScanner;
+        $scannerSafe = ! $uploadsEnabled || $realScanner || MediaScannerPolicy::permitsNoop($production);
+        $productionBypass = $production && $uploadsEnabled && $scanner instanceof NullMediaContentScanner && MediaScannerPolicy::permitsNoop(true);
 
         return [
-            ['key' => 'scanner.required', 'severity' => 'error', 'passed' => ! (bool) config('nvl-media.scanner.required', false) || ($scanner instanceof MediaContentScanner && ! $scanner instanceof NullMediaContentScanner), 'message' => 'Required scanner readiness needs a real scanner in every environment; allow_noop is a development bypass only.'],
+            ['key' => 'scanner.required', 'severity' => 'error', 'passed' => ! $uploadsEnabled || ! (bool) config('nvl-media.scanner.required', false) || $realScanner, 'message' => 'Explicit scanner requirements for materialized uploads need a real scanner.'],
             ['key' => 'binding.authorization', 'severity' => 'error', 'passed' => $authorization instanceof MediaAuthorization, 'message' => 'MediaAuthorization is bound.'],
             ['key' => 'binding.scanner', 'severity' => 'error', 'passed' => $scanner instanceof MediaContentScanner, 'message' => 'MediaContentScanner is bound.'],
             ['key' => 'scanner.production', 'severity' => $production ? 'error' : 'warning', 'passed' => $scannerSafe, 'message' => $scannerSafe
-                    ? 'Media scanner policy is safe for enabled ingestion paths.'
+                    ? 'Enabled materialized upload paths satisfy the effective scanner policy.'
                     : 'Untrusted uploads are enabled but only the no-op scanner is configured.'],
+            ...($productionBypass ? [['key' => 'scanner.production_bypass', 'severity' => 'warning', 'passed' => false, 'message' => 'Untrusted production uploads can bypass scanning through scanner.allow_unscanned_production.']] : []),
         ];
     }
 
