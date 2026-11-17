@@ -485,7 +485,7 @@ final class MediaImport
             }
             [$expected, $actual] = [$this->adoptFact($expected), $this->adoptFact($actual)];
             if (in_array($column, ['tags', 'metadata', 'variation_definitions', 'failure_context'], true)) {
-                $same = $this->adoptSortedKeys(json_decode($expected, true)) === $this->adoptSortedKeys(json_decode($actual, true));
+                $same = $this->adoptSortedKeys(json_decode($expected)) === $this->adoptSortedKeys(json_decode($actual));
             } elseif (str_ends_with($column, '_at')) {
                 $same = Carbon::parse($expected)->equalTo(Carbon::parse($actual));
             } else {
@@ -504,15 +504,17 @@ final class MediaImport
      */
     private function adoptSortedKeys(mixed $value): mixed
     {
-        if (! is_array($value)) {
+        if (is_array($value)) {
+            return array_map($this->adoptSortedKeys(...), $value);
+        }
+        if (! $value instanceof stdClass) {
             return $value;
         }
-        $value = array_map($this->adoptSortedKeys(...), $value);
-        if (! array_is_list($value)) {
-            ksort($value, SORT_STRING);
-        }
+        // Wrap objects so an object with numeric keys never compares equal to a list.
+        $properties = array_map($this->adoptSortedKeys(...), get_object_vars($value));
+        ksort($properties, SORT_STRING);
 
-        return $value;
+        return ['object' => $properties];
     }
 
     /**
@@ -608,7 +610,8 @@ final class MediaImport
      */
     private function adoptMergedJson(Authenticatable|SystemActor $actor, stdClass $row, array $properties): ?string
     {
-        $merged = [];
+        // Objects stay objects so numeric keys are neither renumbered nor encoded as a list.
+        $merged = new stdClass;
 
         foreach ($properties as $property) {
             $value = $this->adoptProperty($actor, $row, $property);
@@ -618,15 +621,17 @@ final class MediaImport
             }
 
             $decoded = is_string($value)
-                ? json_decode($value, true, flags: JSON_THROW_ON_ERROR)
+                ? json_decode($value, flags: JSON_THROW_ON_ERROR)
                 : $value;
 
-            if (is_array($decoded)) {
-                $merged = [...$merged, ...$decoded];
+            if (is_array($decoded) || $decoded instanceof stdClass) {
+                foreach ((array) $decoded as $key => $item) {
+                    $merged->{$key} = $item;
+                }
             }
         }
 
-        return $merged === [] ? null : json_encode($merged, JSON_THROW_ON_ERROR);
+        return get_object_vars($merged) === [] ? null : json_encode($merged, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
     }
 
     /**

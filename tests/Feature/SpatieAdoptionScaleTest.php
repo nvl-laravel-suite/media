@@ -174,3 +174,22 @@ it('treats a jsonb-reordered staged row as the same facts but still rejects a ch
     DB::table($media->getTable())->where('id', $media->id)->update(['metadata' => '{"zeta":"1","alpha":{"b":2,"a":1},"list":[3,1,"x"]}']);
     expect($import->adopt(SystemActor::Background, 'adoption_legacy')['ready'])->toBeFalse();
 });
+
+it('keeps a JSON object with numeric keys distinct from a list when comparing adopted facts', function (): void {
+    stageLegacySpatieMedia(1);
+    Schema::table('adoption_legacy', static function (Blueprint $table): void {
+        $table->text('metadata')->nullable();
+    });
+    DB::table('adoption_legacy')->update(['metadata' => '{"1":"b","0":"a"}']);
+    $import = app(MediaImport::class);
+    expect($import->adopt(SystemActor::Background, 'adoption_legacy', apply: true)['ready'])->toBeTrue();
+    $media = Media::query()->sole();
+
+    DB::table($media->getTable())->where('id', $media->id)->update(['metadata' => '{"0":"a","1":"b"}']);
+    expect($import->adopt(SystemActor::Background, 'adoption_legacy')['ready'])->toBeTrue();
+
+    DB::table($media->getTable())->where('id', $media->id)->update(['metadata' => '["a","b"]']);
+    $dryRun = $import->adopt(SystemActor::Background, 'adoption_legacy');
+    expect($dryRun['ready'])->toBeFalse()
+        ->and($dryRun['errors'])->toBe([$media->getTable()." [{$media->id}] already exists with different data."]);
+});

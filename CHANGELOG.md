@@ -5,6 +5,10 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Spatie adoption keeps legacy JSON objects with numeric keys as objects: merged `metadata`/`custom_properties` were renumbered and could be stored as a list, and the comparison of existing rows treated such an object and a list as equal.
+
 ## [7.5.0] - 2026-11-17
 
 ### Fixed
