@@ -5,9 +5,17 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [7.5.1] - 2026-11-17
+
 ### Fixed
 
 - Spatie adoption keeps legacy JSON objects with numeric keys as objects: merged `metadata`/`custom_properties` were renumbered and could be stored as a list, and the comparison of existing rows treated such an object and a list as equal.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- Dagger image continuation, translations lease release, media JSON adoption, CSV inline cleanup
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.5.0] - 2026-11-17
 
