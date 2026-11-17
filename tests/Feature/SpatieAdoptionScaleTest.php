@@ -148,3 +148,29 @@ it('divergent existing UUID blocks dry-run and apply', function (): void {
         ->and(fn () => $import->adopt(SystemActor::Background, 'adoption_legacy', 'adoption_legacy_translations', apply: true))->toThrow(LogicException::class, 'cannot apply')
         ->and($media->fresh()?->filename)->toBe('other.txt');
 });
+
+it('treats a jsonb-reordered staged row as the same facts but still rejects a changed value', function (): void {
+    if (DB::connection()->getDriverName() !== 'pgsql') {
+        $this->markTestSkipped('Only PostgreSQL jsonb reorders object keys.');
+    }
+    stageLegacySpatieMedia(1);
+    Schema::table('adoption_legacy', static function (Blueprint $table): void {
+        $table->text('metadata')->nullable();
+    });
+    DB::table('adoption_legacy')->update(['metadata' => '{"zeta":1,"alpha":{"b":2,"a":1},"list":[3,1,"x"]}']);
+    DB::statement(sprintf('ALTER TABLE %s ALTER COLUMN metadata TYPE jsonb USING metadata::jsonb', (new Media)->getTable()));
+    $import = app(MediaImport::class);
+    expect($import->adopt(SystemActor::Background, 'adoption_legacy', apply: true)['ready'])->toBeTrue();
+    $media = Media::query()->sole();
+    expect(DB::table($media->getTable())->where('id', $media->id)->value('metadata'))->toBe('{"list": [3, 1, "x"], "zeta": 1, "alpha": {"a": 1, "b": 2}}');
+
+    $dryRun = $import->adopt(SystemActor::Background, 'adoption_legacy');
+    expect($dryRun['ready'])->toBeTrue()->and($dryRun['matchedMedia'])->toBe(1)->and($dryRun['errors'])->toBe([]);
+
+    DB::table($media->getTable())->where('id', $media->id)->update(['metadata' => '{"zeta":1,"alpha":{"b":2,"a":1},"list":[1,3,"x"]}']);
+    $dryRun = $import->adopt(SystemActor::Background, 'adoption_legacy');
+    expect($dryRun['ready'])->toBeFalse()->and($dryRun['errors'])->toBe([$media->getTable()." [{$media->id}] already exists with different data."]);
+
+    DB::table($media->getTable())->where('id', $media->id)->update(['metadata' => '{"zeta":"1","alpha":{"b":2,"a":1},"list":[3,1,"x"]}']);
+    expect($import->adopt(SystemActor::Background, 'adoption_legacy')['ready'])->toBeFalse();
+});

@@ -65,11 +65,11 @@ final class MediaLibrary
             throw new \InvalidArgumentException('Media filenames must be bounded display names without path separators.');
         }
         $actor = MediaActors::assert($actor);
-        $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
         $mediaId = $media instanceof Media ? $media->id : $media;
-        $freshMedia = $this->mutationLock->execute($mediaId, function () use ($mediaId, $filename): Media {
-            return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($mediaId, $filename): Media {
+        $freshMedia = $this->mutationLock->execute($mediaId, function () use ($actor, $mediaId, $filename): Media {
+            return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor, $mediaId, $filename): Media {
                 $media = MediaModelRegistry::query()->lockForUpdate()->findOrFail($mediaId);
+                $this->access->authorize($actor, MediaAbility::Mutate, $media);
                 $media->update(['filename' => $filename]);
 
                 $this->domainEvents->dispatch(new MediaMutated($media->id, 'renamed'), $media->getConnection());
@@ -98,11 +98,11 @@ final class MediaLibrary
         $this->validateMetadata($data);
 
         $actor = MediaActors::assert($actor);
-        $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
         $mediaId = $media instanceof Media ? $media->id : $media;
-        $freshMedia = $this->mutationLock->execute($mediaId, function () use ($mediaId, $data): Media {
-            return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($mediaId, $data): Media {
+        $freshMedia = $this->mutationLock->execute($mediaId, function () use ($actor, $mediaId, $data): Media {
+            return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor, $mediaId, $data): Media {
                 $media = MediaModelRegistry::query()->lockForUpdate()->findOrFail($mediaId);
+                $this->access->authorize($actor, MediaAbility::Mutate, $media);
                 $mediaFields = [];
 
                 if (array_key_exists('tags', $data)) {
@@ -173,7 +173,6 @@ final class MediaLibrary
         ?int $expectedRevision = null,
     ): Media {
         $actor = MediaActors::assert($actor);
-        $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
         $mediaId = $media instanceof Media ? $media->id : $media;
         $this->diskGuard->assertAllowed($disk, $visibility);
         $this->disks->ensureDefined($disk);
@@ -197,6 +196,7 @@ final class MediaLibrary
         ?int $expectedRevision,
     ): Media {
         $media = MediaModelRegistry::query()->with('imageVariations')->findOrFail($mediaId);
+        $this->access->authorize($actor, MediaAbility::Mutate, $media);
 
         if ($expectedRevision !== null && $media->revision !== $expectedRevision) {
             throw new MediaUploadException(
@@ -262,6 +262,7 @@ final class MediaLibrary
             }
 
             $relocated = (MediaModelRegistry::newInstance())->getConnection()->transaction(function () use (
+                $actor,
                 $mediaId,
                 $disk,
                 $visibility,
@@ -275,6 +276,7 @@ final class MediaLibrary
                 &$writeCommitted,
             ): Media {
                 $locked = MediaModelRegistry::query()->with('imageVariations')->lockForUpdate()->findOrFail($mediaId);
+                $this->access->authorize($actor, MediaAbility::Mutate, $locked);
 
                 if ($expectedRevision !== null && $locked->revision !== $expectedRevision) {
                     throw new MediaUploadException(
@@ -519,7 +521,7 @@ final class MediaLibrary
     }
 
     /**
-     * Delete multiple media records by UUID.
+     * Delete multiple media records by UUID in one transaction, after every locked member is authorized.
      *
      * @param  array<int, string>  $ids  Media UUIDs
      * @return int Number of successfully deleted records
@@ -527,22 +529,25 @@ final class MediaLibrary
     public function bulkDelete(Authenticatable|SystemActor $actor, array $ids): int
     {
         $actor = MediaActors::assert($actor);
-        foreach ($this->queries->findMany($actor, $ids) as $item) {
-            $this->access->authorize($actor, MediaAbility::Delete, $item);
-        }
         $ids = array_values(array_unique($ids));
         $this->queries->findMany($actor, $ids);
 
         return $this->mutationLock->executeMany($ids, function () use ($actor, $ids): int {
-            $count = 0;
-
-            foreach ($ids as $id) {
-                if ($this->delete($actor, $id)) {
-                    $count++;
+            return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor, $ids): int {
+                $lockedItems = MediaModelRegistry::query()->whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get();
+                foreach ($lockedItems as $media) {
+                    $this->access->authorize($actor, MediaAbility::Delete, $media);
                 }
-            }
+                $count = 0;
 
-            return $count;
+                foreach ($ids as $id) {
+                    if ($this->delete($actor, $id)) {
+                        $count++;
+                    }
+                }
+
+                return $count;
+            });
         });
     }
 
@@ -560,9 +565,6 @@ final class MediaLibrary
     public function move(Authenticatable|SystemActor $actor, array $ids, string $folder): int
     {
         $actor = MediaActors::assert($actor);
-        foreach ($this->queries->findMany($actor, $ids) as $item) {
-            $this->access->authorize($actor, MediaAbility::Mutate, $item);
-        }
         $sanitizedFolder = $this->pathResolver->normalizeFolder($folder);
         $mediaIds = array_values(
             $this->queries->findMany($actor, $ids)
@@ -576,6 +578,7 @@ final class MediaLibrary
         }
 
         return $this->mutationLock->executeMany($mediaIds, function () use (
+            $actor,
             $mediaIds,
             $sanitizedFolder,
         ): int {
@@ -583,6 +586,7 @@ final class MediaLibrary
                 ->with('imageVariations')
                 ->whereIn('id', $mediaIds)
                 ->get();
+            $this->authorizeEachMutation($actor, $mediaItems->all());
             $copies = [];
 
             foreach ($mediaItems as $media) {
@@ -655,11 +659,19 @@ final class MediaLibrary
                 }
 
                 (MediaModelRegistry::newInstance())->getConnection()->transaction(function () use (
+                    $actor,
                     $mediaIds,
                     $sanitizedFolder,
                     $completedCopies,
                     &$writeCommitted,
                 ): void {
+                    $lockedItems = MediaModelRegistry::query()
+                        ->whereIn('id', $mediaIds)
+                        ->orderBy('id')
+                        ->lockForUpdate()
+                        ->get();
+                    $this->authorizeEachMutation($actor, $lockedItems->all());
+
                     foreach ($completedCopies as $copy) {
                         $this->fileEffects->deleteAfterRollback(
                             $copy['disk'],
@@ -674,20 +686,16 @@ final class MediaLibrary
                         }
                     }
 
-                    MediaModelRegistry::query()
-                        ->whereIn('id', $mediaIds)
-                        ->lockForUpdate()
-                        ->get()
-                        ->each(
-                            fn (Media $media): bool => $media
-                                ->forceFill([
-                                    'folder' => $sanitizedFolder,
-                                    ...(is_string($media->storage_path) && $media->storage_path !== ''
-                                        ? ['storage_path' => $this->pathResolver->mediaPathForFolder($media, $sanitizedFolder)]
-                                        : []),
-                                ])
-                                ->save(),
-                        );
+                    $lockedItems->each(
+                        fn (Media $media): bool => $media
+                            ->forceFill([
+                                'folder' => $sanitizedFolder,
+                                ...(is_string($media->storage_path) && $media->storage_path !== ''
+                                    ? ['storage_path' => $this->pathResolver->mediaPathForFolder($media, $sanitizedFolder)]
+                                    : []),
+                            ])
+                            ->save(),
+                    );
                     $this->eventCommits->afterCommit((MediaModelRegistry::newInstance())->getConnection(), static function () use (&$writeCommitted): void {
                         $writeCommitted = true;
                     });
@@ -727,9 +735,6 @@ final class MediaLibrary
     public function bulkTag(Authenticatable|SystemActor $actor, array $ids, array $tags): int
     {
         $actor = MediaActors::assert($actor);
-        foreach ($this->queries->findMany($actor, $ids) as $item) {
-            $this->access->authorize($actor, MediaAbility::Mutate, $item);
-        }
         $ids = array_values(array_unique($ids));
 
         if ($ids === []) {
@@ -737,13 +742,14 @@ final class MediaLibrary
         }
         $this->queries->findMany($actor, $ids);
 
-        return $this->mutationLock->executeMany($ids, function () use ($ids, $tags): int {
-            return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($ids, $tags): int {
+        return $this->mutationLock->executeMany($ids, function () use ($actor, $ids, $tags): int {
+            return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor, $ids, $tags): int {
                 $mediaItems = MediaModelRegistry::query()
                     ->whereIn('id', $ids)
                     ->orderBy('id')
                     ->lockForUpdate()
                     ->get();
+                $this->authorizeEachMutation($actor, $mediaItems->all());
                 $count = 0;
 
                 foreach ($mediaItems as $media) {
@@ -769,16 +775,16 @@ final class MediaLibrary
         array $remove = [],
     ): Media {
         $actor = MediaActors::assert($actor);
-        $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
         $mediaId = $media instanceof Media ? $media->id : $media;
         $add = $this->tagNormalize($actor, $add);
         $remove = $this->tagNormalize($actor, $remove);
 
         return $this->mutationLock->execute(
             $mediaId,
-            function () use ($mediaId, $add, $remove): Media {
-                return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($mediaId, $add, $remove): Media {
+            function () use ($actor, $mediaId, $add, $remove): Media {
+                return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor, $mediaId, $add, $remove): Media {
                     $locked = MediaModelRegistry::query()->lockForUpdate()->findOrFail($mediaId);
+                    $this->access->authorize($actor, MediaAbility::Mutate, $locked);
                     $tags = array_values(array_diff($locked->tags ?? [], $remove));
                     $locked->tags = array_values(array_unique([...$tags, ...$add]));
                     $locked->save();
@@ -787,6 +793,18 @@ final class MediaLibrary
                 });
             },
         );
+    }
+
+    /**
+     * Require the mutate decision for every member before a bulk operation writes any of them.
+     *
+     * @param  array<int, Media>  $mediaItems
+     */
+    private function authorizeEachMutation(Authenticatable|SystemActor $actor, array $mediaItems): void
+    {
+        foreach ($mediaItems as $media) {
+            $this->access->authorize($actor, MediaAbility::Mutate, $media);
+        }
     }
 
     /** Validate native display mutations before actor resolution or persistence.

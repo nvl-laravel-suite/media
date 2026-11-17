@@ -48,7 +48,7 @@ test('published workflows expose native explicit actor signatures and document a
                 expect($actor->isOptional())->toBeFalse()->and((string) $actor->getType())->toContain(SystemActor::class);
             }
             foreach ($method->getParameters() as $parameter) {
-                expect((string) $parameter->getType())->not->toContain('\\Data\\', 'Illuminate\\Http\\Request');
+                expect((string) $parameter->getType())->not->toContain('\\Data\\')->not->toContain('Illuminate\\Http\\Request');
                 if ((string) $parameter->getType() === 'array') {
                     expect($method->getDocComment())->toContain('$'.$parameter->getName());
                 }

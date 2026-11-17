@@ -15,7 +15,7 @@ it('classifies an unavailable remote media stream without exposing its source or
     $before = $temporaryFiles->count();
     expect(fn () => app(MediaLocalFileMaterializer::class)->materialize('c4-remote', 'private-owner/credential.pdf'))->toThrow(function (MediaStorageException $failure): void {
         $payload = app(PackageExceptionPayload::class)->for($failure);
-        expect($failure)->toBeInstanceOf(RuntimeException::class)->and($failure->responseCode())->toBe('storage_unavailable')->and($failure->suggestedStatus())->toBe(500)->and($failure->publicContext())->toBe([])->and(json_encode($payload, JSON_THROW_ON_ERROR))->not->toContain('private-owner', 'credential.pdf', 'c4-remote');
+        expect($failure)->toBeInstanceOf(RuntimeException::class)->and($failure->responseCode())->toBe('storage_unavailable')->and($failure->suggestedStatus())->toBe(500)->and($failure->publicContext())->toBe([])->and(json_encode($payload, JSON_THROW_ON_ERROR))->not->toContain('private-owner')->not->toContain('credential.pdf')->not->toContain('c4-remote');
     });
     expect($temporaryFiles->count())->toBe($before);
 });

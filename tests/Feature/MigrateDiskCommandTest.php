@@ -471,3 +471,28 @@ it('removes source bytes only after the surrounding transaction commits and new 
         expect(Storage::disk('public')->get($path))->toBe('ambient-transaction-content');
     }
 })->with(['commit' => true, 'rollback' => false]);
+
+it('keeps the live source bytes when a round trip runs inside one surrounding transaction', function (): void {
+    Storage::fake('public');
+    Storage::fake('cloudflare-r2');
+    config(['filesystems.disks.cloudflare-r2.driver' => 's3', 'nvl-media.allowed_disks' => ['public', 'cloudflare-r2']]);
+    $media = createMigratableMedia(['hash' => 'ambient-round-trip.jpg']);
+    $path = $media->buildPath();
+    Storage::disk('public')->put($path, 'ambient-round-trip-content');
+
+    $level = DB::transactionLevel();
+    DB::beginTransaction();
+    try {
+        $this->artisan('nvl:media:migrate-disk', ['--from' => 'public', '--to' => 'cloudflare-r2', '--no-interaction' => true])->assertExitCode(0);
+        $this->artisan('nvl:media:migrate-disk', ['--from' => 'cloudflare-r2', '--to' => 'public', '--no-interaction' => true])->assertExitCode(0);
+        DB::commit();
+    } finally {
+        while (DB::transactionLevel() > $level) {
+            DB::rollBack();
+        }
+    }
+
+    expect($media->fresh()->disk)->toBe('public')
+        ->and(Storage::disk('public')->get($path))->toBe('ambient-round-trip-content');
+    Storage::disk('cloudflare-r2')->assertMissing($path);
+});

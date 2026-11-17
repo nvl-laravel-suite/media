@@ -44,6 +44,7 @@ use Nvl\Media\Tests\Fixtures\MediaLibraryItemDataFactory;
 use Nvl\Media\Tests\Stubs\OwnerSlotWorkflowModel;
 use Nvl\Media\Tests\Stubs\TestMediaModel;
 use Nvl\Media\Tests\Stubs\TestMediaUser;
+use Nvl\Media\Tests\Stubs\TestPermissionMediaUser;
 use Nvl\Support\Enums\SystemActor;
 
 function ownerSlotActor(string $identifier = 'actor-1'): Authenticatable|SystemActor
@@ -707,6 +708,8 @@ it('rejects unauthorized, missing, and corrupt copy sources before mutation', fu
     expect(fn () => app(MediaAttachments::class)->copySlot($actorData, $destination, 'document', $source->id))->toThrow(AuthorizationException::class, 'view');
     useOwnerSlotAuthorization(static fn (Authenticatable|SystemActor $candidateActor, MediaAbility $ability): bool => $ability === MediaAbility::View);
     expect(fn () => app(MediaAttachments::class)->copySlot($actorData, $destination, 'document', $source->id))->toThrow(AuthorizationException::class, 'associate');
+    useOwnerSlotAuthorization(static fn (Authenticatable|SystemActor $candidateActor, MediaAbility $ability): bool => $ability !== MediaAbility::Download);
+    expect(fn () => app(MediaAttachments::class)->copySlot($actorData, $destination, 'document', $source->id))->toThrow(AuthorizationException::class, 'download');
     useOwnerSlotAuthorization(static fn (): bool => true);
     Storage::disk('public')->delete($source->buildPath());
     expect(fn () => app(MediaAttachments::class)->copySlot($actorData, $destination, 'document', $source->id))->toThrow(MediaUploadException::class, 'source object');
@@ -1198,6 +1201,21 @@ it('replaces an exclusive slot whose current Media record was already deleted', 
     expect($result->id)->toBe($replacement->id)
         ->and(MediaAssociation::query()->where('media_id', $deleted->id)->exists())->toBeFalse()
         ->and(Media::withTrashed()->findOrFail($deleted->id)->trashed())->toBeTrue();
+});
+it('honours the privileged access bridge in slot workflows and owner removal', function (): void {
+    Storage::fake('public');
+    config(['nvl-media.authorization.spatie_permission.enabled' => true]);
+    $actor = TestPermissionMediaUser::query()->create(['name' => 'Privileged', 'email' => 'privileged@slot.test', 'password' => 'test'])->withMediaPermissions(['nvl.media.manage']);
+    $owner = ownerSlotWorkflowOwner();
+    $slotted = ownerSlotStoredMedia('slotted');
+    attachOwnerSlotMedia($slotted, $owner, 'document');
+    $removed = ownerSlotStoredMedia('removed');
+    attachOwnerSlotMedia($removed, $owner, 'gallery');
+    useOwnerSlotAuthorization(static fn (): bool => false);
+
+    expect(app(MediaAttachments::class)->getSlot($actor, $owner, 'document')?->id)->toBe($slotted->id);
+    app(MediaAttachments::class)->remove($actor, $owner, $removed->id, 'gallery');
+    expect(Media::withTrashed()->findOrFail($removed->id)->trashed())->toBeTrue();
 });
 it('carried owner attributes cannot grant access', function (): void {
     Storage::fake('public');

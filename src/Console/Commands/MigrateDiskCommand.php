@@ -250,7 +250,7 @@ class MigrateDiskCommand extends Command
                     $this->updateDiskColumn($this->lockVerifiedSnapshot($records, $to), $from, $to);
 
                     if ($ambient) {
-                        $this->deferAmbientMoves($from, $to, $completedMoves);
+                        $this->deferAmbientMoves($records, $from, $to, $completedMoves);
 
                         return;
                     }
@@ -282,11 +282,22 @@ class MigrateDiskCommand extends Command
     /**
      * Inside a caller's transaction, remove sources only after its root commits and new copies only if it rolls back.
      *
+     * A later migration in the same transaction may move the rows back, so sources the committed rows reference again stay.
+     *
+     * @param  Collection<int, Media>  $records
      * @param  array<int, array{old: string, new: string, destination_existed: bool}>  $completedMoves
      */
-    private function deferAmbientMoves(string $from, string $to, array $completedMoves): void
+    private function deferAmbientMoves(Collection $records, string $from, string $to, array $completedMoves): void
     {
-        $this->fileEffects->deleteAfterCommit($from, array_column($completedMoves, 'old'), 'migrate_disk_source');
+        $sources = array_column($completedMoves, 'old');
+        $this->fileEffects->afterCommit(function () use ($records, $from, $sources): void {
+            $referenced = $records->toBase()->chunk(self::KEY_CHUNK)->flatMap(
+                static fn ($chunk) => $records->firstOrFail()->newQuery()->withTrashed()->whereKey($chunk->pluck('id')->all())
+                    ->where('disk', $from)->with('imageVariations')->get()
+                    ->flatMap(static fn (Media $media): array => [$media->buildPath(), ...$media->imageVariations->map(static fn (MediaImageVariation $variation): string => $variation->getPath())]),
+            )->all();
+            $this->fileEffects->deleteAfterCommit($from, array_values(array_diff($sources, $referenced)), 'migrate_disk_source');
+        });
         $this->fileEffects->deleteAfterRollback(
             $to,
             array_column(array_filter($completedMoves, static fn (array $move): bool => ! $move['destination_existed']), 'new'),

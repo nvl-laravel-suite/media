@@ -169,7 +169,7 @@ final class MediaReader
             ? $filters['sortDirection']
             : 'desc';
 
-        $query->orderBy($sortBy, $sortDirection);
+        $query->orderBy($sortBy, $sortDirection)->orderBy($query->getModel()->getQualifiedKeyName(), $sortDirection);
 
         $perPage = ($filters['per_page'] ?? 25);
         $perPage = min(

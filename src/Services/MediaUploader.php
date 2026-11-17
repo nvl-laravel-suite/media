@@ -548,13 +548,13 @@ final class MediaUploader
     public function replace(Authenticatable|SystemActor $actor, Media|string $media, UploadedFile $file): Media
     {
         $actor = MediaActors::assert($actor);
-        $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
         $mediaId = $media instanceof Media ? $media->id : $media;
 
-        return $this->mutationLock->execute($mediaId, function () use ($mediaId, $file): Media {
+        return $this->mutationLock->execute($mediaId, function () use ($actor, $mediaId, $file): Media {
             $currentMedia = MediaModelRegistry::query()
                 ->with('imageVariations')
                 ->findOrFail($mediaId);
+            $this->access->authorize($actor, MediaAbility::Mutate, $currentMedia);
             $this->diskGuard->assertAllowed($currentMedia->disk, $currentMedia->visibility);
             $staged = $this->stager->stage($currentMedia, $file);
             $sourceDisk = $currentMedia->disk;
@@ -567,6 +567,7 @@ final class MediaUploader
             $writeCommitted = false;
             try {
                 (MediaModelRegistry::newInstance())->getConnection()->transaction(function () use (
+                    $actor,
                     $mediaId,
                     $sourceDisk,
                     $sourcePath,
@@ -585,6 +586,7 @@ final class MediaUploader
                         ->with('imageVariations')
                         ->lockForUpdate()
                         ->findOrFail($mediaId);
+                    $this->access->authorize($actor, MediaAbility::Mutate, $lockedMedia);
 
                     if ($lockedMedia->disk !== $sourceDisk
                         || $lockedMedia->buildPath() !== $sourcePath

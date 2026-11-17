@@ -32,7 +32,7 @@ Grant `MediaAbility::FinalizeScan` to the actor your scanner uses. `MediaScan::f
 
 Deduplication now asks your policy for `reuse` on the existing asset (and `mutate` when the upload adds variation definitions). When either is denied the upload stores a separate asset. Exclusive slots never deduplicate, and `deduplicateExisting: true` with an exclusive slot throws `InvalidArgumentException`.
 
-Owner-slot workflows and `MediaLibrary::delete($actor, $media, owner: $owner)` pass the owner reloaded from storage to your policy, not the instance you supplied. Policies that read unsaved attributes from the owner must read persisted ones. `MediaLibrary::delete(owner: $owner)` therefore requires the owner record to still exist; a soft-deleted owner is accepted. `clearCollectionExcept()` throws `InvalidArgumentException` for an excluded item that is neither a `Media` model nor a UUID string.
+Owner-slot workflows, `MediaAttachments::attach()`, `detach()`, `removeFromModel()` and `reuse()`, and `MediaLibrary::delete($actor, $media, owner: $owner)` pass the owner reloaded from storage to your policy, not the instance you supplied. Policies that read unsaved attributes from the owner must read persisted ones. `MediaLibrary::delete(owner: $owner)` therefore requires the owner record to still exist; a soft-deleted owner is accepted. `clearCollectionExcept()` throws `InvalidArgumentException` for an excluded item that is neither a `Media` model nor a UUID string.
 
 Call multipart `initiate()`, `complete()` and `abort()` outside database transactions; inside one they now throw `MediaUploadException`. `nvl:media:migrate-disk` inside a caller's transaction defers source deletion until that transaction commits. `nvl:media:reconcile` rejects `--no-write` together with `--cleanup-orphans`.
 
@@ -41,3 +41,9 @@ Call multipart `initiate()`, `complete()` and `abort()` outside database transac
 On PostgreSQL, rename GCT's colliding `px_media*` indexes, or keep the legacy tables on a separate source connection, before installing the native schema; see the README.
 
 `nvl:adopt media` now refuses to resume when staged rows behind a stored checkpoint were deleted or changed. Restore them or start a new run. It needs the Core release that adds `AdoptionAdapter::assertCheckpoint()`.
+
+`MediaAttachments::reuse()` now authorizes `MediaAbility::Reuse` on the asset in addition to `Associate`. Custom `MediaAuthorization` implementations must grant `Reuse` to actors that may attach existing public assets through `reuse()`.
+
+`MediaLibrary::bulkDelete()` is now all-or-nothing: if any member is denied or cannot be deleted (for example a shared public asset), no member is deleted. Callers that relied on partial deletion must retry the remaining ids themselves.
+
+`MediaAttachments::copySlot()` now also authorizes `MediaAbility::Download` on the source asset, because the copy hands its bytes to the destination slot. Grant `Download` to actors that copy slots.

@@ -60,12 +60,12 @@ final class MediaScan
         ];
 
         $actor = MediaActors::assert($actor);
-        $this->access->authorize($actor, MediaAbility::FinalizeScan, MediaModelRegistry::query()->findOrFail($media instanceof Media ? $media->id : $media));
         $id = $media instanceof Media ? $media->id : $media;
 
         return $this->mutationLock->execute($id, function () use ($actor, $id, $result): Media {
             $finalized = MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor, $id, $result): Media {
                 $locked = MediaModelRegistry::query()->lockForUpdate()->findOrFail($id);
+                $this->access->authorize($actor, MediaAbility::FinalizeScan, $locked);
 
                 if ($locked->status === MediaLifecycleStatus::Available && $result['clean']) {
                     return $locked;

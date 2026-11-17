@@ -5,6 +5,20 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- `MediaAttachments::reuse()` authorizes `MediaAbility::Reuse` on the asset as well as `Associate`, so an actor can no longer attach another user's public asset it may not reuse.
+- `nvl:adopt media` compares staged JSON columns with object keys sorted, so a target that reorders keys (PostgreSQL `jsonb`) no longer reports identical rows as different; list order and value types still count.
+- `nvl:media:migrate-disk` run several times inside one surrounding transaction (A to B and back to A) no longer deletes the source files the committed rows reference again.
+- `MediaAttachments::copySlot()` authorizes `MediaAbility::Download` on the source, before and under the lock, so an actor that may only view and associate an asset can no longer copy its bytes into a slot it controls.
+- `MediaAttachments::detach()`, `removeFromModel()` and `reuse()` authorize against the owner reloaded from storage and the locked asset inside the transaction, so unsaved owner attributes can no longer grant access; `reuse()` checks `Reuse` again on the locked rows.
+- Owner-slot workflows and `MediaAttachments::remove()` honour the optional privileged-access bridge, like attach, detach and `MediaLibrary`.
+- `MediaReader::paginate()` orders ties by the asset key, so pages no longer repeat or skip assets that share a sort value on PostgreSQL.
+- `MediaLibrary::rename()`, `updateMetadata()`, `relocate()`, `tag()`, `move()` and `bulkTag()`, `MediaUploader::replace()` and `MediaScan::finalize()` authorize the asset locked inside the mutation transaction, so a policy-relevant change committed after an earlier check can no longer let the write through. `move()` and `bulkTag()` authorize every locked member before writing any of them.
+- `MediaAttachments::attach()` (and the paths built on it: `sync()`, slot replacement and copy) authorizes the locked asset and the owner reloaded from storage inside the transaction, instead of the instances supplied before the locks were taken.
+- `MediaLibrary::bulkDelete()` locks and authorizes every member before deleting any of them, and deletes them in one transaction, so a denial or failure part-way through no longer leaves the earlier members deleted.
+- `MediaVariations::generate()` authorizes the locked asset before marking it as processing and again when committing the variation; a denied commit removes the new object, restores the asset status and rethrows the `AuthorizationException`. A missing asset now returns `null` like an unavailable one.
+
 ## [7.4.0] - 2026-11-17
 
 ### Changed

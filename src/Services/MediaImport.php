@@ -485,7 +485,7 @@ final class MediaImport
             }
             [$expected, $actual] = [$this->adoptFact($expected), $this->adoptFact($actual)];
             if (in_array($column, ['tags', 'metadata', 'variation_definitions', 'failure_context'], true)) {
-                $same = json_decode($expected, true) === json_decode($actual, true);
+                $same = $this->adoptSortedKeys(json_decode($expected, true)) === $this->adoptSortedKeys(json_decode($actual, true));
             } elseif (str_ends_with($column, '_at')) {
                 $same = Carbon::parse($expected)->equalTo(Carbon::parse($actual));
             } else {
@@ -497,6 +497,22 @@ final class MediaImport
         }
 
         return true;
+    }
+
+    /**
+     * Sort JSON object keys recursively so stores that reorder keys, such as PostgreSQL jsonb, compare equal; list order is kept.
+     */
+    private function adoptSortedKeys(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+        $value = array_map($this->adoptSortedKeys(...), $value);
+        if (! array_is_list($value)) {
+            ksort($value, SORT_STRING);
+        }
+
+        return $value;
     }
 
     /**

@@ -18,7 +18,7 @@ it('applies filename type and tag search without broadening the caller query', f
     $decoy = Media::factory()->create(['filename' => 'report.pdf', 'extension' => 'pdf', 'mime_type' => 'application/pdf', 'disk' => 'public', 'type' => MediaType::DOCUMENT, 'tags' => ['report']]);
     $ids = app(MediaReader::class)->paginate(SystemActor::Background, ['disk' => 'public', 'search' => 'image'])->pluck('id')->all();
     expect($ids)->toHaveCount(3)->toContain($filenameMatch->id, $typeMatch->id, $tagMatch->id);
-    expect($ids)->not->toContain($outsideCallerRestriction->id, $decoy->id);
+    expect($ids)->not->toContain($outsideCallerRestriction->id)->not->toContain($decoy->id);
 });
 
 it('rejects malformed native filters before querying Media', function (array $filters): void {

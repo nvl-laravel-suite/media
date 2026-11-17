@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Media\Services;
 
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -59,7 +60,6 @@ final class MediaVariations
         ?int $expectedRevision = null,
     ): ?MediaImageVariation {
         $actor = MediaActors::assert($actor);
-        $this->access->authorize($actor, MediaAbility::Mutate, MediaModelRegistry::query()->findOrFail($media->id));
 
         return $this->mutationLock->execute(
             $media->id,
@@ -83,7 +83,9 @@ final class MediaVariations
                 $definition->validate();
                 $this->diskGuard->assertAllowed($currentMedia->disk, $currentMedia->visibility);
                 $resultExtension = $definition->getResultExtension($currentMedia->extension);
-                MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($currentMedia): void {
+                MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor, &$currentMedia): void {
+                    $currentMedia = MediaModelRegistry::query()->lockForUpdate()->findOrFail($currentMedia->id);
+                    $this->access->authorize($actor, MediaAbility::Mutate, $currentMedia);
                     $currentMedia->forceFill([
                         'status' => MediaLifecycleStatus::ProcessingVariations,
                         'failure_code' => null,
@@ -170,6 +172,7 @@ final class MediaVariations
 
                     try {
                         $variation = MediaModelRegistry::newInstance()->getConnection()->transaction(function () use (
+                            $actor,
                             $currentMedia,
                             $definition,
                             $sourceRevision,
@@ -194,6 +197,7 @@ final class MediaVariations
                                 || $lockedMedia->revision !== $sourceRevision) {
                                 return null;
                             }
+                            $this->access->authorize($actor, MediaAbility::Mutate, $lockedMedia);
 
                             $variation = MediaImageVariation::query()->firstOrNew([
                                 'media_id' => $lockedMedia->id,
@@ -238,6 +242,9 @@ final class MediaVariations
                             [$newVariationPath],
                             'variation_pre_commit_failure',
                         );
+                        if ($exception instanceof AuthorizationException) {
+                            throw $exception;
+                        }
 
                         throw new ConversionFailedException(
                             "DB commit failed for variation [{$definition->name}] on media [{$currentMedia->id}]: {$exception->getMessage()}",
@@ -265,6 +272,13 @@ final class MediaVariations
                     }
 
                     return $variation;
+                } catch (AuthorizationException $exception) {
+                    $this->generateRecordFailure($actor, $currentMedia, $definition, new ConversionFailedException(
+                        "Variation [{$definition->name}] was not authorized for media [{$currentMedia->id}].",
+                        previous: $exception,
+                    ));
+
+                    throw $exception;
                 } catch (ConversionFailedException $exception) {
                     $this->generateRecordFailure($actor, $currentMedia, $definition, $exception);
 

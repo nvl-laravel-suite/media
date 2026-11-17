@@ -287,7 +287,7 @@ it('returns requested current public variation URLs without private capabilities
     } else {
         expect($items[$assets[0]->id]['variationUrls']->thumbnail)->toBeNull();
     }
-    expect($items[$assets[0]->id]['variationUrls']->missing)->toBeNull()->and($items[$assets[1]->id]['media']['url'])->toBeNull()->and(get_object_vars($items[$assets[1]->id]['variationUrls']))->toBe(['thumbnail' => null, 'missing' => null])->and(json_encode($result))->not->toContain('signature=', 'uploadedBy', 'storagePath');
+    expect($items[$assets[0]->id]['variationUrls']->missing)->toBeNull()->and($items[$assets[1]->id]['media']['url'])->toBeNull()->and(get_object_vars($items[$assets[1]->id]['variationUrls']))->toBe(['thumbnail' => null, 'missing' => null])->and(json_encode($result))->not->toContain('signature=')->not->toContain('uploadedBy')->not->toContain('storagePath');
 })->with([true, false]);
 it('serializes owner variation maps as objects for empty and numeric labels', function (array $labels, string $expected): void {
     $owner = BatchMediaOwner::query()->create(['name' => 'Owner']);

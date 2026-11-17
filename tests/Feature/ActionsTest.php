@@ -382,6 +382,22 @@ describe('ReusePublicMediaAction', function (): void {
         $association = $action->reuse(auth()->user() ?? SystemActor::Background, $media, $owner, dispatchVariations: false);
         expect($association->media_id)->toBe($media->id)->and($association->exists)->toBeTrue();
     });
+    it('denies reuse of a public asset the actor may associate but not reuse', function (): void {
+        $media = Media::factory()->create(['disk' => 'public', 'is_public' => true]);
+        $owner = TestMediaModel::query()->create(['name' => 'Consumer']);
+        useActionAuthorization(static fn (Authenticatable|SystemActor $actor, MediaAbility $ability): bool => $ability !== MediaAbility::Reuse);
+        expect(fn () => app(MediaAttachments::class)->reuse(createTestUser(), $media, $owner, dispatchVariations: false))->toThrow(AuthorizationException::class);
+        expect(MediaAssociation::query()->where('media_id', $media->id)->exists())->toBeFalse();
+    });
+    it('carried owner attributes cannot grant reuse', function (): void {
+        $media = Media::factory()->create(['disk' => 'public', 'is_public' => true]);
+        $owner = TestMediaModel::query()->create(['name' => 'Locked']);
+        useActionAuthorization(static fn (Authenticatable|SystemActor $actor, MediaAbility $ability, ?Media $candidate, ?Model $candidateOwner): bool => $ability !== MediaAbility::Reuse || $candidateOwner?->getAttribute('name') === 'Granted');
+        $owner->setAttribute('name', 'Granted');
+
+        expect(fn () => app(MediaAttachments::class)->reuse(createTestUser(), $media, $owner, dispatchVariations: false))->toThrow(AuthorizationException::class);
+        expect(MediaAssociation::query()->where('media_id', $media->id)->exists())->toBeFalse();
+    });
 });
 describe('ReplaceMediaFileAction', function () {
     beforeEach(function () {
@@ -468,6 +484,16 @@ describe('ReplaceMediaFileAction', function () {
  * DetachMediaAction
  * ================================================================= */
 describe('DetachMediaAction', function () {
+    it('carried owner attributes cannot grant detach', function (): void {
+        $media = createMediaRecord();
+        $owner = TestMediaModel::query()->create(['name' => 'Locked']);
+        $association = app(MediaAttachments::class)->attach(SystemActor::Background, $media, $owner, 'gallery', dispatchVariations: false);
+        useActionAuthorization(static fn (Authenticatable|SystemActor $actor, MediaAbility $ability, ?Media $candidate, ?Model $candidateOwner): bool => $candidateOwner?->getAttribute('name') === 'Granted');
+        $owner->setAttribute('name', 'Granted');
+
+        expect(fn () => app(MediaAttachments::class)->detach(createTestUser(), $media, $owner))->toThrow(AuthorizationException::class);
+        expect(MediaAssociation::query()->whereKey($association->id)->exists())->toBeTrue();
+    });
     it('removes association between media and model', function () {
         $media = createMediaRecord();
         $user = createTestUser();
@@ -612,6 +638,21 @@ describe('DeleteMediaAction', function () {
         expect(Media::query()->find($media->id))->not->toBeNull()
             ->and(Storage::disk('public')->get($media->buildPath()))->toBe('kept');
     });
+    it('carried owner attributes cannot grant removal from a model', function (): void {
+        Storage::fake('public');
+        $owner = TestMediaModel::query()->create(['name' => 'Locked']);
+        $other = TestMediaModel::query()->create(['name' => 'Other']);
+        $media = createMediaRecord(['is_public' => false]);
+        $attachments = app(MediaAttachments::class);
+        $removed = $attachments->attach(SystemActor::Background, $media, $owner, 'gallery', dispatchVariations: false);
+        $attachments->attach(SystemActor::Background, $media, $other, 'gallery', dispatchVariations: false);
+        useActionAuthorization(static fn (Authenticatable|SystemActor $actor, MediaAbility $ability, ?Media $candidate, ?Model $candidateOwner): bool => $candidateOwner?->getAttribute('name') === 'Granted');
+        $owner->setAttribute('name', 'Granted');
+
+        expect(fn () => app(MediaAttachments::class)->removeFromModel(createTestUser(), $owner, $media))->toThrow(AuthorizationException::class);
+        expect(MediaAssociation::query()->whereKey($removed->id)->exists())->toBeTrue()
+            ->and(Media::query()->whereKey($media->id)->exists())->toBeTrue();
+    });
     it('soft-deletes the media record and retains its diagnostic tombstone', function () {
         $media = createMediaRecord();
         $media_id = $media->id;
@@ -717,6 +758,17 @@ it('accepts native MediaType enums in authorized reader filters', function (): v
     $page = app(MediaReader::class)->paginate(SystemActor::Background, ['type' => MediaType::IMAGE]);
 
     expect($page->getCollection()->modelKeys())->toBe([$media->id]);
+});
+
+it('pages a tied sort value without repeating or skipping assets', function (): void {
+    $sharedTimestamp = now()->startOfSecond();
+    $ids = collect(range(1, 30))->map(static fn (): string => createMediaRecord(['created_at' => $sharedTimestamp])->id);
+    $reader = app(MediaReader::class);
+
+    $paged = collect(range(1, 3))->flatMap(static fn (int $page): array => $reader->paginate(SystemActor::Background, ['per_page' => 10, 'page' => $page])->getCollection()->modelKeys());
+
+    expect($paged)->toHaveCount(30)
+        ->and($paged->unique()->sort()->values()->all())->toBe($ids->sort()->values()->all());
 });
 
 it('denied reuse cannot attach or alter foreign deduplicated media', function (): void {

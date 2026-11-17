@@ -16,7 +16,6 @@ use Illuminate\Support\Str;
 use InvalidArgumentException;
 use LogicException;
 use Nvl\Media\Contracts\HasNvlMedia;
-use Nvl\Media\Contracts\MediaAuthorization;
 use Nvl\Media\Enums\MediaAbility;
 use Nvl\Media\Enums\MediaOwnerSlotOperationType;
 use Nvl\Media\Events\MediaAttached;
@@ -65,7 +64,6 @@ final class MediaAttachments
         private readonly DomainEventDispatcher $domainEvents,
         private readonly OwnershipWriter $ownershipWriter,
         private readonly MediaBatchOwnerAdmission $removeOwners,
-        private readonly MediaAuthorization $authorization,
         private readonly MediaMutationLock $lock,
         private readonly MediaLibrary $deleteAction,
         private readonly MediaOwnerSlotResolver $resolver,
@@ -101,7 +99,6 @@ final class MediaAttachments
         $actor = MediaActors::assert($actor);
         $model = $this->owners->resolve($model);
         MediaOwnership::assertAsset($media);
-        $this->access->authorize($actor, MediaAbility::Associate, $media, $model);
         if ($collection instanceof MediaPlacement) {
             if ($locale !== null || $order !== null || $metadata !== [] || $slot !== null) {
                 throw new InvalidArgumentException('Supply placement fields together on the Media placement.');
@@ -129,6 +126,8 @@ final class MediaAttachments
                     throw new InvalidArgumentException('Media owners require a scalar key.');
                 }
                 $locked = MediaModelRegistry::query()->lockForUpdate()->findOrFail($media->id);
+                $model = $this->owners->resolve($model, true);
+                $this->access->authorize($actor, MediaAbility::Associate, $locked, $model);
                 if ($slot !== null) {
                     $this->stagingPolicy->assertFitsSlot($locked, $slot);
                     if ($slot->isExclusive()) {
@@ -227,7 +226,6 @@ final class MediaAttachments
         bool $requirePublic = false,
     ): MediaAssociation {
         $actor = MediaActors::assert($actor);
-        $this->access->authorize($actor, MediaAbility::Associate, MediaModelRegistry::query()->withTrashed()->findOrFail($media->id), $model);
         $this->tenantBoundary->assertRecord($media, 'media.assets');
         $model = $this->owners->resolve($model);
         $morph_type = $model->getMorphClass();
@@ -311,17 +309,18 @@ final class MediaAttachments
         ?string $collection = null,
     ): int {
         $actor = MediaActors::assert($actor);
-        $this->access->authorize($actor, MediaAbility::Associate, MediaModelRegistry::query()->withTrashed()->findOrFail($media instanceof Media ? $media->id : $media), $model);
         $model = $this->owners->resolve($model);
         $mediaId = $media instanceof Media ? $media->id : $media;
 
         /** @var array{0: int, 1: array<int, array{media_id: string, associable_type: string, associable_id: string, collection: string, locale: string|null}>} $result */
-        $result = $this->mutationLock->execute($mediaId, function () use ($mediaId, $model, $collection): array {
-            return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($mediaId, $model, $collection): array {
-                MediaModelRegistry::query()
+        $result = $this->mutationLock->execute($mediaId, function () use ($actor, $mediaId, $model, $collection): array {
+            return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor, $mediaId, $model, $collection): array {
+                $asset = MediaModelRegistry::query()
                     ->withTrashed()
                     ->lockForUpdate()
                     ->findOrFail($mediaId);
+                $model = $this->owners->resolve($model, true);
+                $this->access->authorize($actor, MediaAbility::Associate, $asset, $model);
                 $query = MediaAssociation::where('media_id', $mediaId);
                 $ownerKey = $model->getKey();
                 if (! is_int($ownerKey) && ! is_string($ownerKey)) {
@@ -370,21 +369,28 @@ final class MediaAttachments
         bool $dispatchVariations = true,
     ): MediaAssociation {
         $actor = MediaActors::assert($actor);
-        $this->access->authorize($actor, MediaAbility::Associate, MediaModelRegistry::query()->withTrashed()->findOrFail($media instanceof Media ? $media->id : $media), $model);
-        $resolvedMedia = is_string($media)
-            ? MediaModelRegistry::query()->findOrFail($media)
-            : $media;
+        $owner = $this->owners->resolve($model);
+        $mediaId = $media instanceof Media ? $media->id : $media;
 
-        return $this->attach($actor,
-            media: $resolvedMedia,
-            model: $model,
-            collection: $collection,
-            locale: $locale,
-            order: $order,
-            metadata: $metadata,
-            dispatchVariations: $dispatchVariations,
-            requirePublic: true,
-        );
+        return $this->lockForAttachment($owner, $collection, [$mediaId], function () use ($actor, $mediaId, $owner, $collection, $locale, $order, $metadata, $dispatchVariations): MediaAssociation {
+            return MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor, $mediaId, $owner, $collection, $locale, $order, $metadata, $dispatchVariations): MediaAssociation {
+                $asset = MediaModelRegistry::query()->lockForUpdate()->findOrFail($mediaId);
+                $owner = $this->owners->resolve($owner, true);
+                $this->access->authorize($actor, MediaAbility::Reuse, $asset, $owner);
+                $this->access->authorize($actor, MediaAbility::Associate, $asset, $owner);
+
+                return $this->attach($actor,
+                    media: $asset,
+                    model: $owner,
+                    collection: $collection,
+                    locale: $locale,
+                    order: $order,
+                    metadata: $metadata,
+                    dispatchVariations: $dispatchVariations,
+                    requirePublic: true,
+                );
+            });
+        });
     }
 
     /** Retain canonical owner admission, authorization and native lifecycle collaborators. */
@@ -425,7 +431,7 @@ final class MediaAttachments
     /** Require the host's current capability decision for the canonical owner and asset. */
     private function attachmentsRemoveAuthorize(Authenticatable|SystemActor $actor, MediaAbility $ability, Media $media, Model $owner): void
     {
-        if (! $this->authorization->allows($actor, $ability, $media, $owner)) {
+        if (! $this->access->allows($actor, $ability, $media, $owner)) {
             throw new AuthorizationException('The selected Media owner removal is not authorized.');
         }
     }
@@ -501,14 +507,18 @@ final class MediaAttachments
     public function removeFromModel(Authenticatable|SystemActor $actor, Model&HasNvlMedia $model, string|Media $media, ?string $collection = null, ?Closure $beforeOrphanDelete = null): void
     {
         $actor = MediaActors::assert($actor);
-        $this->access->authorize($actor, MediaAbility::Associate, MediaModelRegistry::query()->withTrashed()->findOrFail($media instanceof Media ? $media->id : $media), $model);
         $mediaId = $media instanceof Media ? $media->id : $media;
 
         $this->mutationLock->execute($mediaId, function () use ($actor, $model, $mediaId, $collection, $beforeOrphanDelete): void {
             MediaModelRegistry::newInstance()->getConnection()->transaction(function () use ($actor, $model, $mediaId, $collection, $beforeOrphanDelete): void {
                 $resolvedMedia = MediaModelRegistry::query()->lockForUpdate()->findOrFail($mediaId);
+                $owner = $this->owners->resolve($model, true);
+                if (! $owner instanceof HasNvlMedia) {
+                    throw new InvalidArgumentException('A canonical Media-capable owner is required.');
+                }
+                $this->access->authorize($actor, MediaAbility::Associate, $resolvedMedia, $owner);
 
-                $this->lifecycleserviceRemoveResolvedFromModel($actor, $model, $resolvedMedia, $collection, $beforeOrphanDelete);
+                $this->lifecycleserviceRemoveResolvedFromModel($actor, $owner, $resolvedMedia, $collection, $beforeOrphanDelete);
             });
         });
     }
@@ -1408,7 +1418,7 @@ final class MediaAttachments
         ?Media $media,
         Model&HasNvlMedia $owner,
     ): void {
-        if ($this->authorization->allows($actor, $ability, $media, $owner)) {
+        if ($this->access->allows($actor, $ability, $media, $owner)) {
             return;
         }
 
@@ -1471,6 +1481,7 @@ final class MediaAttachments
         $source = $this->ownerslotcopyworkflowMedia($actor, $sourceMediaId);
         $this->ownerslotworkflowAuthorize($actor, MediaAbility::View, $source, $owner);
         $this->ownerslotworkflowAuthorize($actor, MediaAbility::Associate, $source, $owner);
+        $this->ownerslotworkflowAuthorize($actor, MediaAbility::Download, $source, $owner);
         $claim = null;
         $mutationState = new MediaOwnerSlotMutationState;
 
@@ -1670,6 +1681,7 @@ final class MediaAttachments
         $this->ownerslotworkflowAssertAvailable($actor, $source);
         $this->ownerslotworkflowAuthorize($actor, MediaAbility::View, $source, $owner);
         $this->ownerslotworkflowAuthorize($actor, MediaAbility::Associate, $source, $owner);
+        $this->ownerslotworkflowAuthorize($actor, MediaAbility::Download, $source, $owner);
         $this->ownerslotcopyworkflowVerifyMaterializedSource($actor, $source, $lease->path());
 
         // A copy keeps the source bytes: the destination slot's original-image conversion applies to uploads only.

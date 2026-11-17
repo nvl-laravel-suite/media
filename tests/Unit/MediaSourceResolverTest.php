@@ -195,7 +195,7 @@ describe('fromUrl SSRF validation', function () {
             $this->fail('The HTTP failure must reject the download.');
         } catch (MediaUploadException $exception) {
             expect($exception->getMessage())->toContain('Could not download')
-                ->not->toContain($url, 'private-download-token');
+                ->not->toContain($url)->not->toContain('private-download-token');
         }
 
     });
@@ -221,7 +221,7 @@ describe('fromUrl SSRF validation', function () {
             $this->fail('Oversized downloads must be rejected.');
         } catch (MediaUploadException $exception) {
             expect($exception->getMessage())->toContain('exceeds the maximum allowed size')
-                ->not->toContain($url, 'private-download-token')
+                ->not->toContain($url)->not->toContain('private-download-token')
                 ->and(app(MediaTemporaryFileRegistry::class)->count())->toBe(0);
         }
     })->with([true, false]);
