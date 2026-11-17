@@ -5,6 +5,8 @@ All notable changes to `nvl/media` are documented here.
 
 ## [Unreleased]
 
+## [7.5.0] - 2026-11-17
+
 ### Fixed
 
 - `MediaAttachments::reuse()` authorizes `MediaAbility::Reuse` on the asset as well as `Associate`, so an actor can no longer attach another user's public asset it may not reuse.
@@ -18,6 +20,12 @@ All notable changes to `nvl/media` are documented here.
 - `MediaAttachments::attach()` (and the paths built on it: `sync()`, slot replacement and copy) authorizes the locked asset and the owner reloaded from storage inside the transaction, instead of the instances supplied before the locks were taken.
 - `MediaLibrary::bulkDelete()` locks and authorizes every member before deleting any of them, and deletes them in one transaction, so a denial or failure part-way through no longer leaves the earlier members deleted.
 - `MediaVariations::generate()` authorizes the locked asset before marking it as processing and again when committing the variation; a denied commit removes the new object, restores the asset status and rethrows the `AuthorizationException`. A missing asset now returns `null` like an unavailable one.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- consumer-audit fixes across the suite, UTC timestamps, core/forms release ordering
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.4.0] - 2026-11-17
 
